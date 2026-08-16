@@ -7,6 +7,7 @@
 | [0003](0003-fixtures-as-the-example-data-contract.md) | Fixtures as the example-data contract | accepted |
 | [0004](0004-one-package-with-optional-integrations.md) | One package with optional integrations | accepted |
 | [0005](0005-language-neutral-trace-wire-format.md) | Language-neutral trace wire format | accepted |
+| [0006](0006-datasets-and-expression-fixtures.md) | Datasets and expression fixtures | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision,
 Consequences), indexed here in the same commit.
