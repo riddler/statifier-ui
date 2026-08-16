@@ -76,11 +76,9 @@ this project inherits from it:
   UI-side expects to rewind a live session or re-wait original delays.
 - **The datamodel commitments in statifier-ex `docs/datamodel.md`, anchored on
   statifier ADR-0004 (Predicator is the datamodel; no ECMAScript, no Elixir
-  eval).** The bead that produced this record pointed at "predicator
-  commitments from docs/datamodel.md"; that file lives in statifier-ex (there
-  is no predicator-ex `docs/datamodel.md`), and it is the living surface for
-  the commitments this project leans on: predicator is the expression
-  language, evaluation is pure and non-evaluative (predicator ADR-0004: no
+  eval).** That file is where the predicator-facing commitments this project
+  leans on are written down: predicator is the expression language,
+  evaluation is pure and non-evaluative (predicator ADR-0004: no
   eval, errors are values), expressions compile once at Machine-build time
   into predicator's compiled envelope carrying its own position table
   (predicator ADR-0009), and every evaluation returns
@@ -108,6 +106,14 @@ on it. However small the patch looks, it is not made from this repository.
   not named above are context this project may read, not premises it is
   bound to cite. The list above can grow by amendment when a new upstream
   decision becomes load-bearing for the UI.
+- It does not adopt statifier ADR-0040 (session telemetry event contract),
+  which was considered for the list. That contract is a metrics-facing second
+  interpreter of the effect stream this project already consumes at the
+  statifier ADR-0003 and ADR-0012 seams - its events carry measurements meant
+  for aggregation, and it is silent under replay, where this project's time
+  travel lives. A UI feature that wants aggregate session metrics rather than
+  individual effects reopens the question, by the same amendment mechanism as
+  the growth clause above.
 - It does not give this repository standing in upstream arguments. Reopening
   a statifier or predicator ADR happens in that repo, through an `st-` or
   `px-` bead, with this repo's need stated as input - not by an ADR here
@@ -131,16 +137,3 @@ on it. However small the patch looks, it is not made from this repository.
 - The adopted list is a maintenance surface: when an upstream ADR named above
   is superseded, the summary here can go stale until someone amends this
   record. Accepted as cheap, since the rule is to re-read upstream anyway.
-
-## Open questions
-
-Recorded rather than resolved by invention:
-
-- The bead's phrase "predicator commitments from docs/datamodel.md" most
-  plausibly means statifier-ex `docs/datamodel.md`, which exists and carries
-  exactly those commitments; predicator-ex has no such file. This record
-  reads it that way. If a predicator-ex datamodel document was intended to
-  exist separately, adopting it is an amendment here once it does.
-- Whether statifier ADR-0040 (session telemetry event contract) belongs on
-  the adopted list once this project consumes session telemetry. Not adopted
-  now; nothing here reads it yet.
