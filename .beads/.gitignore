@@ -38,6 +38,20 @@ export-state/
 export-state.json
 last_pull
 
+# Interaction audit log (local-only, per-machine)
+# Append-only log of bead field changes. The Dolt DB synced over
+# refs/dolt/data already holds this history authoritatively, so the git copy
+# is redundant - and because every machine appends to the same line range, a
+# tracked copy conflicts on every merge. Tracking it was accidental: nothing
+# above matched it, while the sibling issues.jsonl was never tracked.
+interactions.jsonl
+
+# Git hook scripts installed by bd init (local-only, opt-in per machine)
+# This repo does not wire them into .git/hooks, so a tracked copy is inert
+# weight that reads as an active integration. Sync is driven explicitly by
+# bd dolt pull/push instead.
+hooks/
+
 # Ephemeral store (SQLite - wisps/molecules, intentionally not versioned)
 ephemeral.sqlite3
 ephemeral.sqlite3-journal
