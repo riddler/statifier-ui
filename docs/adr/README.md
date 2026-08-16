@@ -11,6 +11,7 @@
 | [0007](0007-text-first-authoring.md) | Text-first authoring | accepted |
 | [0008](0008-client-side-elkjs-layout.md) | Client-side elkjs layout rendering plain SVG | accepted |
 | [0009](0009-javascript-ships-as-source.md) | JavaScript ships as source | accepted |
+| [0010](0010-cross-repo-tracker-authority-and-mirrors.md) | Cross-repo tracker authority and mirrors | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision,
 Consequences), indexed here in the same commit.
