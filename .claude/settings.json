@@ -1,4 +1,11 @@
 {
+  "permissions": {
+    "deny": [
+      "Edit(.quality.exs)",
+      "Edit(coveralls.json)",
+      "Edit(.doctor.exs)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
