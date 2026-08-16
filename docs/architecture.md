@@ -7,7 +7,7 @@ only what is built. The repository is presently a scaffold - see "What exists
 today" below for the line between built and planned.
 
 The direction summarized here was settled in
-[`docs/research/260816-sui-kua-gui-research-and-direction.md`](research/260816-sui-kua-gui-research-and-direction.md)
+[`docs/research/260816-sui-kua-gui-research-and-direction.md`][research]
 ("the research doc"); this document narrates the resulting shape rather than
 re-arguing it. Decisions are cited by ADR number - bare numbers are this
 repo's (see `docs/adr/`), and other repositories' ADRs are cited by name, for
@@ -312,3 +312,5 @@ do not settle. They are recorded here rather than resolved by invention:
   the ecosystem (`live_monaco_editor`) but does not state whether
   statifier-ui commits to offering it alongside the `file:../deps/` source
   path, or only the latter.
+
+[research]: research/260816-sui-kua-gui-research-and-direction.md
