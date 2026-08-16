@@ -3,6 +3,7 @@
 | # | Decision | Status |
 |---|---|---|
 | [0001](0001-record-architecture-decisions.md) | Record architecture decisions | accepted |
+| [0002](0002-adopt-upstream-decisions-by-reference.md) | Adopt upstream statifier and predicator decisions by reference | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision,
 Consequences), indexed here in the same commit.
