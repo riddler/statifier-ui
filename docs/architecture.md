@@ -219,8 +219,11 @@ protocol's four JSON event shapes (`@xstate.actor`, `@xstate.event`,
 `@xstate.snapshot`, `@xstate.microstep`) survive only as design inspiration,
 not as a dependency or a target to interoperate with.
 
-Where the wire format specification itself will live is not settled by this
-document or its sources; see "Open questions."
+The format itself - envelope, event types, versioning, and the rule that
+structs and LiveView payloads are carriers rather than the definition - is
+settled by ADR-0005, and its normative home is `docs/wire-format.md` (a
+document written alongside the first producer; see ADR-0005 for what it
+must contain).
 
 ## The JS strategy
 
@@ -296,10 +299,6 @@ neither.
 These are gaps the bead implies but that the research doc and existing ADRs
 do not settle. They are recorded here rather than resolved by invention:
 
-- **Where the wire-format specification itself will live.** The research doc
-  states it "starts here; may graduate to riddler_spec/statifier_spec
-  territory once a second interpreter exists," but does not commit to a file,
-  directory, or format for the spec document within this repository.
 - **The fixture sidecar's file naming and shape** (for example, whether it is
   `<chart>.fixtures.json` or some other convention). The research doc flags
   this explicitly as unsettled, to be decided in sui-8a7.
