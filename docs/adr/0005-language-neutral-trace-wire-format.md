@@ -66,10 +66,17 @@ type:
   send/invoke family) get their own namespaces as consumers need them.
 - `session`: the emitting session's id (the `_sessionid` value), so streams
   from an invoke tree of sessions can share one channel.
-- `seq`: a per-session monotonic integer assigned by the producer in
-  emission order. The engine guarantees effect-list order (statifier
-  ADR-0012: no side channel); `seq` is that order made explicit on the
-  wire, where a list has become a stream.
+- `seq`: a per-session monotonic integer stamped by the producer at the
+  session subscription boundary, starting at `0` on `session.start` and
+  incrementing by one per message; the carrier never assigns it. The
+  engine guarantees effect-list order (statifier ADR-0012: no side
+  channel), and the session's fan-out preserves it per subscriber - but
+  only per session. Each session is its own process, so a carrier
+  merging an invoke tree onto one channel receives an interleaving
+  nobody ordered; delivery-time stamping would bake that accident into
+  the stream. `seq` is the engine's order made explicit on the wire,
+  where a list has become a stream, and only the subscription boundary
+  still sees that order.
 - On every `trace.*` message, the three counters as integers: `macrostep`,
   `microstep`, `round`. `(macrostep, round)` remains the timeline ordering
   key (statifier ADR-0020); `seq` totally orders within it.
@@ -83,16 +90,47 @@ the session id, the chart source (SCXML), and the identity tables the
 compiled Machine retains - state index to id and location, `t_index` and
 `c_index` to location. This is what makes indexes on later messages
 resolvable by a consumer that has no compiler, and it is why events
-themselves stay small.
+themselves stay small. A session started by `<invoke>` also names its
+origin on `session.start` - the parent's session id and the `invokeid`
+the child stamps (spec 5.10.1) - so a consumer rebuilds the invoke tree
+from message content alone. And `session.start` may carry the fixture
+bundle inline, as an optional `fixtures` field holding the ADR-0003
+sidecar's JSON object verbatim, its own `version` field included.
+Inline rather than by reference: a reference needs a namespace to
+resolve in - a filesystem, a URL scheme - and the format presupposes no
+shared one. Key absence means the host supplied no fixtures, per the
+discipline below.
+
+**Interleaving across sessions is arbitrary.** The format guarantees
+total order within a session (`seq`) and promises nothing between
+sessions: the engine orders only a session's own effect list, and a
+shared channel's merge is whatever process scheduling produced.
+Consumers must not read causality from arrival order; parent-child
+causality lives in the data - the `trace.invoke_pass` effects, the
+`invokeid` on forwarded and child events, and the origin fields on
+`session.start` above. This writes down the guarantee the engine
+actually provides rather than promising one it does not.
 
 **JSON discipline, because the engine's values do not all map trivially:**
 
 - `_event.data` distinguishes `:undefined` (no data) from `nil` (data,
   present, null) from `%{}` (data, empty). On the wire: key absence is "no
   data", JSON `null` is present-and-null. No carrier may collapse them.
+- Predicator's value domain is closed (predicator
+  `Predicator.Types.value/0`): booleans, integers, floats, strings,
+  lists, string- or atom-keyed maps, `Date`, `DateTime`, durations,
+  `nil`, and `:undefined`. No tuple reaches a value position. The
+  JSON-native members map to themselves, atom map keys serializing as
+  their names. The non-native members serialize as one-key tagged
+  objects: `{"$date": "2026-08-16"}` and `{"$datetime": ...}` in ISO
+  8601, `{"$duration": {...}}` carrying all eight unit fields as
+  integers, and - because absence has no positional encoding inside a
+  list or map value - `{"$undefined": true}` where the `:undefined`
+  sentinel appears in a composite. The `$`-prefixed one-key shape is
+  reserved by the spec.
 - Set-valued fields (configurations, exit/entry sets) serialize as arrays
-  in a canonical order (ascending index), so two traces of the same run are
-  byte-comparable.
+  in a canonical order (ascending index), and object keys in
+  lexicographic order, so two traces of the same run are byte-comparable.
 
 **Versioning.** The definition message carries an integer `"version"`,
 initially `1` (the fixtures sidecar's convention, ADR-0003). Consumers must
@@ -161,10 +199,20 @@ via ADR-0002). The engine is not asked to learn JSON.
   inspector works. Conformance is checkable by golden trace, not by
   reading Elixir.
 - Every UI feature pays a serialization toll even in-process, and the
-  definition message duplicates data (source, tables) a co-located
-  consumer already has. Accepted: the toll is the contract, and carriers
-  may negotiate not to resend what a consumer holds, so long as the
-  format's meaning never depends on that shortcut.
+  definition message duplicates data (source, tables, any inline
+  fixtures) a co-located consumer already has. Accepted: the toll is the
+  contract, and carriers may negotiate not to resend what a consumer
+  holds, so long as the format's meaning never depends on that shortcut.
+- The tagged-object encodings buy type fidelity at an ambiguity price: a
+  host map whose only key genuinely is `"$date"` is indistinguishable
+  from an encoded `Date`. Accepted as vanishingly rare, and the reserved
+  shape makes the collision a spec violation on the host's side rather
+  than a silent misread.
+- No cross-session ordering means a merged timeline view does its own
+  merging - on `(session, seq)` and the invoke-tree links, never on
+  arrival order - and two captures of the same run on a shared channel
+  are byte-comparable only session by session, not as one interleaved
+  file.
 - The spec document is a second place the trace vocabulary lives, and it
   can drift from the engine's. The golden-trace mechanism is the drift
   alarm; an upstream vocabulary change that breaks it is handled as
@@ -195,19 +243,3 @@ via ADR-0002). The engine is not asked to learn JSON.
   format a non-goal, and a spec next to one engine reads as that engine's
   serialization. Starting here keeps the language-neutral claim honest;
   graduation later is already the recorded path. Rejected for now.
-
-**Open questions carried, not resolved here:**
-
-- Whether `seq` is stamped by the producer at the session boundary or by
-  the carrier at delivery - equivalent for one session on one channel,
-  not for multiplexed invoke trees; the first producer bead settles it.
-- How child-session streams interleave on a shared channel (one
-  `session.start` per session is settled; ordering guarantees across
-  sessions are not).
-- The exact JSON encoding of predicator values beyond the
-  `:undefined`/`null` rule - tuples and other non-JSON-native values need
-  a documented mapping in the spec when the first producer meets one.
-- Whether `session.start` carries the fixture bundle (or a reference to
-  it) so a debugging consumer gets chart, tables, and example data in one
-  message - a spec-document call, constrained only by the sidecar shape
-  settled in ADR-0003.
