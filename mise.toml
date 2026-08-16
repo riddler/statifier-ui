@@ -1,0 +1,18 @@
+# mise config for statifier-ui: toolchain.
+#
+#   mise install    provision the toolchain below
+#
+# Pinned to the same versions statifier-ex builds against. This package is
+# compiled against that engine, so a version skew between the two repos is a
+# problem to discover here rather than in a host application.
+#
+# No Java: statifier-ex needs a JRE for the Saxon TXML -> SCXML transform that
+# generates its conformance corpus. Nothing in this repo runs that transform.
+#
+# Node is deliberately absent too. The JavaScript is distributed as source and
+# recompiled by the host's own esbuild through `file:../deps/`, so a host's
+# toolchain builds it - this repo never runs a bundler of its own.
+
+[tools]
+erlang = "27.3"
+elixir = "1.18.3-otp-27"
