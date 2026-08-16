@@ -44,6 +44,80 @@ the signal working. Report the finding and stop. Each of those files carries
 the reason for its numbers at the number; a change that moves a threshold
 without moving its reason is incomplete regardless of who asked.
 
+## Commit message limits: reviewed, not just inherited
+
+`.claude/wurk.json`'s `commits` block started as a straight copy of
+statifier-ex's values (6d99b05). sui-a61 reviewed them against this repo's
+own history rather than accepting the copy silently.
+
+- **`total_lines_max: 40` - kept.** The longest message on `main` is 24 lines
+  (`Sets up the wurk manifest and extensions`); nothing is within striking
+  distance of 40. The limit is not binding today, but nothing in this repo's
+  commit style argues for a different number either, so there is no reason to
+  move it.
+- **`trailer.key: "Refs"` - kept.** History has exactly one trailer at all,
+  `Beads: sui-kua`, and it was written by `bd` itself (a bd-driven commit),
+  not by `/wurk:commit` - it is not a precedent for what this workflow's
+  trailer key should be. Weighed against that single tool-authored line is
+  consistency with statifier-ex, the sibling repo this project deliberately
+  mirrors and where fixtures and conventions move back and forth in both
+  directions. Consistency with the sibling wins over one non-`/wurk:commit`
+  data point.
+- **`subject_under: 50` and `body_line_max: 72` - unchanged**, and out of
+  scope for this review: they already match the CLAUDE.md prose and nothing
+  in the bead asked them to be re-litigated. Worth knowing in practice: two
+  commits on `main` have a body line of 73 characters, one over the limit.
+  That is not a reason to move the limit - it says the 72-character wrap is
+  already binding, which is the check doing its job the first time it will
+  actually run.
+
+## The attribution ban will reject some legitimate messages here
+
+`commit_message.rb`'s attribution check is hardcoded (not manifest-driven) to
+reject any message containing `Co-Authored-By`, `Generated with`, or the
+exact string `Claude`. That rule lives in `~/.claude/skills/wurk:kit/`,
+outside this repo, so it cannot be configured away from here - and it should
+not be: the ban exists to keep AI attribution out of commit messages, which
+is a real rule this project wants.
+
+The check is a case-sensitive `String#include?`, which matters here: this
+repo's own project instructions file is named `CLAUDE.md` (all caps) and its
+manifest lives under `.claude/` (all lowercase) - neither trips the ban,
+because neither is the exact capitalization `Claude`. Typing those paths in a
+commit body is safe.
+
+The one real collision on `main` is 2a01433 ("Removes the bd-generated
+.agents and .codex scaffolding"), whose body says "This project drives beads
+from Claude Code only" - the exact capitalization, so it trips the ban.
+Verified directly: `git log -1 --format='%B' 2a01433 | ruby
+~/.claude/skills/wurk:kit/scripts/commit_message.rb check` fails on
+`no_attribution` (`found forbidden attribution text: "Claude"`) and, as an
+unrelated finding from the same replay, also fails `subject_length` (its
+subject is 55 characters against the 49-character limit) - useful evidence
+that both limits bind in practice, not just in theory.
+
+**Write around it only when a sentence would name the coding agent itself**
+(write `the project's coding agent`, not `Claude`) - not for file paths,
+which are already safe as written (`CLAUDE.md`, `.claude/wurk.json`). This is
+not a workaround for the rule - it is describing the same thing without
+tripping a substring match the rule was never meant to catch.
+
+## No commit-msg git hook
+
+Decision: **do not add a `commit-msg` hook.** Enforcement stays inside
+`/wurk:commit` (Step 2 pre-commit, Step 4.4 post-commit verification).
+
+Reasons: this repo has one contributor and no CI (`CLAUDE.md`'s authority
+table), so `/wurk:commit` is already the only path a commit takes in
+practice - a plain `git commit` bypassing it would be a self-inflicted
+problem, not an outside contributor's. A hook is also another uninstalled-by-
+default file: git hooks are not checked in or wired up automatically, so
+shipping one here would need its own installer step this repo does not have,
+for a case (bypassing the one workflow the one contributor uses) that has not
+come up. This repo removed `.beads/hooks` for the same reason - nothing read
+them. Revisit if a second contributor, or a habit of using plain `git commit`,
+actually shows up.
+
 ## No CI means the gate is the whole check
 
 The authority table in `CLAUDE.md` makes a full green `mix quality` the trigger
