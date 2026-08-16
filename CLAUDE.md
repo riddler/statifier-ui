@@ -146,7 +146,9 @@ the host's own esbuild compiles it through `file:../deps/`).
   green.
 - Commit messages: title < 50 chars, simple present tense ("Adds ...",
   "Fixes ..."), body wrapped at ~72 chars, functional changes highlighted. No
-  AI attribution trailers. (sui-a61 makes these mechanical.)
+  AI attribution trailers. Enforced mechanically by `/wurk:commit` via
+  `commit_message.rb`; see `.claude/wurk/commit.md` for the reviewed
+  thresholds and the attribution-ban wording collision to write around.
 - SCXML in tests: triple-quoted heredocs, 4-space base indentation - matching
   statifier-ex, since fixtures move between the repos.
 
