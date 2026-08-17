@@ -14,7 +14,16 @@ defmodule StatifierUI.Value do
   `nil` - a present, null value - never to the `:undefined` sentinel, which
   has its own tagged encoding because absence has no positional spelling
   inside a list or map value.
+
+  Durations are the one value that does not round-trip identically:
+  `StatifierUI.Shape.duration?/1` recognizes any non-empty subset of the
+  eight units (predicator's parser emits seven, omitting `:milliseconds`),
+  while `encode/1` always writes all eight, filling absent units with `0`.
+  The re-decoded value is therefore canonical rather than identical to the
+  input, and semantically equal to it.
   """
+
+  alias StatifierUI.Shape
 
   @duration_units [
     :years,
@@ -118,7 +127,7 @@ defmodule StatifierUI.Value do
   def encode(%DateTime{} = datetime), do: {:ok, %{"$datetime" => DateTime.to_iso8601(datetime)}}
 
   def encode(map) when is_map(map) do
-    if duration?(map) do
+    if Shape.duration?(map) do
       encode_duration(map)
     else
       encode_host_map(map)
@@ -140,14 +149,6 @@ defmodule StatifierUI.Value do
   end
 
   def encode(scalar), do: {:ok, scalar}
-
-  @spec duration?(map()) :: boolean()
-  defp duration?(map) do
-    keys = map |> Map.keys() |> MapSet.new()
-
-    MapSet.equal?(keys, MapSet.new(@duration_units)) and
-      Enum.all?(map, fn {_key, value} -> is_integer(value) end)
-  end
 
   @spec encode_duration(map()) :: {:ok, map()}
   defp encode_duration(duration) do

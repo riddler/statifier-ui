@@ -26,13 +26,49 @@ defmodule StatifierUI.FixturesTest do
       assert {:error, _reason} = Fixtures.new(scenarios: [{"a", %{}}])
     end
 
-    test "rejects an atom key at the top level of a scenario" do
-      assert {:error, _reason} = Fixtures.new(scenarios: %{"s" => %{ok: 1}})
+    test "rejects an atom key at the top level of a scenario, naming the scenario" do
+      assert {:error, {:invalid_key, :ok, ["s"]}} =
+               Fixtures.new(scenarios: %{"s" => %{ok: 1}})
     end
 
     test "rejects an atom key nested three levels deep inside a list of maps" do
       scenario = %{"a" => %{"b" => [%{ok: 1}]}}
-      assert {:error, _reason} = Fixtures.new(scenarios: %{"s" => scenario})
+
+      assert {:error, {:invalid_key, :ok, ["s", "a", "b", 0]}} =
+               Fixtures.new(scenarios: %{"s" => scenario})
+    end
+
+    test "a key error names the scenario it came from, not just the key" do
+      scenarios = %{
+        "fine" => %{"tier" => "gold"},
+        "broken" => %{"user" => %{bad: 1}}
+      }
+
+      assert {:error, {:invalid_key, :bad, ["broken", "user"]}} =
+               Fixtures.new(scenarios: scenarios)
+    end
+
+    # The engine's own rule is `is_atom(key) and not is_boolean(key)`, so it
+    # accepts these two; a sidecar can never express them, so we do not.
+    test "is stricter than the engine: an integer key is rejected" do
+      assert {:error, {:invalid_key, 1, ["s"]}} = Fixtures.new(scenarios: %{"s" => %{1 => "x"}})
+    end
+
+    test "is stricter than the engine: a boolean key is rejected" do
+      assert {:error, {:invalid_key, true, ["s"]}} =
+               Fixtures.new(scenarios: %{"s" => %{true => "x"}})
+    end
+
+    test "a duration in scenario data says so, rather than naming a unit key" do
+      scenario = %{"trial_left" => %{days: 14}}
+
+      assert {:error, {:duration_in_scenario, ["s", "trial_left"]}} =
+               Fixtures.new(scenarios: %{"s" => scenario})
+    end
+
+    test "a duration in an event payload is accepted" do
+      assert {:ok, %Fixtures{}} =
+               Fixtures.new(events: %{"grace.granted" => %{days: 14}})
     end
 
     test "accepts Date and DateTime struct values without walking them" do

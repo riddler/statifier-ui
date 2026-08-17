@@ -85,6 +85,23 @@ defmodule StatifierUI.ValueTest do
       assert duration.days == 3
     end
 
+    test "encodes the seven-key duration predicator's parser emits, filling milliseconds" do
+      assert {:ok, value} = Predicator.evaluate("3d8h")
+      assert {:ok, %{"$duration" => encoded}} = Value.encode(value)
+      assert encoded["days"] == 3
+      assert encoded["hours"] == 8
+      assert encoded["milliseconds"] == 0
+      assert map_size(encoded) == 8
+    end
+
+    test "a parsed duration re-decodes to the canonical eight-key form" do
+      assert {:ok, value} = Predicator.evaluate("2w")
+      assert {:ok, encoded} = Value.encode(value)
+      assert {:ok, decoded} = Value.decode(encoded)
+      assert decoded == Map.put(value, :milliseconds, 0)
+      assert {:ok, ^encoded} = Value.encode(decoded)
+    end
+
     test "a duration with a bogus unit key is rejected" do
       assert {:error, {:unknown_duration_unit, "fortnights"}} =
                Value.decode(%{"$duration" => %{"fortnights" => 1}})

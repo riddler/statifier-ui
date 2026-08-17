@@ -16,12 +16,21 @@ defmodule StatifierUI.Fixtures do
   is indifferent to which one produced the struct.
 
   `new/1` validates rather than raises: scenario datamodels must have string
-  keys at every level, mirroring the invariant
-  `Statifier.MachineState.new/2` enforces at runtime, so a fixture that would
-  blow up deep inside the engine is instead rejected at load time. Event
-  payloads are preserved verbatim, including the three-way `:undefined` /
-  `nil` / map distinction predicator's `_event.data` semantics require.
+  keys at every level, so a fixture that would blow up deep inside the engine
+  is instead rejected at load time. Event payloads are preserved verbatim,
+  including the three-way `:undefined` / `nil` / map distinction predicator's
+  `_event.data` semantics require.
+
+  Scenario validation is **deliberately stricter than the engine's**, not a
+  mirror of it. `Statifier.MachineState.new/2` rejects only atom keys that
+  are not booleans, so it accepts an integer or boolean key; this rejects
+  every key that is not a string. The reason is convergence: a JSON object
+  key is always a string, so a scenario a behaviour source could supply but
+  a sidecar could never express would break the one-struct guarantee
+  ADR-0003 rests on. Rejecting it in both paths keeps them interchangeable.
   """
+
+  alias StatifierUI.Shape
 
   @typedoc "The name of a fixture scenario."
   @type scenario_name :: String.t()
@@ -32,8 +41,17 @@ defmodule StatifierUI.Fixtures do
   @typedoc "An example datamodel: string keys at every level."
   @type datamodel :: %{optional(String.t()) => term()}
 
-  @typedoc "A diagnostic surfaced while loading a fixture bundle."
-  @type diagnostic :: %{kind: atom(), message: String.t(), path: [String.t()]}
+  @typedoc """
+  A diagnostic surfaced while loading a fixture bundle. `path` is the key
+  path inside the bundle; `source` is the file it came from, or `nil` for a
+  bundle that never was a file.
+  """
+  @type diagnostic :: %{
+          kind: atom(),
+          message: String.t(),
+          path: [String.t()],
+          source: Path.t() | nil
+        }
 
   @type t :: %__MODULE__{
           scenarios: %{optional(scenario_name()) => datamodel()},
@@ -48,9 +66,12 @@ defmodule StatifierUI.Fixtures do
 
   Both options default to `%{}`. Returns `{:error, reason}` rather than
   raising when a scenario or event key is not a string, when a scenario
-  datamodel is not a map, or when a scenario datamodel contains an atom key
-  at any depth (mirroring the `check_keys!/2` private function in
-  statifier's `Statifier.MachineState` module).
+  datamodel is not a map, or when a scenario datamodel contains a non-string
+  key at any depth. A non-string key found inside a datamodel is reported as
+  `{:invalid_key, key, path}`, where `path` starts with the scenario name -
+  or, when the offending map is a predicator duration, as
+  `{:duration_in_scenario, path}`, which says why rather than naming a unit
+  key the author never wrote.
 
   ## Examples
 
@@ -147,7 +168,10 @@ defmodule StatifierUI.Fixtures do
   defp validate_scenario_entry(name, datamodel) when not is_map(datamodel),
     do: {:error, {:invalid_scenario, name}}
 
-  defp validate_scenario_entry(_name, datamodel), do: check_keys(datamodel, [])
+  # The path is seeded with the scenario name so a key error names the
+  # scenario it came from; a bundle with several scenarios is otherwise
+  # ambiguous about which one to go fix.
+  defp validate_scenario_entry(name, datamodel), do: check_keys(datamodel, [name])
 
   @spec validate_events(term()) :: :ok | {:error, term()}
   defp validate_events(events) when is_map(events) do
@@ -160,9 +184,10 @@ defmodule StatifierUI.Fixtures do
 
   defp validate_events(other), do: {:error, {:invalid_events, other}}
 
-  # Mirrors Statifier.MachineState.check_keys!/2
-  # (deps/statifier/lib/statifier/machine_state.ex:500-516): descends maps and
-  # lists, stops at structs, and rejects any non-string map key.
+  # Shaped after Statifier.MachineState.check_keys!/2
+  # (deps/statifier/lib/statifier/machine_state.ex:500-516) - descends maps
+  # and lists, stops at structs - but stricter about what counts as an
+  # offending key, for the convergence reason in this module's @moduledoc.
   @spec check_keys(term(), [term()]) :: :ok | {:error, term()}
   defp check_keys(list, path) when is_list(list) do
     list
@@ -177,7 +202,21 @@ defmodule StatifierUI.Fixtures do
 
   defp check_keys(%_struct{}, _path), do: :ok
 
+  # A duration is reported as itself rather than as the first offending unit
+  # key: the author wrote `$duration` (or an atom-keyed map), never `:seconds`,
+  # so naming the unit describes the decoding rather than the mistake.
   defp check_keys(map, path) when is_map(map) do
+    if Shape.duration?(map) do
+      {:error, {:duration_in_scenario, Enum.reverse(path)}}
+    else
+      check_each_key(map, path)
+    end
+  end
+
+  defp check_keys(_scalar, _path), do: :ok
+
+  @spec check_each_key(map(), [term()]) :: :ok | {:error, term()}
+  defp check_each_key(map, path) do
     Enum.reduce_while(map, :ok, fn {key, value}, :ok ->
       case check_key(key, value, path) do
         :ok -> {:cont, :ok}
@@ -185,8 +224,6 @@ defmodule StatifierUI.Fixtures do
       end
     end)
   end
-
-  defp check_keys(_scalar, _path), do: :ok
 
   @spec check_key(term(), term(), [term()]) :: :ok | {:error, term()}
   defp check_key(key, _value, path) when not is_binary(key),
