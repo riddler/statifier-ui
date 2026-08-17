@@ -64,8 +64,9 @@ dependency until statifier-ex publishes to hex) and the two optional
 integrations, `kino` and `phoenix_live_view`, and `lib/statifier_ui.ex` is
 the top-level module with its `@moduledoc` and a `version/0` function.
 
-What is built is the fixtures contract described below. `lib/statifier_ui/`
-holds five core modules, none of which reference `Kino` or
+What is built is the fixtures contract described below, plus the trace
+plumbing described under "The wire format boundary." `lib/statifier_ui/`
+holds eleven core modules, none of which reference `Kino` or
 `Phoenix.LiveView`:
 
 - `StatifierUI.Fixtures` - the consumed struct and its validation.
@@ -77,6 +78,18 @@ holds five core modules, none of which reference `Kino` or
   predicator values, used by the sidecar loader.
 - `StatifierUI.Shape` - pure shape inference from an example value to a
   display-type label, independent of the fixtures modules.
+- `StatifierUI.Trace.Message` - the wire-format envelope struct and its
+  `to_map/1` rendering.
+- `StatifierUI.Trace.Json` - the canonical, byte-comparable JSON encoder for
+  trace messages.
+- `StatifierUI.Trace.Normalizer` - the pure mapping from engine effects to
+  `StatifierUI.Trace.Message` structs.
+- `StatifierUI.Trace.Manifest` - builds the `session.start` definition
+  message from a compiled machine.
+- `StatifierUI.Trace.Buffer` - the fixed-capacity, drop-oldest message store
+  a chatty session buffers into.
+- `StatifierUI.Trace.Subscriber` - the `GenServer` that attaches to a live
+  `Statifier.Session`, stamps `seq`, and fans messages out to listeners.
 
 No LiveComponent, no Kino widget, and no JS asset exists yet. Everything
 described below past this section is intended design, tracked by beads and
@@ -248,9 +261,16 @@ not as a dependency or a target to interoperate with.
 
 The format itself - envelope, event types, versioning, and the rule that
 structs and LiveView payloads are carriers rather than the definition - is
-settled by ADR-0005, and its normative home is `docs/wire-format.md` (a
-document written alongside the first producer; see ADR-0005 for what it
-must contain).
+settled by ADR-0005, and `docs/wire-format.md` is its normative home: when
+the document and an implementation disagree, the document is what
+conformance means. The first producer is `StatifierUI.Trace.Normalizer`,
+which maps engine effects to `StatifierUI.Trace.Message` structs matching
+the document field for field; `StatifierUI.Trace.Manifest` builds the
+`session.start` message the same way; `StatifierUI.Trace.Json` renders
+either to the document's canonical, byte-comparable JSON; and
+`StatifierUI.Trace.Subscriber`, backed by `StatifierUI.Trace.Buffer`, is the
+process that attaches to a live session and produces the stream from those
+pieces.
 
 ## The JS strategy
 
