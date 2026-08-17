@@ -49,7 +49,8 @@ defmodule StatifierUI.Fixtures do
   Both options default to `%{}`. Returns `{:error, reason}` rather than
   raising when a scenario or event key is not a string, when a scenario
   datamodel is not a map, or when a scenario datamodel contains an atom key
-  at any depth (mirroring `Statifier.MachineState.check_keys!/2`).
+  at any depth (mirroring the `check_keys!/2` private function in
+  statifier's `Statifier.MachineState` module).
 
   ## Examples
 

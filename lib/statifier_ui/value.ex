@@ -1,6 +1,7 @@
 defmodule StatifierUI.Value do
   @moduledoc """
-  Codec for ADR-0005's JSON encoding of `Predicator.Types.value/0`.
+  Codec for ADR-0005's JSON encoding of the value domain predicator's
+  `Predicator.Types` module defines (its `value/0` type).
 
   `decode/1` reads a JSON-decoded term (as produced by the stdlib `JSON`
   module) and recovers the predicator value it encodes, resolving the
