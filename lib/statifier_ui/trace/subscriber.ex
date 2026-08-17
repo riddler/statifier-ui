@@ -373,14 +373,28 @@ defmodule StatifierUI.Trace.Subscriber do
 
     case Normalizer.normalize(input, ctx) do
       {:ok, message} -> buffer_and_fanout(state, message)
-      {:error, reason} -> record_normalize_error(state, reason)
+      {:error, reason} -> record_normalize_error(state, effect_tag(input), reason)
     end
   end
 
-  @spec record_normalize_error(State.t(), term()) :: State.t()
-  defp record_normalize_error(state, reason) do
+  # The tag names which effect failed to normalize - `reason` alone (e.g.
+  # `{:unsupported_value, term}`) does not say whether the rejected value
+  # came from an `effect.log`, a `trace.done`, or elsewhere, and that is
+  # exactly what a human reading the warning needs first. Dedup stays keyed
+  # on `reason` alone (see `record_normalize_error/3`); this is for the log
+  # line's readability only.
+  @spec effect_tag(Normalizer.input()) :: atom()
+  defp effect_tag({:effect, {tag, _payload}}) when is_atom(tag), do: tag
+  defp effect_tag({:unroutable, {tag, _payload}}) when is_atom(tag), do: tag
+  defp effect_tag({:halted, reason}) when is_atom(reason), do: reason
+  defp effect_tag({tag, _payload}) when is_atom(tag), do: tag
+
+  @spec record_normalize_error(State.t(), atom(), term()) :: State.t()
+  defp record_normalize_error(state, tag, reason) do
     unless MapSet.member?(state.error_reasons, reason) do
-      Logger.warning("StatifierUI.Trace.Subscriber: normalize error #{inspect(reason)}")
+      Logger.warning(
+        "StatifierUI.Trace.Subscriber: normalize error on #{tag}: #{inspect(reason)}"
+      )
     end
 
     %{
