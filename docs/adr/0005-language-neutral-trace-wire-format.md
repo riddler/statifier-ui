@@ -1,6 +1,8 @@
 # ADR-0005: Language-neutral trace wire format
 
-Status: accepted (2026-08-16)
+Status: accepted (2026-08-16), amended in part by ADR-0011 (2026-08-17):
+exit and entry sets are engine-ordered sequences, not canonically sorted
+sets
 
 ## Context
 
