@@ -16,6 +16,13 @@ defmodule StatifierUI do
   by a host module implementing `StatifierUI.Fixtures.Source` or by
   `StatifierUI.Fixtures.Sidecar` reading a `<chart>.fixtures.json` file.
   `StatifierUI.Shape` infers display-type labels from example values.
+
+  Trace data - the wire format that carries a running session's effects to
+  a UI - is produced by `StatifierUI.Trace.Subscriber`, which attaches to a
+  `Statifier.Session` and normalizes its effects into
+  `StatifierUI.Trace.Message` structs via `StatifierUI.Trace.Normalizer`,
+  buffering them in a `StatifierUI.Trace.Buffer`. `StatifierUI.Trace.Json`
+  renders messages to the canonical JSON `docs/wire-format.md` specifies.
   """
 
   @version Mix.Project.config()[:version]
