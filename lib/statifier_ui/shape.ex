@@ -75,7 +75,7 @@ defmodule StatifierUI.Shape do
   def infer(%_struct{}), do: :unknown
 
   def infer(value) when is_map(value) do
-    if duration_map?(value) do
+    if duration?(value) do
       :duration
     else
       infer_map(value)
@@ -84,13 +84,42 @@ defmodule StatifierUI.Shape do
 
   def infer(_value), do: :unknown
 
-  @spec duration_map?(map()) :: boolean()
-  defp duration_map?(value) do
+  @doc """
+  Whether `value` is a predicator duration: a non-empty map whose keys are
+  atoms drawn from the eight duration units and whose values are all
+  integers.
+
+  A **subset** of the units is enough, deliberately. `Predicator.Duration`'s
+  own builder returns all eight, but predicator's expression parser returns
+  seven - `Predicator.evaluate("3d")` omits `:milliseconds` - so requiring
+  the full set misses every duration produced by evaluating an expression,
+  which is the common case. Nothing else in the value domain can collide:
+  atom keys reach a fixture only from Elixir, and a datamodel forbids them
+  outright (`StatifierUI.Fixtures`), so the only atom-keyed maps that arrive
+  here are durations.
+
+  Public because `StatifierUI.Fixtures` and `StatifierUI.Value` need the same
+  rule, and three copies of it are what let the seven-versus-eight gap go
+  unnoticed once already.
+
+  ## Examples
+
+      iex> StatifierUI.Shape.duration?(%{days: 3, hours: 8})
+      true
+
+      iex> StatifierUI.Shape.duration?(%{"days" => 3})
+      false
+
+  """
+  @spec duration?(term()) :: boolean()
+  def duration?(value) when is_map(value) and map_size(value) > 0 and not is_struct(value) do
     keys = value |> Map.keys() |> MapSet.new()
 
-    MapSet.equal?(keys, @duration_keys) and
+    MapSet.subset?(keys, @duration_keys) and
       Enum.all?(Map.values(value), &is_integer/1)
   end
+
+  def duration?(_value), do: false
 
   @spec infer_map(map()) :: t()
   defp infer_map(value) do

@@ -12,6 +12,12 @@ defmodule StatifierUI.Fixtures.Sidecar do
   ignored with a `:unknown_key` diagnostic (ADR-0006's extension-friendly
   requirement), and every value under `"scenarios"` and `"events"` is
   decoded through `StatifierUI.Value.decode/1`.
+
+  A `$duration` cannot appear inside `"scenarios"`: it decodes to an
+  atom-keyed map, and a datamodel forbids atom keys at every level (the
+  engine's own invariant, tightened in `StatifierUI.Fixtures`). Such a
+  sidecar is rejected with `{:duration_in_scenario, path}`. Durations under
+  `"events"` are fine - an `_event.data` payload has no key constraint.
   """
 
   alias StatifierUI.Fixtures
@@ -46,8 +52,9 @@ defmodule StatifierUI.Fixtures.Sidecar do
   @doc """
   Derives the sidecar path for `chart_path` and loads it.
 
-  A missing sidecar is `{:error, :enoent}`, not an empty bundle - whether
-  "no fixtures" is acceptable is a caller-level decision.
+  A missing sidecar is `{:error, {:sidecar_not_found, path}}`, not an empty
+  bundle - whether "no fixtures" is acceptable is a caller-level decision,
+  and a typo'd chart path must not look like a chart without fixtures.
   """
   @spec load_for_chart(Path.t()) :: {:ok, Fixtures.t()} | {:error, term()}
   def load_for_chart(chart_path) do
@@ -57,25 +64,38 @@ defmodule StatifierUI.Fixtures.Sidecar do
   @doc """
   Reads, parses, and validates a sidecar file at `path`, returning the same
   struct `StatifierUI.Fixtures.from_source/1` produces.
+
+  Every error names `path`, because a corpus run loads many sidecars and a
+  bare POSIX reason does not say which one failed.
   """
   @spec load(Path.t()) :: {:ok, Fixtures.t()} | {:error, term()}
   def load(path) do
-    with {:ok, contents} <- File.read(path),
-         {:ok, decoded} <- JSON.decode(contents) do
-      from_json(decoded)
+    with {:ok, contents} <- read_sidecar(path),
+         {:ok, decoded} <- decode_json(contents, path) do
+      from_json(decoded, source: path)
     end
   end
 
   @doc """
   Converts an already JSON-decoded sidecar map into a validated
   `StatifierUI.Fixtures` struct.
+
+  Options:
+
+    * `:source` - the file the map was read from, recorded on each
+      diagnostic and named in each logged warning. `load/1` passes it;
+      omitting it is for a map that never was a file.
   """
-  @spec from_json(map()) :: {:ok, Fixtures.t()} | {:error, term()}
-  def from_json(json) when is_map(json) do
-    with {:ok, version_diagnostics} <- validate_version(json),
+  @spec from_json(map(), keyword()) :: {:ok, Fixtures.t()} | {:error, term()}
+  def from_json(json, opts \\ [])
+
+  def from_json(json, opts) when is_map(json) do
+    source = Keyword.get(opts, :source)
+
+    with {:ok, version_diagnostics} <- validate_version(json, source),
          {:ok, scenarios} <- decode_section(json, "scenarios"),
          {:ok, events} <- decode_section(json, "events") do
-      unknown_key_diagnostics = unknown_key_diagnostics(json)
+      unknown_key_diagnostics = unknown_key_diagnostics(json, source)
 
       case Fixtures.new(scenarios: scenarios, events: events) do
         {:ok, fixtures} ->
@@ -83,36 +103,63 @@ defmodule StatifierUI.Fixtures.Sidecar do
           Enum.each(diagnostics, &log_diagnostic/1)
           {:ok, %Fixtures{fixtures | diagnostics: diagnostics}}
 
-        {:error, _reason} = error ->
-          error
+        {:error, reason} ->
+          {:error, with_source(reason, source)}
       end
     end
   end
 
-  def from_json(other), do: {:error, {:invalid_sidecar, other}}
+  def from_json(other, _opts), do: {:error, {:invalid_sidecar, other}}
 
-  @spec validate_version(map()) :: {:ok, [Fixtures.diagnostic()]} | {:error, term()}
-  defp validate_version(%{"version" => version}) when is_integer(version) and version == 1 do
+  @spec read_sidecar(Path.t()) :: {:ok, binary()} | {:error, term()}
+  defp read_sidecar(path) do
+    case File.read(path) do
+      {:ok, contents} -> {:ok, contents}
+      {:error, :enoent} -> {:error, {:sidecar_not_found, path}}
+      {:error, reason} -> {:error, {:sidecar_unreadable, path, reason}}
+    end
+  end
+
+  @spec decode_json(binary(), Path.t()) :: {:ok, term()} | {:error, term()}
+  defp decode_json(contents, path) do
+    case JSON.decode(contents) do
+      {:ok, decoded} -> {:ok, decoded}
+      {:error, reason} -> {:error, {:invalid_json, path, reason}}
+    end
+  end
+
+  @spec with_source(term(), Path.t() | nil) :: term()
+  defp with_source(reason, nil), do: reason
+  defp with_source(reason, source), do: {:invalid_sidecar_contents, source, reason}
+
+  @spec validate_version(map(), Path.t() | nil) ::
+          {:ok, [Fixtures.diagnostic()]} | {:error, term()}
+  defp validate_version(%{"version" => version}, _source)
+       when is_integer(version) and version == 1 do
     {:ok, []}
   end
 
-  defp validate_version(%{"version" => version}) when is_integer(version) and version > 1 do
+  defp validate_version(%{"version" => version}, source)
+       when is_integer(version) and version > 1 do
     {:ok,
      [
-       %{
-         kind: :future_version,
-         message: "sidecar declares version #{version}, newer than the version this loader knows",
-         path: ["version"]
-       }
+       diagnostic(
+         :future_version,
+         "sidecar declares version #{version}, newer than the version this loader knows",
+         ["version"],
+         source
+       )
      ]}
   end
 
-  defp validate_version(%{"version" => version}) when is_integer(version) do
-    {:error, {:invalid_version, version}}
+  defp validate_version(%{"version" => version}, source) when is_integer(version) do
+    {:error, with_source({:invalid_version, version}, source)}
   end
 
-  defp validate_version(%{"version" => version}), do: {:error, {:invalid_version, version}}
-  defp validate_version(_json), do: {:error, :missing_version}
+  defp validate_version(%{"version" => version}, source),
+    do: {:error, with_source({:invalid_version, version}, source)}
+
+  defp validate_version(_json, source), do: {:error, with_source(:missing_version, source)}
 
   @spec decode_section(map(), String.t()) :: {:ok, map()} | {:error, term()}
   defp decode_section(json, key) do
@@ -133,21 +180,28 @@ defmodule StatifierUI.Fixtures.Sidecar do
 
   defp decode_map_of_values(other, section), do: {:error, {:invalid_section, section, other}}
 
-  @spec unknown_key_diagnostics(map()) :: [Fixtures.diagnostic()]
-  defp unknown_key_diagnostics(json) do
+  @spec unknown_key_diagnostics(map(), Path.t() | nil) :: [Fixtures.diagnostic()]
+  defp unknown_key_diagnostics(json, source) do
     json
     |> Map.keys()
     |> Enum.reject(&(&1 in @known_top_level_keys))
     |> Enum.sort()
     |> Enum.map(fn key ->
-      %{
-        kind: :unknown_key,
-        message: "ignoring unknown sidecar key #{inspect(key)}",
-        path: [key]
-      }
+      diagnostic(:unknown_key, "ignoring unknown sidecar key #{inspect(key)}", [key], source)
     end)
   end
 
+  @spec diagnostic(atom(), String.t(), [String.t()], Path.t() | nil) :: Fixtures.diagnostic()
+  defp diagnostic(kind, message, path, source) do
+    %{kind: kind, message: message, path: path, source: source}
+  end
+
+  # The file is part of the message, not only of the struct: a corpus run
+  # logs these while walking many charts, and a warning that names only the
+  # key cannot be traced back to the sidecar that caused it.
   @spec log_diagnostic(Fixtures.diagnostic()) :: :ok
-  defp log_diagnostic(%{message: message}), do: Logger.warning(message)
+  defp log_diagnostic(%{message: message, source: nil}), do: Logger.warning(message)
+
+  defp log_diagnostic(%{message: message, source: source}),
+    do: Logger.warning("#{message} in #{source}")
 end

@@ -21,9 +21,11 @@ defmodule StatifierUI.Fixtures.SidecarTest do
   end
 
   describe "load_for_chart/1" do
-    test "a missing sidecar is {:error, :enoent}" do
+    test "a missing sidecar names the path it looked for" do
+      expected = Path.join(@fixtures_dir, "nonexistent.fixtures.json")
+
       assert Sidecar.load_for_chart(Path.join(@fixtures_dir, "nonexistent.scxml")) ==
-               {:error, :enoent}
+               {:error, {:sidecar_not_found, expected}}
     end
 
     test "loads the sidecar derived from a chart path" do
@@ -33,9 +35,10 @@ defmodule StatifierUI.Fixtures.SidecarTest do
   end
 
   describe "load/1" do
-    test "a missing file returns {:error, :enoent}" do
-      assert Sidecar.load(Path.join(@fixtures_dir, "does_not_exist.fixtures.json")) ==
-               {:error, :enoent}
+    test "a missing file names the path" do
+      path = Path.join(@fixtures_dir, "does_not_exist.fixtures.json")
+
+      assert Sidecar.load(path) == {:error, {:sidecar_not_found, path}}
     end
 
     test "malformed JSON returns an error value" do
@@ -46,7 +49,7 @@ defmodule StatifierUI.Fixtures.SidecarTest do
 
       on_exit(fn -> File.rm(path) end)
 
-      assert {:error, _reason} = Sidecar.load(path)
+      assert {:error, {:invalid_json, ^path, _reason}} = Sidecar.load(path)
     end
   end
 
@@ -104,8 +107,57 @@ defmodule StatifierUI.Fixtures.SidecarTest do
       assert unknown_key_names == ["datasets", "expressions", "nonsense"]
     end
 
+    test "a diagnostic from from_json/2 without a source records source: nil",
+         %{decoded: decoded} do
+      assert {:ok, %Fixtures{diagnostics: diagnostics}} = Sidecar.from_json(decoded)
+      assert Enum.all?(diagnostics, &(&1.source == nil))
+    end
+
+    test "load/1 records the file on every diagnostic and in the logged warning" do
+      path = Path.join(@fixtures_dir, "extended.fixtures.json")
+
+      log =
+        ExUnit.CaptureLog.capture_log(fn ->
+          assert {:ok, %Fixtures{diagnostics: diagnostics}} = Sidecar.load(path)
+          assert diagnostics != []
+          assert Enum.all?(diagnostics, &(&1.source == path))
+        end)
+
+      assert log =~ "ignoring unknown sidecar key"
+      assert log =~ path
+    end
+
     test "scenarios and events load as empty maps", %{decoded: decoded} do
       assert {:ok, %Fixtures{scenarios: %{}, events: %{}}} = Sidecar.from_json(decoded)
+    end
+  end
+
+  describe "load/1 - a $duration in scenario data" do
+    test "is rejected, naming the scenario and the key path rather than a unit key" do
+      path =
+        Path.join(System.tmp_dir!(), "sidecar_dur_#{System.unique_integer([:positive])}.json")
+
+      File.write!(path, ~s({
+        "version": 1,
+        "scenarios": {"gold-tier": {"trial_left": {"$duration": {"days": 14}}}}
+      }))
+
+      on_exit(fn -> File.rm(path) end)
+
+      assert {:error,
+              {:invalid_sidecar_contents, ^path,
+               {:duration_in_scenario, ["gold-tier", "trial_left"]}}} = Sidecar.load(path)
+    end
+
+    test "the same duration under events is accepted" do
+      assert {:ok, fixtures} =
+               Sidecar.from_json(%{
+                 "version" => 1,
+                 "events" => %{"grace.granted" => %{"$duration" => %{"days" => 14}}}
+               })
+
+      assert {:ok, duration} = Fixtures.event(fixtures, "grace.granted")
+      assert duration.days == 14
     end
   end
 

@@ -66,8 +66,11 @@ defmodule StatifierUI.ShapeTest do
       assert Shape.infer(duration) == :duration
     end
 
-    test "a seven-key near-miss infers as a plain map instead" do
-      near_miss = %{
+    test "the seven-key duration predicator's parser actually emits infers as :duration" do
+      # Predicator.Duration.new/1 fills all eight units, but the expression
+      # parser omits :milliseconds. Requiring all eight missed every duration
+      # produced by evaluating an expression, which is the common path.
+      seven_key = %{
         years: 0,
         months: 0,
         weeks: 0,
@@ -77,7 +80,44 @@ defmodule StatifierUI.ShapeTest do
         seconds: 0
       }
 
-      assert {:map, _pairs} = Shape.infer(near_miss)
+      assert Shape.infer(seven_key) == :duration
+    end
+
+    test "a partial duration infers as :duration" do
+      assert Shape.infer(%{days: 14}) == :duration
+    end
+
+    test "durations from real predicator expressions infer as :duration" do
+      for expr <- ["3d", "2w", "1h30m", "3d8h"] do
+        assert {:ok, value} = Predicator.evaluate(expr)
+        assert Shape.infer(value) == :duration, "#{expr} did not infer as a duration"
+        assert Shape.label(Shape.infer(value)) == "duration"
+      end
+    end
+
+    test "durations from Predicator.Duration.new/1 infer as :duration" do
+      assert Shape.infer(Predicator.Duration.new(days: 3)) == :duration
+    end
+
+    test "an empty map is a map, not a duration" do
+      assert Shape.infer(%{}) == {:map, %{}}
+      refute Shape.duration?(%{})
+    end
+
+    test "a string-keyed unit map is a host map, not a duration" do
+      assert Shape.infer(%{"days" => 3}) == {:map, %{"days" => :integer}}
+    end
+
+    test "a unit map with a non-integer value is not a duration" do
+      refute Shape.duration?(%{days: "three"})
+    end
+
+    test "a map carrying a non-unit atom key is not a duration" do
+      refute Shape.duration?(%{days: 3, fortnights: 1})
+    end
+
+    test "a struct is never a duration" do
+      refute Shape.duration?(~D[2024-01-15])
     end
 
     test "a map with a \"$date\" key infers as a plain map, not a wire-decoded value" do

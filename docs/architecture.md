@@ -58,14 +58,15 @@ capability to get started.
 
 ## What exists today
 
-As of this writing the repository is mostly a scaffold, with one exception:
-`mix.exs` declares the `statifier` dependency (a git dependency until
-statifier-ex publishes to hex) and the two optional integrations, `kino` and
-`phoenix_live_view`; `lib/statifier_ui.ex` is the top-level module with its
-`@moduledoc` and a `version/0` function.
+As of this writing one thing is built and the rest is scaffold. The scaffold
+is the packaging: `mix.exs` declares the `statifier` dependency (a git
+dependency until statifier-ex publishes to hex) and the two optional
+integrations, `kino` and `phoenix_live_view`, and `lib/statifier_ui.ex` is
+the top-level module with its `@moduledoc` and a `version/0` function.
 
-The fixtures contract (below) is built. `lib/statifier_ui/` holds four core
-modules, none of which reference `Kino` or `Phoenix.LiveView`:
+What is built is the fixtures contract described below. `lib/statifier_ui/`
+holds five core modules, none of which reference `Kino` or
+`Phoenix.LiveView`:
 
 - `StatifierUI.Fixtures` - the consumed struct and its validation.
 - `StatifierUI.Fixtures.Source` - the behaviour a host module implements to
