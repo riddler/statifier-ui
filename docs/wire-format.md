@@ -211,23 +211,16 @@ in a value slot.
   wherever it appears (`trace.macrostep_stable`, `trace.done`,
   `effect.budget_exhausted`).
 - **A sequence-valued field that is already ordered by the engine keeps
-  that order; it is not additionally sorted.** This is a deliberate,
-  narrow departure from an ADR-0005 sentence that names exit and entry
-  sets specifically alongside configurations as "canonical order (ascending
-  index)". Read literally, sorting would discard information: statifier's
-  exit order is inner-to-outer (the order Appendix D's `exitStates` actually
-  visits them) and its entry order is entry order, and the event-log pane
-  this format was built for renders exactly that sequence to a user
-  stepping through a run. Both orders are deterministic for a given run, so
-  preserving them costs the byte-comparability rule nothing - the property
-  the ascending-index sentence exists to protect. The resolution, applying
-  to `trace.exit_set` and `trace.entry_set`'s `indexes` fields precisely:
-  they are sequences in the engine's own emission order, never re-sorted.
-  Every other sequence field in this document that is not already
-  identified as a genuine set (transition lists, content lists, and so on)
-  likewise keeps the engine's own order. This document, in stating the
-  rule this way, is exercising exactly the field-by-field remit ADR-0005
-  delegated to it, not contradicting the envelope ADR-0005 fixed.
+  that order; it is not additionally sorted** (ADR-0011). This applies to
+  `trace.exit_set` and `trace.entry_set`'s `indexes` fields precisely:
+  they are sequences in the engine's own emission order - exit order is
+  inner-to-outer (the order Appendix D's `exitStates` actually visits
+  them), entry order is ascending - and re-sorting the exit set would
+  reverse what happened. Both orders are deterministic for a given run,
+  so preserving them costs the byte-comparability rule nothing. Every
+  other sequence field in this document that is not already identified as
+  a genuine set (transition lists, content lists, and so on) likewise
+  keeps the engine's own order.
 
 Together, canonical ordering plus the value encoding above is what makes
 two producer runs of the same chart, the same fixtures, and the same event
