@@ -1,6 +1,8 @@
 defmodule StatifierUI.Trace.SubscriberTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureLog
+
   alias Statifier.Effect.Log
   alias Statifier.Session
   alias StatifierUI.Test.Support.Trace.SessionCase
@@ -258,6 +260,103 @@ defmodule StatifierUI.Trace.SubscriberTest do
       assert "session.halted" in types
       assert "session.terminated" in types
       assert "session.unroutable" in types
+    end
+  end
+
+  describe "normalize errors" do
+    # A pid occupies a value position (`Log.value`) but is outside
+    # `StatifierUI.Value.encode/1`'s closed value domain (ADR-0005), so it
+    # is rejected with `{:error, {:unsupported_value, term}}` rather than
+    # passed through - sui-qlf. That makes it reachable here.
+    defp out_of_domain_log(label, macrostep) do
+      {:log, %Log{label: label, value: self(), macrostep: macrostep, microstep: 0}}
+    end
+
+    test "an out-of-domain value drives stats.errors up through a live subscriber" do
+      machine = SessionCase.compile!(@two_state)
+      {sub, session} = SessionCase.start_early!(machine, "sess_normalize_error")
+      drive_and_wait(sub, session)
+
+      session_id = Subscriber.stats(sub).session
+      before_seq = Subscriber.stats(sub).seq
+
+      capture_log(fn ->
+        send(sub, {:statifier, session_id, {:effect, out_of_domain_log("bad", 99)}})
+        SessionCase.wait_until(sub, 500, fn stats -> stats.errors == 1 end)
+      end)
+
+      assert Subscriber.stats(sub).errors == 1
+      # The failed effect is never buffered - seq does not advance for it.
+      assert Subscriber.stats(sub).seq == before_seq
+    end
+
+    test "a repeated identical reason logs exactly once but counts every occurrence" do
+      machine = SessionCase.compile!(@two_state)
+      {sub, session} = SessionCase.start_early!(machine, "sess_normalize_dedup")
+      drive_and_wait(sub, session)
+
+      session_id = Subscriber.stats(sub).session
+
+      log =
+        capture_log(fn ->
+          send(sub, {:statifier, session_id, {:effect, out_of_domain_log("dup", 99)}})
+          SessionCase.wait_until(sub, 500, fn stats -> stats.errors == 1 end)
+
+          send(sub, {:statifier, session_id, {:effect, out_of_domain_log("dup", 99)}})
+          SessionCase.wait_until(sub, 500, fn stats -> stats.errors == 2 end)
+        end)
+
+      assert Subscriber.stats(sub).errors == 2
+
+      occurrences =
+        log
+        |> String.split("\n")
+        |> Enum.count(&(&1 =~ "normalize error"))
+
+      assert occurrences == 1
+    end
+
+    test "the warning names the effect tag and the reason" do
+      machine = SessionCase.compile!(@two_state)
+      {sub, session} = SessionCase.start_early!(machine, "sess_normalize_tag")
+      drive_and_wait(sub, session)
+
+      session_id = Subscriber.stats(sub).session
+
+      log =
+        capture_log(fn ->
+          send(sub, {:statifier, session_id, {:effect, out_of_domain_log("tagged", 99)}})
+          SessionCase.wait_until(sub, 500, fn stats -> stats.errors == 1 end)
+        end)
+
+      assert log =~ "normalize error on log:"
+      assert log =~ "unsupported_value"
+    end
+
+    test "the subscriber survives a normalize error and keeps normalizing subsequent messages" do
+      machine = SessionCase.compile!(@two_state)
+      {sub, session} = SessionCase.start_early!(machine, "sess_normalize_survives")
+      drive_and_wait(sub, session)
+
+      session_id = Subscriber.stats(sub).session
+      before_seq = Subscriber.stats(sub).seq
+
+      capture_log(fn ->
+        send(sub, {:statifier, session_id, {:effect, out_of_domain_log("boom", 99)}})
+        SessionCase.wait_until(sub, 500, fn stats -> stats.errors == 1 end)
+      end)
+
+      good_effect = {:log, %Log{label: "still-alive", value: "ok", macrostep: 99, microstep: 0}}
+      send(sub, {:statifier, session_id, {:effect, good_effect}})
+
+      SessionCase.wait_for_seq(sub, before_seq + 1)
+
+      assert Subscriber.stats(sub).status == :attached
+
+      assert Enum.any?(
+               Subscriber.messages(sub),
+               &(&1.type == "effect.log" and &1.payload["label"] == "still-alive")
+             )
     end
   end
 
