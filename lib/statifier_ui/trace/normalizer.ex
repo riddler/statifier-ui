@@ -15,8 +15,11 @@ defmodule StatifierUI.Trace.Normalizer do
   never rescued. Everything structural is reduced first (decision 6):
   `MapSet`s to sorted lists (`configuration/1`), atoms to `"kind"`-tagged
   objects (`origin/1`, `owner/1`). This ordering matters -
-  `StatifierUI.Value.encode/1` passes an unknown term through unchanged, so
-  handing it a raw tuple would produce silent garbage rather than an error.
+  `StatifierUI.Value.encode/1` rejects any term outside predicator's
+  closed value domain with `{:error, {:unsupported_value, term}}`, so
+  handing it a raw tuple or a bare atom would produce a wrong error
+  (`:unsupported_value` instead of a normalizer-specific one) rather than
+  the structural, purpose-built handling this module gives those shapes.
 
   ## Absence
 
