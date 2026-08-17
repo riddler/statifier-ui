@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "scenarios": {},
+  "events": {},
+  "datasets": {
+    "minor": {
+      "user": {
+        "age": 15,
+        "country": "US"
+      }
+    },
+    "adult-us": {
+      "user": {
+        "age": 30,
+        "country": "US"
+      }
+    }
+  },
+  "expressions": {
+    "is-adult-us": {
+      "source": "user.age >= 18 and user.country == 'US'",
+      "expect": {
+        "minor": false,
+        "adult-us": true
+      }
+    }
+  },
+  "nonsense": "not a real sidecar key"
+}

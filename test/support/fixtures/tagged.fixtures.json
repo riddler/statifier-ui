@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "scenarios": {
+    "tagged": {
+      "created_at": { "$date": "2026-08-16" },
+      "expires_at": { "$datetime": "2026-08-16T10:30:00Z" },
+      "middle_name": null,
+      "tags": [{ "$date": "2026-08-17" }]
+    }
+  },
+  "events": {
+    "payment.pending": { "$undefined": true },
+    "grace_period.granted": {
+      "$duration": {
+        "years": 0,
+        "months": 0,
+        "weeks": 1,
+        "days": 3,
+        "hours": 0,
+        "minutes": 0,
+        "seconds": 0,
+        "milliseconds": 0
+      }
+    }
+  }
+}
