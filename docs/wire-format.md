@@ -279,6 +279,7 @@ order:
 | targets | array of integers | always (empty for a targetless transition) |
 | events | array of arrays of strings | always - one dot-split token list per whitespace-separated event descriptor; empty for an eventless transition |
 | type | string | always - `"internal"` or `"external"` |
+| content | array of integers | always - the transition's own executable content, `c_index` list in document order; empty when the transition carries none |
 | location | location object | always |
 | cond_location | location object | present only when the transition carries a `cond` |
 
