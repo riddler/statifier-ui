@@ -671,13 +671,18 @@ count accounts for it even though no producer emits it yet.
 ## Worked example
 
 The complete JSON Lines trace of a two-state chart with one external
-transition. The producer ran with `session_id: "sess_golden"`. This is the
-same fixture phase 5's golden test compares against byte-for-byte.
+transition. The producer ran with `session_id: "sess_golden"`, attached
+early (`Statifier.Trace.Subscriber`'s `:subscribers`-at-`start_link` path,
+`docs/plans/260817-sui-t36.3-session-subscriber-and-trace-normalizer.md`
+phase 5), so it sees the initialize burst that runs to quiescence before
+`Statifier.Session.start_link/2` returns. This is the same fixture phase
+5's golden test compares against byte-for-byte
+(`test/support/trace/two_state.jsonl`).
 
 Chart:
 
 ```xml
-<scxml initial="a">
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="a" version="1.0">
     <state id="a">
         <transition event="go" target="b"/>
     </state>
@@ -685,29 +690,46 @@ Chart:
 </scxml>
 ```
 
-Driven with one external event, `"go"`, with no data. Trace (one JSON
-object per line, each shown here pretty-printed for readability; the wire
-form is one line with lexicographic keys and no extra whitespace):
+`xmlns` and `version` are required attributes on the root element
+(`Statifier.Validator`); a chart missing either fails to compile, so an
+example chart must carry both even though they add nothing to the
+trace itself.
+
+Driven with one external event, `"go"`, with no data, after the session
+has already come up and settled into `a` on its own. Trace (one JSON
+object per line, each shown here with lexicographic keys exactly as the
+wire form produces - the actual bytes, not a reformatting):
 
 ```json
-{"type": "session.start", "session": "sess_golden", "seq": 0, "version": 1, "states": [{"index": 0, "kind": "scxml", "children": [1, 2], "transitions": [], "location": {"start_line": 1, "start_column": 1, "start_offset": 0, "end_line": 5, "end_column": 9, "end_offset": 140}}, {"index": 1, "kind": "state", "id": "a", "parent": 0, "children": [], "transitions": [0], "location": {"start_line": 2, "start_column": 5, "start_offset": 25, "end_line": 4, "end_column": 13, "end_offset": 99}}, {"index": 2, "kind": "state", "id": "b", "parent": 0, "children": [], "transitions": [], "location": {"start_line": 4, "start_column": 5, "start_offset": 105, "end_line": 4, "end_column": 17, "end_offset": 117}}], "transitions": [{"t_index": 0, "source": 1, "targets": [2], "events": [["go"]], "type": "external", "content": [], "location": {"start_line": 3, "start_column": 9, "start_offset": 39, "end_line": 3, "end_column": 47, "end_offset": 77}}], "contents": []}
-{"type": "trace.event_dequeued", "session": "sess_golden", "seq": 1, "macrostep": 1, "microstep": 0, "round": 0, "event": {"name": "go", "type": "external"}, "from": "external"}
-{"type": "trace.transitions_selected", "session": "sess_golden", "seq": 2, "macrostep": 1, "microstep": 0, "round": 0, "t_indexes": [0], "event": {"name": "go", "type": "external"}}
-{"type": "trace.exit_set", "session": "sess_golden", "seq": 3, "macrostep": 1, "microstep": 1, "round": 0, "indexes": [1]}
-{"type": "trace.entry_set", "session": "sess_golden", "seq": 4, "macrostep": 1, "microstep": 1, "round": 0, "indexes": [2]}
-{"type": "trace.invoke_pass", "session": "sess_golden", "seq": 5, "macrostep": 1, "microstep": 1, "round": 0, "state_indexes": [], "invoke_ids": []}
-{"type": "trace.finalize_autoforward", "session": "sess_golden", "seq": 6, "macrostep": 1, "microstep": 1, "round": 0, "event": {"name": "go", "type": "external"}, "finalized": [], "forwarded": []}
-{"type": "trace.macrostep_stable", "session": "sess_golden", "seq": 7, "macrostep": 1, "microstep": 1, "round": 0, "configuration": [2]}
+{"contents":[],"seq":0,"session":"sess_golden","states":[{"children":[1,2],"index":0,"kind":"scxml","location":{"end_column":9,"end_line":6,"end_offset":178,"start_column":1,"start_line":1,"start_offset":0},"transitions":[]},{"children":[],"id":"a","index":1,"kind":"state","location":{"end_column":13,"end_line":4,"end_offset":149,"start_column":5,"start_line":2,"start_offset":78},"parent":0,"transitions":[0]},{"children":[],"id":"b","index":2,"kind":"state","location":{"end_column":20,"end_line":5,"end_offset":169,"start_column":5,"start_line":5,"start_offset":154},"parent":0,"transitions":[]}],"transitions":[{"content":[],"events":[["go"]],"location":{"end_column":44,"end_line":3,"end_offset":136,"start_column":9,"start_line":3,"start_offset":101},"source":1,"t_index":0,"targets":[2],"type":"external"}],"type":"session.start","version":1}
+{"indexes":[0,1],"macrostep":1,"microstep":1,"round":0,"seq":1,"session":"sess_golden","type":"trace.entry_set"}
+{"macrostep":1,"microstep":1,"round":1,"seq":2,"session":"sess_golden","t_indexes":[],"type":"trace.transitions_selected"}
+{"invoke_ids":[],"macrostep":1,"microstep":1,"round":1,"seq":3,"session":"sess_golden","state_indexes":[0,1],"type":"trace.invoke_pass"}
+{"configuration":[0,1],"macrostep":1,"microstep":1,"round":1,"seq":4,"session":"sess_golden","type":"trace.macrostep_stable"}
+{"event":{"name":"go","type":"external"},"from":"external","macrostep":2,"microstep":0,"round":0,"seq":5,"session":"sess_golden","type":"trace.event_dequeued"}
+{"event":{"name":"go","type":"external"},"finalized":[],"forwarded":[],"macrostep":2,"microstep":0,"round":0,"seq":6,"session":"sess_golden","type":"trace.finalize_autoforward"}
+{"event":{"name":"go","type":"external"},"macrostep":2,"microstep":0,"round":0,"seq":7,"session":"sess_golden","t_indexes":[0],"type":"trace.transitions_selected"}
+{"indexes":[1],"macrostep":2,"microstep":1,"round":0,"seq":8,"session":"sess_golden","type":"trace.exit_set"}
+{"c_indexes":[],"macrostep":2,"microstep":1,"owner":{"kind":"transition","t_index":0},"round":0,"seq":9,"session":"sess_golden","type":"trace.content_executed"}
+{"indexes":[2],"macrostep":2,"microstep":1,"round":0,"seq":10,"session":"sess_golden","type":"trace.entry_set"}
+{"macrostep":2,"microstep":1,"round":1,"seq":11,"session":"sess_golden","t_indexes":[],"type":"trace.transitions_selected"}
+{"invoke_ids":[],"macrostep":2,"microstep":1,"round":1,"seq":12,"session":"sess_golden","state_indexes":[2],"type":"trace.invoke_pass"}
+{"configuration":[0,2],"macrostep":2,"microstep":1,"round":1,"seq":13,"session":"sess_golden","type":"trace.macrostep_stable"}
 ```
 
 `seq` starts at `0` on `session.start` and increments by one across every
 subsequent message, with no gaps - this chart never touches the `<invoke>`/
 internal-`<send>` reordering seam, so a producer's live delivery order and
 `(macrostep, round)` order agree throughout, and the trace above is
-byte-comparable run to run. `trace.content_executed` and `trace.done` do
-not appear because this run has no executable content and never halts
-through a `<final>` state; a chart exercising those types would show them
-in the same shape the schemas above describe.
+byte-comparable run to run. `macrostep` `1` is the session's own
+initialize burst (Appendix D's `initialize` procedure, entering `a` before
+any event is ever sent - `configuration` on `trace.macrostep_stable` is
+`[0, 2]` later, not `[2]`, because the synthesized root at index `0` is
+always a member); `macrostep` `2` is the driven `"go"` transition into
+`b`. `trace.content_executed` appears once, for the transition's own
+(empty) executable content list; `trace.done` does not appear because
+this run never halts through a `<final>` state - a chart reaching one
+would show it in the shape its schema above describes.
 
 ## Type index
 
