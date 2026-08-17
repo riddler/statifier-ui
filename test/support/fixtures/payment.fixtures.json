@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "scenarios": {
+    "gold-tier-user": {
+      "tier": "gold",
+      "user_id": "u-1999"
+    }
+  },
+  "events": {
+    "payment.success": {
+      "amount": 1999,
+      "currency": "USD"
+    }
+  }
+}
