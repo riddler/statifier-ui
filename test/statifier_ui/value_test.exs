@@ -161,6 +161,38 @@ defmodule StatifierUI.ValueTest do
     end
   end
 
+  describe "encode/1 - out-of-domain rejection" do
+    test "rejects every out-of-domain term without raising" do
+      port = Port.open({:spawn, "cat"}, [:binary])
+
+      table = [
+        {"bare atom", :an_atom},
+        {"pid", self()},
+        {"tuple", {:a, :b}},
+        {"reference", make_ref()},
+        {"port", port},
+        {"function", fn -> :ok end},
+        {"Time struct", ~T[10:30:00]},
+        {"NaiveDateTime struct", ~N[2026-08-16 10:30:00]},
+        {"URI struct", URI.parse("https://example.com")}
+      ]
+
+      for {label, value} <- table do
+        assert {:error, _reason} = Value.encode(value), "expected #{label} to be rejected"
+      end
+
+      Port.close(port)
+    end
+
+    test "propagates an out-of-domain term nested inside a list" do
+      assert {:error, _reason} = Value.encode([1, :an_atom, "ok"])
+    end
+
+    test "propagates an out-of-domain term nested inside a map value" do
+      assert {:error, _reason} = Value.encode(%{"key" => :an_atom})
+    end
+  end
+
   describe "round trip" do
     @duration %{
       years: 1,

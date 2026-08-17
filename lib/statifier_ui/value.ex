@@ -21,6 +21,14 @@ defmodule StatifierUI.Value do
   while `encode/1` always writes all eight, filling absent units with `0`.
   The re-decoded value is therefore canonical rather than identical to the
   input, and semantically equal to it.
+
+  `encode/1` is closed over predicator's value domain (ADR-0005): the
+  JSON-native scalars, `Date`, `DateTime`, durations, string- or
+  atom-keyed maps, and lists of the above. A term outside that domain -
+  a bare atom other than `nil`, `:undefined`, `true`, or `false`, a pid,
+  tuple, reference, port, function, or a struct other than `Date` or
+  `DateTime` - is rejected with `{:error, {:unsupported_value, term}}`
+  rather than passed through or allowed to raise.
   """
 
   alias StatifierUI.Shape
@@ -112,6 +120,11 @@ defmodule StatifierUI.Value do
   The inverse of `decode/1`. Not wired to any writer; present so the codec
   is round-trip testable.
 
+  A term outside predicator's closed value domain - a bare atom other than
+  `nil`, `:undefined`, `true`, or `false`, a pid, tuple, reference, port,
+  function, or a struct other than `Date` or `DateTime` - returns
+  `{:error, {:unsupported_value, term}}`. This function never raises.
+
   ## Examples
 
       iex> StatifierUI.Value.encode(:undefined)
@@ -125,6 +138,8 @@ defmodule StatifierUI.Value do
   def encode(:undefined), do: {:ok, %{"$undefined" => true}}
   def encode(%Date{} = date), do: {:ok, %{"$date" => Date.to_iso8601(date)}}
   def encode(%DateTime{} = datetime), do: {:ok, %{"$datetime" => DateTime.to_iso8601(datetime)}}
+
+  def encode(%_struct{} = other), do: {:error, {:unsupported_value, other}}
 
   def encode(map) when is_map(map) do
     if Shape.duration?(map) do
@@ -148,7 +163,12 @@ defmodule StatifierUI.Value do
     end
   end
 
-  def encode(scalar), do: {:ok, scalar}
+  def encode(scalar)
+      when is_binary(scalar) or is_integer(scalar) or is_float(scalar) or
+             is_boolean(scalar) or is_nil(scalar),
+      do: {:ok, scalar}
+
+  def encode(other), do: {:error, {:unsupported_value, other}}
 
   @spec encode_duration(map()) :: {:ok, map()}
   defp encode_duration(duration) do
