@@ -10,6 +10,12 @@ defmodule StatifierUI do
   Nothing here changes the engine. Statifier already emits trace effects at
   every Appendix D phase boundary and retains source locations, so a UI is one
   more effect interpreter reading seams that exist.
+
+  Fixture data - example scenario datamodels and event payloads a host
+  supplies for a chart - is delivered through `StatifierUI.Fixtures`, either
+  by a host module implementing `StatifierUI.Fixtures.Source` or by
+  `StatifierUI.Fixtures.Sidecar` reading a `<chart>.fixtures.json` file.
+  `StatifierUI.Shape` infers display-type labels from example values.
   """
 
   @version Mix.Project.config()[:version]

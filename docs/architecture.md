@@ -58,14 +58,28 @@ capability to get started.
 
 ## What exists today
 
-As of this writing the repository is a scaffold: `mix.exs` declares the
-`statifier` dependency (a git dependency until statifier-ex publishes to hex)
-and the two optional integrations, `kino` and `phoenix_live_view`; `lib/`
-contains only `lib/statifier_ui.ex`, the top-level module with its
-`@moduledoc` and a `version/0` function. No LiveComponent, no Kino widget, no
-fixture module, and no JS asset exists yet. Everything described below past
-this section is intended design, tracked by beads and phased as summarized
-under "Phasing" in the research doc:
+As of this writing the repository is mostly a scaffold, with one exception:
+`mix.exs` declares the `statifier` dependency (a git dependency until
+statifier-ex publishes to hex) and the two optional integrations, `kino` and
+`phoenix_live_view`; `lib/statifier_ui.ex` is the top-level module with its
+`@moduledoc` and a `version/0` function.
+
+The fixtures contract (below) is built. `lib/statifier_ui/` holds four core
+modules, none of which reference `Kino` or `Phoenix.LiveView`:
+
+- `StatifierUI.Fixtures` - the consumed struct and its validation.
+- `StatifierUI.Fixtures.Source` - the behaviour a host module implements to
+  supply fixtures from Elixir.
+- `StatifierUI.Fixtures.Sidecar` - the `<chart>.fixtures.json` loader for
+  corpus and CLI use.
+- `StatifierUI.Value` - the codec for ADR-0005's `$`-tagged JSON encoding of
+  predicator values, used by the sidecar loader.
+- `StatifierUI.Shape` - pure shape inference from an example value to a
+  display-type label, independent of the fixtures modules.
+
+No LiveComponent, no Kino widget, and no JS asset exists yet. Everything
+described below past this section is intended design, tracked by beads and
+phased as summarized under "Phasing" in the research doc:
 
 1. The Livebook inspector (a Kino widget - configuration rendering, event
    log, fixture-fed event injection, datamodel explorer).
@@ -123,10 +137,22 @@ Fixtures are how a chart moves between statifier-ex and this repository:
 statifier-ex is the engine and the compiler, and does not need fixtures to
 run a chart; this repository is the consumer that needs example data to
 render anything more than the static structure. The concrete delivery
-mechanism - a behaviour plus sidecar file, per the research doc's summary -
-and the sidecar's naming and shape are the subject of a fixtures-specific
-bead (sui-8a7 in the research doc's phasing) and are not settled further by
-this document; see "Open questions" below.
+mechanism is a behaviour plus a sidecar file, per the research doc's
+summary, and both paths converge on the one struct ADR-0003 names:
+
+- `StatifierUI.Fixtures.Source` is the behaviour a host module implements
+  (`scenarios/0`, `example_events/0`) to supply fixtures from Elixir.
+- `StatifierUI.Fixtures.Sidecar` reads the `<chart>.fixtures.json` file for
+  corpus and CLI use.
+- Both paths produce a `StatifierUI.Fixtures` struct, so a consumer never
+  needs to know which one produced it.
+- `StatifierUI.Shape` turns any example value - from a fixture or from a
+  live datamodel - into the display-type label the explorer tree and editor
+  completions use.
+
+How the sidecar file is named and how predicator values are encoded as
+`$`-tagged JSON are settled by ADR-0003 and ADR-0005 respectively; see those
+ADRs for the reasoning.
 
 ## The LiveComponents
 
@@ -299,9 +325,6 @@ neither.
 These are gaps the bead implies but that the research doc and existing ADRs
 do not settle. They are recorded here rather than resolved by invention:
 
-- **The fixture sidecar's file naming and shape** (for example, whether it is
-  `<chart>.fixtures.json` or some other convention). The research doc flags
-  this explicitly as unsettled, to be decided in sui-8a7.
 - **Whether the Livebook inspector's first rendering uses Mermaid** (accepting
   the cross-hierarchy limitation noted under "The LiveComponents," above,
   temporarily) **or waits for the elkjs renderer.** The research doc flags
