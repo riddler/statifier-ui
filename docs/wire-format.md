@@ -68,6 +68,12 @@ Beyond the fields in the table, every message carries a **payload**: the
 type-specific fields, documented below one type at a time. A payload key
 never collides with an envelope key - `type`, `session`, `seq`, `macrostep`,
 `microstep`, and `round` are reserved words in every message's JSON object.
+This is why `effect.invoke` and `effect.send`/`effect.send_delayed` name
+their own `<invoke>`/`<send>` `type`/`typeexpr` attribute `invoke_type` and
+`send_type` rather than the engine's own field name `type` - the element
+attribute and the envelope's message-type discriminator are unrelated
+concepts that would otherwise collide under one key in the same flat JSON
+object.
 
 ## Ordering
 
@@ -505,7 +511,7 @@ Emitted once per `<invoke>` the invoke pass actually started (spec 6.4).
 | Field | Type | Presence |
 |---|---|---|
 | invoke_id | string | always |
-| type | string | present only when set |
+| invoke_type | string | present only when set - the `<invoke>` element's own `type`/`typeexpr` attribute |
 | src | string | present only when set |
 | params | value | present only when the invocation resolved params (absence-rule applies) |
 | content | value | present only when the invocation resolved content (absence-rule applies) |
@@ -542,7 +548,7 @@ Payload for `<send>`, fired immediately (spec 6.2).
 |---|---|---|
 | event | string | always |
 | target | string | present only when set |
-| type | string | present only when set |
+| send_type | string | present only when set - the `<send>` element's own `type`/`typeexpr` attribute |
 | data | value | present only when resolved (absence-rule applies) |
 | send_id | string | always |
 | id_from_author | boolean | always - whether the document wrote `id`/`idlocation` itself, rather than the engine generating one |
