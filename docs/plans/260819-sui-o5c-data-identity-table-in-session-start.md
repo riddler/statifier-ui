@@ -716,10 +716,25 @@ decided without a human in the loop and a human may want to revisit it.
    against the format's other `data` fields but imports the Elixir struct
    field's name. If the name is to change, phase 1 is the cheap moment;
    after a consumer reads it, it is a breaking change.
+
+   **Settled (2026-08-19):** Kept as `"data"`. Confirmed during the
+   `/wurk:verify` walk, at the moment phase 1 named as the cheap one - the
+   table has shipped in the golden fixture but nothing outside this repo
+   reads it yet. The sibling-derivation rule and the `d_index` symmetry
+   held up on re-reading; the `_event.data` collision stayed positional and
+   never ambiguous in practice.
 2. **Omitting a `value_source` discriminator.** Recorded under "What We're
    NOT Doing" with its reasoning. It is the most likely thing a consumer
    asks for next, and ADR-0005 makes adding it free. Flagged so the choice
    is visible rather than invisible.
+
+   **Settled (2026-08-19):** Still omitted. The walk built a chart
+   exercising all four value sources (`expr`, `src`, child content, bare)
+   and confirmed a consumer can already distinguish the two that matter by
+   comparing `value_location` against `location` - equal means no written
+   value. That is weaker than a discriminator (it does not separate `expr`
+   from `src`) but enough for the display case, and ADR-0005 keeps adding
+   the field free later.
 3. **Whether `value_location` can ever be `nil` in practice.** The
    upstream moduledoc says the compiler falls back to the `<data>` node's
    own location, which suggests never - but the struct's default and type
@@ -728,12 +743,38 @@ decided without a human in the loop and a human may want to revisit it.
    present, the schema row could tighten to "always" later; documenting it
    as conditional is the safe direction and costs a consumer one null
    check.
+
+   **Settled (2026-08-19):** Answered from source, not inference:
+   `Statifier.Compiler.build_data_value/2` has four clauses and every one
+   returns a `Location` (the `expr`/`src` clauses an attribute-value span,
+   the child-content and bare clauses `data.location`). So `value_location`
+   is never `nil` on a compiled Machine and the producer's `put_present/3`
+   branch is unreachable. The schema row was **deliberately left
+   conditional anyway** - tightening it to "always" would bind the format
+   to an upstream implementation detail this repo does not control, and the
+   plan's own forward-safe reasoning still holds.
+
+   The walk did surface the more consequential half of this question: the
+   fallback means `value_location` is not always a *value* span, which
+   made this document's identity-only paragraph false for a bare or
+   child-content `<data>`. `docs/wire-format.md` now documents the fallback
+   and the equality check that detects it, `manifest_test.exs` pins it, and
+   whether the producer should instead omit the redundant span is filed as
+   **sui-v8o**.
 4. **No schema drift test.** `wire_format_spec_test.exs` guards only the
    type index, so nothing mechanically ties `docs/wire-format.md`'s
    payload schemas to the producer. This bead adds the fourth table
    without closing that gap - phase 2's criteria substitute a `grep`-level
    check. A real payload-schema drift test is worth its own bead, and this
    plan does not file one.
+
+   **Settled (2026-08-19):** Filed as **sui-o4e** during the
+   `/wurk:verify` walk. The gap is not theoretical: that same walk found
+   two prose defects in `docs/wire-format.md`'s `data` section - a false
+   claim about reading the declared value at `value_location`, and an
+   implementation-stack name in normative prose - and neither was
+   mechanically catchable by anything in the suite. Both were corrected by
+   hand. Still out of scope here; the bead carries the shape worth trying.
 
 ## Deferred Manual Verification
 
@@ -743,16 +784,16 @@ before considering the plan fully landed.
 
 ### Phase 1
 
-- [ ] The regenerated fixture's `session.start` line, read against the
+- [x] The regenerated fixture's `session.start` line, read against the
       previous one, differs only by the inserted `"data":[],` - confirmed
       by eye on `git diff --word-diff`, not only by the numstat count
-- [ ] No test expectation elsewhere in the suite was widened or relaxed to
+- [x] No test expectation elsewhere in the suite was widened or relaxed to
       accommodate the new key
-- [ ] The `data_object/1` row shape matches this plan's row-schema table
+- [x] The `data_object/1` row shape matches this plan's row-schema table
       (phase 2, change 2) field for field - checked against the plan, not
       against `docs/wire-format.md`, which does not carry that table until
       phase 2
-- [ ] No `value`, `value_source`, or `kind` field appears on a `data` row
+- [x] No `value`, `value_source`, or `kind` field appears on a `data` row
 
 **Implementation Note**: Use `mix quality --profile loop` between edits;
 run full `mix quality` as the phase gate. In interactive execution, pause
@@ -764,17 +805,17 @@ items are deferred to the end.
 
 ### Phase 2
 
-- [ ] The documented row schema matches the emitted one field for field,
+- [x] The documented row schema matches the emitted one field for field,
       checked against `head -1 test/support/trace/two_state.jsonl` for the
       empty case and against a locally-run `Manifest.build/3` over a chart
       with `<data>` elements for the populated case
-- [ ] The identity-only paragraph is intelligible to someone who has never
+- [x] The identity-only paragraph is intelligible to someone who has never
       read this plan or ADR-0005 - it states the decision, the consumer's
       alternative, and the reason, without requiring either
-- [ ] The file's existing typography and heading conventions are matched
+- [x] The file's existing typography and heading conventions are matched
       (CLAUDE.md's house-style rule; this file already uses hyphens, so
       keep hyphens)
-- [ ] No Elixir module, struct, or field name from statifier leaked into
+- [x] No Elixir module, struct, or field name from statifier leaked into
       the normative prose beyond the existing, deliberate producer notes
 
 **Implementation Note**: This phase touches no Elixir, so per CLAUDE.md's

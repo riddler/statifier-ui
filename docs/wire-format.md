@@ -322,16 +322,30 @@ block):
 This table is deliberately **identity only**: it resolves a `d_index` to
 an id and a source span, and carries no representation of the element's
 declared value. A consumer wanting to display the declared value reads
-it out of `source` at `value_location`, the same way it reads a
-transition's guard out of `source` at `cond_location`; a consumer
-wanting a *runtime* value reads `session.datamodel` for the starting
-snapshot and the datamodel-change messages after it. The compiled value
-itself is a predicator instruction program, a compile error, or an
+it out of `source` at `value_location`, subject to the fallback below; a
+consumer wanting a *runtime* value reads `session.datamodel` for the
+starting snapshot and the datamodel-change messages after it. The
+compiled value itself is an expression program, a compile error, or an
 unresolved `src` URI depending on how the element was written, and none
 of the three has a language-neutral encoding in this format. Adding a
 value field later would be an additive change and therefore not a
 version bump (ADR-0005), so this document commits to the narrow shape
 now rather than to an encoding it would have to keep.
+
+**`value_location` is not always a value span, and a consumer must check
+before slicing.** It spans the element's *written* value only when the
+element has one to point at: the `expr` attribute's value for an
+`expr`-written element, the `src` attribute's value for a `src`-written
+one. An element written with neither - a bare `<data id="x"/>`, or one
+whose value is child content - has no distinct value span, and
+`value_location` falls back to the `<data>` element's own span, equal to
+this row's `location`. So a consumer slicing `source` at
+`value_location` must compare it against `location` first: when the two
+are equal there is no value span, and the slice is the whole element
+(`<data id="x"/>`), not a value. This is the one place `value_location`
+parts company with a transition's `cond_location`, which is *absent*
+when there is no guard rather than falling back, and therefore always
+spans a guard when present.
 
 **A location object** is always all six fields, and is either wholly
 present or wholly absent - there is no partial location:
@@ -366,7 +380,8 @@ parent.
 compiled `%Statifier.Machine{}` layer, which carries element-level spans -
 a whole `<transition>`, a whole `<assign>` - plus a transition's own
 `cond_location` for its guard expression specifically and a `<data>`
-element's own `value_location` for its declared value specifically. It
+element's own `value_location` for its declared value where the element
+was written with one (see the `data` table's fallback note above). It
 does **not**
 carry attribute-level spans for every attribute (for example, a `<send>`
 element's individual `event`/`target`/`delay` attribute spans): that finer
