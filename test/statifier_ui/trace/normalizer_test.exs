@@ -5,6 +5,7 @@ defmodule StatifierUI.Trace.NormalizerTest do
   alias Statifier.Effect.BudgetExhausted
   alias Statifier.Effect.Cancel
   alias Statifier.Effect.CancelInvoke
+  alias Statifier.Effect.DatamodelInit
   alias Statifier.Effect.Done
   alias Statifier.Effect.Invoke
   alias Statifier.Effect.Log
@@ -82,7 +83,13 @@ defmodule StatifierUI.Trace.NormalizerTest do
     end
 
     test "trace.exit_set" do
-      payload = %Trace.ExitSet{indexes: [3, 1], macrostep: 1, microstep: 1, round: 0}
+      payload = %Trace.ExitSet{
+        indexes: [3, 1],
+        configuration: MapSet.new([0]),
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }
 
       assert {:ok, %Message{type: "trace.exit_set", payload: %{"indexes" => [3, 1]}}} =
                Normalizer.normalize({:trace, payload}, @ctx)
@@ -110,7 +117,13 @@ defmodule StatifierUI.Trace.NormalizerTest do
     end
 
     test "trace.entry_set" do
-      payload = %Trace.EntrySet{indexes: [2], macrostep: 1, microstep: 1, round: 0}
+      payload = %Trace.EntrySet{
+        indexes: [2],
+        configuration: MapSet.new([0, 2]),
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }
 
       assert {:ok, %Message{type: "trace.entry_set", payload: %{"indexes" => [2]}}} =
                Normalizer.normalize({:trace, payload}, @ctx)
@@ -187,7 +200,8 @@ defmodule StatifierUI.Trace.NormalizerTest do
         c_index: 0,
         owner: {:transition, 0},
         macrostep: 1,
-        microstep: 0
+        microstep: 0,
+        round: 0
       }
 
       assert {:ok, %Message{type: "effect.log", macrostep: 1, microstep: 0, round: nil} = message} =
@@ -202,7 +216,13 @@ defmodule StatifierUI.Trace.NormalizerTest do
     end
 
     test "effect.done" do
-      payload = %Done{donedata: nil, configuration: MapSet.new([0]), macrostep: 2, microstep: 0}
+      payload = %Done{
+        donedata: nil,
+        configuration: MapSet.new([0]),
+        macrostep: 2,
+        microstep: 0,
+        round: 0
+      }
 
       assert {:ok, %Message{type: "effect.done", round: nil} = message} =
                Normalizer.normalize({:done, payload}, @ctx)
@@ -258,7 +278,8 @@ defmodule StatifierUI.Trace.NormalizerTest do
         state_index: 1,
         invoke_index: 0,
         macrostep: 1,
-        microstep: 0
+        microstep: 0,
+        round: 0
       }
 
       assert {:ok, %Message{type: "effect.invoke", round: nil} = message} =
@@ -270,7 +291,13 @@ defmodule StatifierUI.Trace.NormalizerTest do
     end
 
     test "effect.cancel_invoke" do
-      payload = %CancelInvoke{invoke_id: "inv1", state_index: 1, macrostep: 1, microstep: 0}
+      payload = %CancelInvoke{
+        invoke_id: "inv1",
+        state_index: 1,
+        macrostep: 1,
+        microstep: 0,
+        round: 0
+      }
 
       assert {:ok, %Message{type: "effect.cancel_invoke"} = message} =
                Normalizer.normalize({:cancel_invoke, payload}, @ctx)
@@ -286,7 +313,8 @@ defmodule StatifierUI.Trace.NormalizerTest do
         state_index: 1,
         event: event,
         macrostep: 1,
-        microstep: 0
+        microstep: 0,
+        round: 0
       }
 
       assert {:ok, %Message{type: "effect.autoforward"} = message} =
@@ -307,7 +335,8 @@ defmodule StatifierUI.Trace.NormalizerTest do
         owner: {:transition, 0},
         macrostep: 1,
         microstep: 0,
-        id_from_author?: true
+        id_from_author?: true,
+        round: 0
       }
 
       assert {:ok, %Message{type: "effect.send", round: nil} = message} =
@@ -330,7 +359,8 @@ defmodule StatifierUI.Trace.NormalizerTest do
         owner: nil,
         macrostep: 1,
         microstep: 0,
-        id_from_author?: false
+        id_from_author?: false,
+        round: 0
       }
 
       assert {:ok, %Message{type: "effect.send_delayed"} = message} =
@@ -350,7 +380,8 @@ defmodule StatifierUI.Trace.NormalizerTest do
         c_index: 0,
         owner: {:transition, 0},
         macrostep: 1,
-        microstep: 0
+        microstep: 0,
+        round: 0
       }
 
       assert {:ok, %Message{type: "effect.cancel"} = message} =
@@ -374,7 +405,13 @@ defmodule StatifierUI.Trace.NormalizerTest do
     end
 
     test "{:unroutable, effect} produces session.unroutable wrapping the effect under kind" do
-      payload = %CancelInvoke{invoke_id: "inv1", state_index: 1, macrostep: 1, microstep: 0}
+      payload = %CancelInvoke{
+        invoke_id: "inv1",
+        state_index: 1,
+        macrostep: 1,
+        microstep: 0,
+        round: 0
+      }
 
       assert {:ok, %Message{type: "session.unroutable"} = message} =
                Normalizer.normalize({:unroutable, {:cancel_invoke, payload}}, @ctx)
@@ -384,7 +421,13 @@ defmodule StatifierUI.Trace.NormalizerTest do
     end
 
     test "{:effect, effect} unwraps to the same result as the bare effect" do
-      payload = %CancelInvoke{invoke_id: "inv1", state_index: 1, macrostep: 1, microstep: 0}
+      payload = %CancelInvoke{
+        invoke_id: "inv1",
+        state_index: 1,
+        macrostep: 1,
+        microstep: 0,
+        round: 0
+      }
 
       assert Normalizer.normalize({:effect, {:cancel_invoke, payload}}, @ctx) ==
                Normalizer.normalize({:cancel_invoke, payload}, @ctx)
@@ -566,7 +609,13 @@ defmodule StatifierUI.Trace.NormalizerTest do
     end
 
     test "exit_set indexes are emitted unsorted, in the engine's own emission order" do
-      payload = %Trace.ExitSet{indexes: [4, 2, 9], macrostep: 1, microstep: 1, round: 0}
+      payload = %Trace.ExitSet{
+        indexes: [4, 2, 9],
+        configuration: MapSet.new([0]),
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }
 
       assert {:ok, %Message{payload: %{"indexes" => [4, 2, 9]}}} =
                Normalizer.normalize({:trace, payload}, @ctx)
@@ -587,6 +636,40 @@ defmodule StatifierUI.Trace.NormalizerTest do
 
       assert {:ok, %Message{} = message} = Normalizer.normalize({:trace, payload}, @ctx)
       assert message.payload["event"]["data"] == %{"expires" => %{"$date" => "2026-08-16"}}
+    end
+  end
+
+  describe "normalize/2 - session.datamodel" do
+    test "a datamodel map with :undefined and a nested host map encodes through Value.encode/1" do
+      payload = %DatamodelInit{
+        datamodel: %{
+          "_sessionid" => "sess_probe",
+          "_name" => :undefined,
+          "x" => :undefined,
+          "config" => %{"nested" => "value"}
+        },
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }
+
+      assert {:ok,
+              %Message{
+                type: "session.datamodel",
+                macrostep: nil,
+                microstep: nil,
+                round: nil
+              } = message} =
+               Normalizer.normalize({:datamodel_init, payload}, @ctx)
+
+      assert message.payload == %{
+               "datamodel" => %{
+                 "_sessionid" => "sess_probe",
+                 "_name" => %{"$undefined" => true},
+                 "x" => %{"$undefined" => true},
+                 "config" => %{"nested" => "value"}
+               }
+             }
     end
   end
 
@@ -651,7 +734,13 @@ defmodule StatifierUI.Trace.NormalizerTest do
   end
 
   defp maximal(:trace, Trace.ExitSet) do
-    %Trace.ExitSet{indexes: [1], macrostep: 1, microstep: 1, round: 0}
+    %Trace.ExitSet{
+      indexes: [1],
+      configuration: MapSet.new([0]),
+      macrostep: 1,
+      microstep: 1,
+      round: 0
+    }
   end
 
   defp maximal(:trace, Trace.ContentExecuted) do
@@ -665,7 +754,13 @@ defmodule StatifierUI.Trace.NormalizerTest do
   end
 
   defp maximal(:trace, Trace.EntrySet) do
-    %Trace.EntrySet{indexes: [1], macrostep: 1, microstep: 1, round: 0}
+    %Trace.EntrySet{
+      indexes: [1],
+      configuration: MapSet.new([0, 1]),
+      macrostep: 1,
+      microstep: 1,
+      round: 0
+    }
   end
 
   defp maximal(:trace, Trace.MacrostepStable) do
@@ -698,11 +793,19 @@ defmodule StatifierUI.Trace.NormalizerTest do
   end
 
   defp maximal(:log, Log) do
-    %Log{label: "hi", value: 1, c_index: 0, owner: {:transition, 0}, macrostep: 1, microstep: 0}
+    %Log{
+      label: "hi",
+      value: 1,
+      c_index: 0,
+      owner: {:transition, 0},
+      macrostep: 1,
+      microstep: 0,
+      round: 0
+    }
   end
 
   defp maximal(:done, Done) do
-    %Done{donedata: 1, configuration: MapSet.new([0]), macrostep: 1, microstep: 0}
+    %Done{donedata: 1, configuration: MapSet.new([0]), macrostep: 1, microstep: 0, round: 0}
   end
 
   defp maximal(:budget_exhausted, BudgetExhausted) do
@@ -727,12 +830,13 @@ defmodule StatifierUI.Trace.NormalizerTest do
       state_index: 1,
       invoke_index: 0,
       macrostep: 1,
-      microstep: 0
+      microstep: 0,
+      round: 0
     }
   end
 
   defp maximal(:cancel_invoke, CancelInvoke) do
-    %CancelInvoke{invoke_id: "inv1", state_index: 1, macrostep: 1, microstep: 0}
+    %CancelInvoke{invoke_id: "inv1", state_index: 1, macrostep: 1, microstep: 0, round: 0}
   end
 
   defp maximal(:autoforward, Autoforward) do
@@ -741,7 +845,8 @@ defmodule StatifierUI.Trace.NormalizerTest do
       state_index: 1,
       event: %Event{name: "go", type: :external},
       macrostep: 1,
-      microstep: 0
+      microstep: 0,
+      round: 0
     }
   end
 
@@ -756,7 +861,8 @@ defmodule StatifierUI.Trace.NormalizerTest do
       owner: {:transition, 0},
       macrostep: 1,
       microstep: 0,
-      id_from_author?: true
+      id_from_author?: true,
+      round: 0
     }
   end
 
@@ -772,12 +878,20 @@ defmodule StatifierUI.Trace.NormalizerTest do
       owner: {:transition, 0},
       macrostep: 1,
       microstep: 0,
-      id_from_author?: true
+      id_from_author?: true,
+      round: 0
     }
   end
 
   defp maximal(:cancel, Cancel) do
-    %Cancel{send_id: "send1", c_index: 0, owner: {:transition, 0}, macrostep: 1, microstep: 0}
+    %Cancel{
+      send_id: "send1",
+      c_index: 0,
+      owner: {:transition, 0},
+      macrostep: 1,
+      microstep: 0,
+      round: 0
+    }
   end
 
   defp expected_keys(:trace, Trace.EventDequeued), do: MapSet.new(~w(event from))
