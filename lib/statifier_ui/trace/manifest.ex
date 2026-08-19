@@ -2,8 +2,9 @@ defmodule StatifierUI.Trace.Manifest do
   @moduledoc """
   Turns a compiled `%Statifier.Machine{}` plus caller-supplied context into
   the `session.start` definition message (`docs/wire-format.md`) - the
-  message that makes every later index (state `index`, `t_index`, `c_index`)
-  resolvable to a source location without a compiler on the reading end.
+  message that makes every later index (state `index`, `t_index`,
+  `c_index`, `d_index`) resolvable to a source location without a compiler
+  on the reading end.
   Pure, no process.
 
   The Machine does not retain the SCXML source text and has no
@@ -41,6 +42,7 @@ defmodule StatifierUI.Trace.Manifest do
 
   alias Statifier.Machine
   alias Statifier.Machine.Content
+  alias Statifier.Machine.Data
   alias Statifier.Machine.State
   alias Statifier.Machine.Transition
   alias Statifier.Parser.Location
@@ -79,7 +81,8 @@ defmodule StatifierUI.Trace.Manifest do
           "version" => @manifest_version,
           "states" => states(machine),
           "transitions" => transitions(machine),
-          "contents" => contents(machine)
+          "contents" => contents(machine),
+          "data" => data(machine)
         }
         |> put_present("source", source)
         |> put_present("fixtures", fixtures)
@@ -187,6 +190,25 @@ defmodule StatifierUI.Trace.Manifest do
   defp content_location(%Content.Assign{node_location: node_location}), do: node_location
   defp content_location(%Content.Script{node_location: node_location}), do: node_location
   defp content_location(%{location: %Location{} = location}), do: location
+
+  # -- data ---------------------------------------------------------------------
+
+  @spec data(Machine.t()) :: [map()]
+  defp data(%Machine{data_elements: data_elements}) do
+    data_elements
+    |> Tuple.to_list()
+    |> Enum.map(&data_object/1)
+  end
+
+  @spec data_object(Data.t()) :: map()
+  defp data_object(%Data{} = element) do
+    %{
+      "d_index" => element.d_index,
+      "id" => element.id,
+      "location" => location_object(element.location)
+    }
+    |> put_present("value_location", location_object_or_nil(element.value_location))
+  end
 
   # -- Locations ----------------------------------------------------------------
 

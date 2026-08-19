@@ -145,8 +145,89 @@ defmodule StatifierUI.Trace.ManifestTest do
     end
   end
 
+  describe "build/3 - data table" do
+    test "empty when the chart has no <datamodel>" do
+      machine = compile!(@two_state)
+      {:ok, message} = Manifest.build(machine, "sess_1")
+
+      assert message.payload["data"] == []
+    end
+
+    test "one row per <data> element, dense and in document order" do
+      machine = compile!(@all_content_kinds)
+      {:ok, message} = Manifest.build(machine, "sess_1")
+
+      data = message.payload["data"]
+      assert length(data) == 2
+
+      assert Enum.map(data, & &1["d_index"]) == Enum.to_list(0..1)
+      assert Enum.map(data, & &1["id"]) == ["items", "x"]
+    end
+
+    test "location is a full six-field span on every row" do
+      machine = compile!(@all_content_kinds)
+      {:ok, message} = Manifest.build(machine, "sess_1")
+
+      for row <- message.payload["data"] do
+        assert %{
+                 "start_line" => start_line,
+                 "start_column" => start_column,
+                 "start_offset" => start_offset,
+                 "end_line" => _,
+                 "end_column" => _,
+                 "end_offset" => end_offset
+               } = row["location"]
+
+        assert is_integer(start_line)
+        assert is_integer(start_column)
+        assert is_integer(start_offset)
+        assert is_integer(end_offset)
+        assert end_offset >= start_offset
+      end
+    end
+
+    test "value_location is present as a span, not a string, on both rows" do
+      machine = compile!(@all_content_kinds)
+      {:ok, message} = Manifest.build(machine, "sess_1")
+
+      # Both <data> elements in @all_content_kinds are written with an
+      # `expr` attribute, so the compiler records the attribute value's
+      # span and value_location is present on every row here. A chart
+      # producing a nil value_location is not exercised in this file - the
+      # location_object_or_nil(nil) branch is already covered by
+      # cond_location in the transitions table.
+      for row <- message.payload["data"] do
+        assert %{
+                 "start_line" => _,
+                 "start_column" => _,
+                 "start_offset" => _,
+                 "end_line" => _,
+                 "end_column" => _,
+                 "end_offset" => _
+               } = row["value_location"]
+      end
+    end
+
+    test "never carries value" do
+      machine = compile!(@all_content_kinds)
+      {:ok, message} = Manifest.build(machine, "sess_1")
+
+      for row <- message.payload["data"] do
+        refute Map.has_key?(row, "value")
+      end
+    end
+
+    test ~s("data" lands between "contents" and "seq" in canonical byte order) do
+      machine = compile!(@two_state)
+      {:ok, message} = Manifest.build(machine, "sess_1")
+
+      encoded = Json.encode_message(message)
+      assert encoded =~ ~s("contents":[],"data":[],"seq":0)
+    end
+  end
+
   describe "build/3 - index round-trip" do
-    test "every published index, t_index, and c_index resolves through Machine.at/2, transition/2, and content/2" do
+    test "every published index, t_index, c_index, and d_index resolves through Machine.at/2, transition/2, content/2, and data/2" do
       machine = compile!(@all_content_kinds)
       {:ok, message} = Manifest.build(machine, "sess_1")
 
@@ -163,6 +244,11 @@ defmodule StatifierUI.Trace.ManifestTest do
       for content <- message.payload["contents"] do
         resolved = Machine.content(machine, content["c_index"])
         assert resolved.c_index == content["c_index"]
+      end
+
+      for row <- message.payload["data"] do
+        resolved = Machine.data(machine, row["d_index"])
+        assert resolved.id == row["id"]
       end
     end
   end
@@ -257,7 +343,7 @@ defmodule StatifierUI.Trace.ManifestTest do
       {:ok, minimal} = Manifest.build(machine, "sess_1")
 
       assert MapSet.new(Map.keys(minimal.payload)) ==
-               MapSet.new(~w(version states transitions contents))
+               MapSet.new(~w(version states transitions contents data))
 
       {:ok, full} =
         Manifest.build(machine, "sess_1",
@@ -269,7 +355,7 @@ defmodule StatifierUI.Trace.ManifestTest do
 
       assert MapSet.new(Map.keys(full.payload)) ==
                MapSet.new(
-                 ~w(version states transitions contents source fixtures parent_session invokeid)
+                 ~w(version states transitions contents data source fixtures parent_session invokeid)
                )
     end
   end

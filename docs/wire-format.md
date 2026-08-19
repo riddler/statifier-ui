@@ -248,6 +248,7 @@ it needs to resolve an index arrived once, up front.
 | states | array of objects | always |
 | transitions | array of objects | always |
 | contents | array of objects | always |
+| data | array of objects | always |
 | source | string | present only when the host supplies chart source |
 | fixtures | object | present only when the host supplies a fixtures bundle |
 | parent_session | string | present only when this session was started by `<invoke>` |
@@ -255,6 +256,10 @@ it needs to resolve an index arrived once, up front.
 
 `version` is `1` for this document. It is the fixtures sidecar's own
 `version` convention (ADR-0003), reused here rather than invented fresh.
+
+`data` is always present, never key-absent, even when the chart has no
+`<datamodel>` at all: an empty datamodel still emits `[]`, the
+empty-collection arm of the absence rule below, not the omitted-key arm.
 
 **`states`** is one object per compiled state, in `index` order (index `0`
 is always the synthesized `:scxml` root):
@@ -717,7 +722,7 @@ object per line, each shown here with lexicographic keys exactly as the
 wire form produces - the actual bytes, not a reformatting):
 
 ```json
-{"contents":[],"seq":0,"session":"sess_golden","states":[{"children":[1,2],"index":0,"kind":"scxml","location":{"end_column":9,"end_line":6,"end_offset":178,"start_column":1,"start_line":1,"start_offset":0},"transitions":[]},{"children":[],"id":"a","index":1,"kind":"state","location":{"end_column":13,"end_line":4,"end_offset":149,"start_column":5,"start_line":2,"start_offset":78},"parent":0,"transitions":[0]},{"children":[],"id":"b","index":2,"kind":"state","location":{"end_column":20,"end_line":5,"end_offset":169,"start_column":5,"start_line":5,"start_offset":154},"parent":0,"transitions":[]}],"transitions":[{"content":[],"events":[["go"]],"location":{"end_column":44,"end_line":3,"end_offset":136,"start_column":9,"start_line":3,"start_offset":101},"source":1,"t_index":0,"targets":[2],"type":"external"}],"type":"session.start","version":1}
+{"contents":[],"data":[],"seq":0,"session":"sess_golden","states":[{"children":[1,2],"index":0,"kind":"scxml","location":{"end_column":9,"end_line":6,"end_offset":178,"start_column":1,"start_line":1,"start_offset":0},"transitions":[]},{"children":[],"id":"a","index":1,"kind":"state","location":{"end_column":13,"end_line":4,"end_offset":149,"start_column":5,"start_line":2,"start_offset":78},"parent":0,"transitions":[0]},{"children":[],"id":"b","index":2,"kind":"state","location":{"end_column":20,"end_line":5,"end_offset":169,"start_column":5,"start_line":5,"start_offset":154},"parent":0,"transitions":[]}],"transitions":[{"content":[],"events":[["go"]],"location":{"end_column":44,"end_line":3,"end_offset":136,"start_column":9,"start_line":3,"start_offset":101},"source":1,"t_index":0,"targets":[2],"type":"external"}],"type":"session.start","version":1}
 {"datamodel":{"_event":{"$undefined":true},"_ioprocessors":{"http://www.w3.org/TR/scxml/#SCXMLEventProcessor":{"location":"#_scxml_sess_golden"}},"_name":{"$undefined":true},"_sessionid":"sess_golden"},"seq":1,"session":"sess_golden","type":"session.datamodel"}
 {"indexes":[0,1],"macrostep":1,"microstep":1,"round":0,"seq":2,"session":"sess_golden","type":"trace.entry_set"}
 {"macrostep":1,"microstep":1,"round":1,"seq":3,"session":"sess_golden","t_indexes":[],"type":"trace.transitions_selected"}
