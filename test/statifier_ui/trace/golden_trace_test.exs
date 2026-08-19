@@ -3,11 +3,12 @@ defmodule StatifierUI.Trace.GoldenTraceTest do
   The ADR-0005 conformance mechanism: a real session, over a real chart,
   compared byte-for-byte against a checked-in fixture. This is the two-state
   chart `docs/wire-format.md`'s worked example carries, chosen deliberately
-  to avoid the `st-r6l9` reordering seam - no `<invoke>`, no
-  `<send target="#_internal">` - so this run's live delivery order and its
-  `(macrostep, round)` order agree throughout and a byte comparison is
-  meaningful. A chart that does touch that seam would need to be compared
-  as a multiset or sorted by `(macrostep, round)`, never by bytes (spike
+  to avoid `<invoke>` and `<send target="#_internal">` - the reordering seam
+  ADR-0044 (`st-r6l9`) has since closed for every chart, not just this one,
+  so live delivery order now agrees with `(macrostep, round)` order across a
+  whole run regardless. What the chart choice still buys is determinism, not
+  order-safety: staying off that seam keeps this test a plain byte
+  comparison rather than a multiset or `(macrostep, round)`-sorted one (spike
   finding, `docs/research/260816-sui-t36.1-trace-coverage-spike.md`).
   """
 
