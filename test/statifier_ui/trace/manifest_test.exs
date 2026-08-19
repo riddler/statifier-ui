@@ -49,6 +49,10 @@ defmodule StatifierUI.Trace.ManifestTest do
     machine
   end
 
+  defp slice(source, %{"start_offset" => start_offset, "end_offset" => end_offset}) do
+    binary_part(source, start_offset, end_offset - start_offset)
+  end
+
   describe "build/3 - states table" do
     test "covers every index including the synthesized root at 0" do
       machine = compile!(@two_state)
@@ -214,6 +218,63 @@ defmodule StatifierUI.Trace.ManifestTest do
 
       for row <- message.payload["data"] do
         refute Map.has_key?(row, "value")
+      end
+    end
+
+    test "value_location spans the written value for expr and src, and falls back to the element's own span otherwise" do
+      # Pins the fallback `docs/wire-format.md`'s `data` table documents: an
+      # element written with neither `expr` nor `src` has no distinct value
+      # span, so `value_location` equals `location` and a consumer slicing
+      # `source` at it gets the whole element rather than a value. The four
+      # rows below are the four value sources `Machine.Data` distinguishes.
+      source = """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="a" version="1.0" datamodel="predicator">
+          <datamodel>
+              <data id="fromExpr" expr="1 + 1" />
+              <data id="fromSrc" src="http://example.com/d.json" />
+              <data id="fromChild">42</data>
+              <data id="bare" />
+          </datamodel>
+          <state id="a" />
+      </scxml>
+      """
+
+      machine = compile!(source)
+      {:ok, message} = Manifest.build(machine, "sess_1", source: source)
+
+      rows = Map.new(message.payload["data"], &{&1["id"], &1})
+      assert map_size(rows) == 4
+
+      # Written value: value_location is a distinct, narrower span, and
+      # slicing the source at it yields exactly the written value.
+      assert slice(source, rows["fromExpr"]["value_location"]) == "1 + 1"
+      assert slice(source, rows["fromSrc"]["value_location"]) == "http://example.com/d.json"
+
+      for id <- ~w(fromExpr fromSrc) do
+        refute rows[id]["value_location"] == rows[id]["location"]
+      end
+
+      # No written value: value_location falls back to the element's own
+      # span. Equality with "location" is the signal the doc tells a
+      # consumer to test before treating a slice as a value.
+      for id <- ~w(fromChild bare) do
+        assert rows[id]["value_location"] == rows[id]["location"]
+        assert slice(source, rows[id]["value_location"]) =~ ~r/\A<data id="#{id}"/
+      end
+    end
+
+    test "value_location is present on every row - the compiler has no nil clause" do
+      # `Statifier.Machine.Data`'s type admits nil, but every
+      # `build_data_value/2` clause upstream returns a location, so the
+      # producer's put_present/3 branch is defensive rather than reachable.
+      # The wire-format schema still documents the field as conditional, so
+      # this asserts the observed behavior without binding the format to it.
+      machine = compile!(@all_content_kinds)
+      {:ok, message} = Manifest.build(machine, "sess_1")
+
+      for row <- message.payload["data"] do
+        assert Map.has_key?(row, "value_location")
       end
     end
 
