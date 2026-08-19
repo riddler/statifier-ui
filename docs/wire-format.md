@@ -629,8 +629,17 @@ Emitted exactly once per session, unconditionally - even under
 `session.start`, from statifier's `Statifier.Effect.DatamodelInit`
 (`st-1xwh`). It carries the datamodel's starting values: spec 5.3.3's
 unconditional `<data>` creation plus the four spec 5.10 system variables,
-before the binding fold that follows it - so a `<data>` element with no
-value yet appears as `{"$undefined": true}` rather than being absent.
+before the binding fold that follows it.
+
+Because the snapshot precedes that fold, **every** `<data>` element appears
+as `{"$undefined": true}`, not only the ones declared without a value: a
+`<data id="count" expr="41 + 1"/>` is present under `count` as
+`{"$undefined": true}` here, and is assigned its `42` afterwards. This
+message therefore names the datamodel's variables reliably, but is not a
+source for their values. The assignments that follow arrive as statifier's
+`Effect.DatamodelChange`, which this producer does not serialize yet;
+`sui-h92` owns that, and until it lands a consumer can observe the
+variable names but never a value.
 
 | Field | Type | Presence |
 |---|---|---|

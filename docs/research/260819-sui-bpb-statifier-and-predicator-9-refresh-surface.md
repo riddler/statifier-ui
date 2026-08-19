@@ -585,9 +585,12 @@ the duration finding without needing its own analysis.
 ## Historical Context
 
 `docs/research/260816-sui-t36.1-trace-coverage-spike.md` filed eight engine
-gaps against the vendored statifier. This refresh closes or moves six of them,
-which is a useful measure of how much of the 141 commits is work this repo
-asked for:
+gaps against the vendored statifier. This refresh closes or moves **all
+eight** of them, which is a useful measure of how much of the 141 commits is
+work this repo asked for. (An earlier revision of this document said six; the
+list below always showed seven, and GAP 5 was confirmed closed during the
+post-implementation verification pass - see the resolution under open question
+6.)
 
 - GAP 1, st-nbmj (`round` missing from core effects) - **closed** by ADR-0046.
 - GAP 2, st-oef3 (no datamodel-change effect) - **closed**, and it is the
@@ -601,7 +604,9 @@ asked for:
   replaying the recording.
 - GAP 7, st-ntf5 (no per-microstep configuration) - **closed**.
 - GAP 5, st-xbaz (`start_session/2` deadlock on initialize-time `<invoke>`) -
-  not verified in this pass.
+  **closed** upstream as a duplicate of st-u2h4, fixed by statifier `3fe03ca`,
+  which is an ancestor of the pinned `1d0c6ba`. Verified after implementation,
+  not in the original pass.
 - GAP 8, st-5fbw (phantom child for unsupported invoke type) - **closed**.
 
 The spike also verified `Machine.at/2`, `transition/2`, `content/2`, and
@@ -667,10 +672,17 @@ prefix-plus-suffix recipe sound.
    should check, and a moved byte is information about upstream, never
    something to re-baseline (ADR-0005, ADR-0011).
 
-5. **sui-t36.6 and sui-t36.7 do not depend on sui-bpb** even though the other
-   four `sui-t36.x` children do. Whether that is deliberate or an omission was
-   not determined.
+5. ~~**sui-t36.6 and sui-t36.7 do not depend on sui-bpb** even though the
+   other four `sui-t36.x` children do.~~ **Resolved 2026-08-19.** They are not
+   the same case. sui-t36.6 (event injection) drives the ordinary
+   `Statifier.Session` event API and correctly needs nothing from the refresh.
+   sui-t36.7 (datamodel explorer) was an omission: its live mode reads the
+   subscribed session datamodel, which did not exist on the wire before this
+   refresh. Dependencies on sui-bpb and sui-h92 were added.
 
-6. **st-xbaz (GAP 5, the initialize-time `<invoke>` deadlock)** was not
-   verified as closed or open in this pass; it did not surface in the commit
-   range review.
+6. ~~**st-xbaz (GAP 5, the initialize-time `<invoke>` deadlock)** was not
+   verified as closed or open in this pass.~~ **Resolved 2026-08-19.** It is
+   closed upstream as a duplicate of st-u2h4, fixed by `3fe03ca`. It did not
+   surface in the commit-range review because it landed under the other bead's
+   id. `git merge-base --is-ancestor 3fe03ca 1d0c6ba` confirms the fix is in
+   the pinned tree, so this refresh carries it.
