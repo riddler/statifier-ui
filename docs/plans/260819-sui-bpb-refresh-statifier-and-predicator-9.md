@@ -148,8 +148,9 @@ output returns only the two deliberately-broken cases in
   never fires in this repo's suite, so deferring it leaves no red gate and no
   warning on any session the tests observe. The deferral is deliberate and
   bounded: a chart with `<data>` or `<assign>` driven through a live subscriber
-  will log one `{:unknown_effect, :datamodel_change}` warning until the
-  follow-up lands. That warning is ADR-0005's drift alarm doing its job on an
+  will log one `{:unknown_effect, :datamodel_change}` warning per assignment
+  until the follow-up lands - a three-`<data>` chart was observed logging three
+  and reaching `stats.errors == 3`. That warning is ADR-0005's drift alarm doing its job on an
   effect we have consciously deferred with a bead behind it, which is different
   from the `:datamodel_init` case where the alarm fires on *every* session and
   would make the refresh dishonest.
@@ -395,16 +396,37 @@ Three further passages in the same file say "reserved" and must move with it:
       the suite logs a normalize error for the effect this phase handles
 
 #### Manual Verification:
-- [ ] Every changed test expectation in the diff is traceable to ADR-0046 /
+- [x] Every changed test expectation in the diff is traceable to ADR-0046 /
       st-xb2b, st-ntf5, or st-1xwh, and no expectation was widened merely to
-      absorb a failure
-- [ ] The `session.datamodel` payload for a real chart with a `<data>` element
-      is readable and correct: system variables present, an unassigned `<data>`
-      appearing as `{"$undefined": true}`
-- [ ] The regenerated fixture's non-`seq` bytes are unchanged from the
-      committed version, line for line
-- [ ] `docs/wire-format.md`'s new section reads as a specification a second
-      interpreter could implement from, not as a changelog entry
+      absorb a failure. Confirmed by reading every hunk: each is a field added
+      to a struct *literal*, a `seq`/count shifted by exactly the one inserted
+      message, or the new `session.datamodel` assertion. No assertion was
+      loosened - `stats.errors == 1` is untouched, `%Message{..., round: nil}`
+      still asserts `nil` (the sui-t36.5 deferral), and the burst assertion
+      got stricter by naming `session.datamodel` at `seq` 1.
+- [x] The `session.datamodel` payload for a real chart with a `<data>` element
+      is readable and correct. Probed a live three-`<data>` chart: all four
+      system variables present, `_ioprocessors` fully formed, every `<data>`
+      encoded as `{"$undefined": true}`. **Finding:** that includes
+      `expr`-carrying elements, not only unassigned ones, because the snapshot
+      precedes the binding fold. `docs/wire-format.md` said only "a `<data>`
+      element with no value yet", which a consumer could read as promising
+      values for the rest; it now states the stronger fact and points at
+      sui-h92. The same probe showed the `:datamodel_change` warning is one
+      *per assignment*, not one per session - the deferral note above was
+      corrected to match.
+- [x] The regenerated fixture's non-`seq` bytes are unchanged from the
+      committed version, line for line. Verified mechanically rather than by
+      eye: stripping `"seq":N,` from both revisions and removing the inserted
+      `session.datamodel` record leaves the two files byte-identical at 14
+      lines each (`diff` reports no output). The only movement is the
+      insertion and the renumbering it forces.
+- [x] `docs/wire-format.md`'s new section reads as a specification a second
+      interpreter could implement from. It states emission conditions, position
+      in the stream, envelope-counter treatment, and a field table, citing
+      `st-1xwh` once as provenance in the same voice the rest of the document
+      uses. Extended during this pass with what a consumer can and cannot rely
+      on the message for.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the bare `mix quality` as the phase gate. In interactive
@@ -497,19 +519,30 @@ chart or the test.
       `test/statifier_ui/trace/golden_trace_test.exs`
 
 #### Manual Verification:
-- [ ] Neither rewritten passage contradicts what Phase 1's producer actually
-      emits; where the spec describes an engine capability this producer has
-      not yet propagated, it says which bead owns the propagation
-- [ ] The cross-session interleaving paragraph is unchanged
-- [ ] Every surviving `st-r6l9` and `st-nbmj` mention (find them with
+- [x] Neither rewritten passage contradicts what Phase 1's producer actually
+      emits, and both name the owning bead. The `round` passage states outright
+      that the engine stamps `round` on every core effect while this producer
+      does not propagate it, and names sui-t36.5; the normalizer tests confirm
+      `effect.*` still carries `round: nil`. All three cited upstream ADRs were
+      checked to exist with matching titles: ADR-0044 (re-entry effects defer
+      to the outer batch), ADR-0046 (round on every core effect), ADR-0050
+      (invoked children inherit observation by opt-in).
+- [x] The cross-session interleaving paragraph is unchanged - `git show` on
+      the Phase 2 diff matches nothing containing "interleav".
+- [x] Every surviving `st-r6l9` and `st-nbmj` mention (find them with
       `grep -n 'st-r6l9\|st-nbmj' docs/wire-format.md`) reads as a historical
       reference to a **closed** gap, not as an assertion that the gap is still
       open. This is a manual check on purpose: the grep cannot tell a correct
       backward reference from a stale claim, and a plain "no matches" would be
       the wrong target - the References list legitimately keeps naming these
-      beads.
-- [ ] No regressions in related features: the spec still reads as one document,
-      not as a document with two patches in it
+      beads. **Confirmed**: all four surviving mentions read as closed-gap
+      history - "closed by ADR-0044" (`:104`), "As of ADR-0044" (`:647`), and
+      two References entries phrased as "the upstream gap behind" and "the
+      old ordering warning".
+- [x] No regressions in related features: the spec still reads as one
+      document. The Ordering section flows from interleaving into monotone
+      delivery without a seam, and the rewritten passages keep the surrounding
+      voice.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the bare `mix quality` as the phase gate. In interactive
@@ -611,14 +644,18 @@ traceably.
 Neither blocks this plan; both are tracker hygiene rather than implementation
 decisions.
 
-1. **sui-t36.6 and sui-t36.7 do not depend on sui-bpb** even though the other
-   four `sui-t36.x` children do. The research could not determine whether that
-   is deliberate. Nothing in this refresh settles it, and it does not affect
-   this bead's execution.
-2. **st-xbaz (the initialize-time `<invoke>` deadlock, GAP 5 of the
-   260816 spike)** was not verified as open or closed in the commit range, and
-   this plan did not verify it either - no chart exercised here uses
-   `<invoke>`. It is an upstream bead in any case, and ADR-0002 keeps it there.
+1. ~~**sui-t36.6 and sui-t36.7 do not depend on sui-bpb**~~ **Resolved
+   2026-08-19**, during the post-implementation verification pass. sui-t36.6
+   correctly needs no dependency: it drives the ordinary `Statifier.Session`
+   event API. sui-t36.7 was an omission - its live mode reads the subscribed
+   session datamodel, which this refresh puts on the wire for the first time -
+   and now depends on both sui-bpb and sui-h92.
+2. ~~**st-xbaz (the initialize-time `<invoke>` deadlock, GAP 5 of the
+   260816 spike)** was not verified as open or closed in the commit range.~~
+   **Resolved 2026-08-19.** Closed upstream as a duplicate of st-u2h4, fixed by
+   statifier `3fe03ca`, which `git merge-base --is-ancestor` confirms is an
+   ancestor of the pinned `1d0c6ba`. It did not surface in the range review
+   because it landed under the duplicate's id. This refresh carries the fix.
 
 ## References
 
@@ -645,7 +682,7 @@ decisions.
   the plan that built the normalizer, subscriber, manifest, and golden fixture
   against the pinned engine
 - Prior research: `docs/research/260816-sui-t36.1-trace-coverage-spike.md` -
-  the eight engine gaps, six of which this refresh closes
+  the eight engine gaps, all eight of which this refresh closes
 - Bead: sui-bpb
 
 ## Deferred Manual Verification
@@ -654,18 +691,42 @@ Manual verification items are deferred during looped (--loop) execution and
 surfaced here once, rather than blocking after each phase. Confirm these
 before considering the plan fully landed.
 
+**All eight confirmed 2026-08-19** in a verification pass after both phases
+committed. Two produced follow-up edits, noted inline.
+
 ### Phase 1
 
-- [ ] Every changed test expectation in the diff is traceable to ADR-0046 /
+- [x] Every changed test expectation in the diff is traceable to ADR-0046 /
       st-xb2b, st-ntf5, or st-1xwh, and no expectation was widened merely to
-      absorb a failure
-- [ ] The `session.datamodel` payload for a real chart with a `<data>` element
-      is readable and correct: system variables present, an unassigned `<data>`
-      appearing as `{"$undefined": true}`
-- [ ] The regenerated fixture's non-`seq` bytes are unchanged from the
-      committed version, line for line
-- [ ] `docs/wire-format.md`'s new section reads as a specification a second
-      interpreter could implement from, not as a changelog entry
+      absorb a failure. Confirmed by reading every hunk: each is a field added
+      to a struct *literal*, a `seq`/count shifted by exactly the one inserted
+      message, or the new `session.datamodel` assertion. No assertion was
+      loosened - `stats.errors == 1` is untouched, `%Message{..., round: nil}`
+      still asserts `nil` (the sui-t36.5 deferral), and the burst assertion
+      got stricter by naming `session.datamodel` at `seq` 1.
+- [x] The `session.datamodel` payload for a real chart with a `<data>` element
+      is readable and correct. Probed a live three-`<data>` chart: all four
+      system variables present, `_ioprocessors` fully formed, every `<data>`
+      encoded as `{"$undefined": true}`. **Finding:** that includes
+      `expr`-carrying elements, not only unassigned ones, because the snapshot
+      precedes the binding fold. `docs/wire-format.md` said only "a `<data>`
+      element with no value yet", which a consumer could read as promising
+      values for the rest; it now states the stronger fact and points at
+      sui-h92. The same probe showed the `:datamodel_change` warning is one
+      *per assignment*, not one per session - the deferral note above was
+      corrected to match.
+- [x] The regenerated fixture's non-`seq` bytes are unchanged from the
+      committed version, line for line. Verified mechanically rather than by
+      eye: stripping `"seq":N,` from both revisions and removing the inserted
+      `session.datamodel` record leaves the two files byte-identical at 14
+      lines each (`diff` reports no output). The only movement is the
+      insertion and the renumbering it forces.
+- [x] `docs/wire-format.md`'s new section reads as a specification a second
+      interpreter could implement from. It states emission conditions, position
+      in the stream, envelope-counter treatment, and a field table, citing
+      `st-1xwh` once as provenance in the same voice the rest of the document
+      uses. Extended during this pass with what a consumer can and cannot rely
+      on the message for.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the bare `mix quality` as the phase gate. In interactive
@@ -679,19 +740,30 @@ blocking here.
 
 ### Phase 2
 
-- [ ] Neither rewritten passage contradicts what Phase 1's producer actually
-      emits; where the spec describes an engine capability this producer has
-      not yet propagated, it says which bead owns the propagation
-- [ ] The cross-session interleaving paragraph is unchanged
-- [ ] Every surviving `st-r6l9` and `st-nbmj` mention (find them with
+- [x] Neither rewritten passage contradicts what Phase 1's producer actually
+      emits, and both name the owning bead. The `round` passage states outright
+      that the engine stamps `round` on every core effect while this producer
+      does not propagate it, and names sui-t36.5; the normalizer tests confirm
+      `effect.*` still carries `round: nil`. All three cited upstream ADRs were
+      checked to exist with matching titles: ADR-0044 (re-entry effects defer
+      to the outer batch), ADR-0046 (round on every core effect), ADR-0050
+      (invoked children inherit observation by opt-in).
+- [x] The cross-session interleaving paragraph is unchanged - `git show` on
+      the Phase 2 diff matches nothing containing "interleav".
+- [x] Every surviving `st-r6l9` and `st-nbmj` mention (find them with
       `grep -n 'st-r6l9\|st-nbmj' docs/wire-format.md`) reads as a historical
       reference to a **closed** gap, not as an assertion that the gap is still
       open. This is a manual check on purpose: the grep cannot tell a correct
       backward reference from a stale claim, and a plain "no matches" would be
       the wrong target - the References list legitimately keeps naming these
-      beads.
-- [ ] No regressions in related features: the spec still reads as one document,
-      not as a document with two patches in it
+      beads. **Confirmed**: all four surviving mentions read as closed-gap
+      history - "closed by ADR-0044" (`:104`), "As of ADR-0044" (`:647`), and
+      two References entries phrased as "the upstream gap behind" and "the
+      old ordering warning".
+- [x] No regressions in related features: the spec still reads as one
+      document. The Ordering section flows from interleaving into monotone
+      delivery without a seam, and the rewritten passages keep the surrounding
+      voice.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits while
 iterating; run the bare `mix quality` as the phase gate. In interactive
