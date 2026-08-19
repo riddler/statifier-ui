@@ -308,6 +308,31 @@ hardcodes `:location` and skips the fallback will crash on the first
 `<script>` in a chart - this is the specific bug this note exists to
 prevent.
 
+**`data`** is one object per compiled `<data>` element, in `d_index`
+order (document order across the whole chart, not per `<datamodel>`
+block):
+
+| Field | Type | Presence |
+|---|---|---|
+| d_index | integer | always |
+| id | string | always - SCXML requires `id` on `<data>` |
+| location | location object | always - the `<data>` element's own span |
+| value_location | location object | present only when the compiler recorded a span for the element's value |
+
+This table is deliberately **identity only**: it resolves a `d_index` to
+an id and a source span, and carries no representation of the element's
+declared value. A consumer wanting to display the declared value reads
+it out of `source` at `value_location`, the same way it reads a
+transition's guard out of `source` at `cond_location`; a consumer
+wanting a *runtime* value reads `session.datamodel` for the starting
+snapshot and the datamodel-change messages after it. The compiled value
+itself is a predicator instruction program, a compile error, or an
+unresolved `src` URI depending on how the element was written, and none
+of the three has a language-neutral encoding in this format. Adding a
+value field later would be an additive change and therefore not a
+version bump (ADR-0005), so this document commits to the narrow shape
+now rather than to an encoding it would have to keep.
+
 **A location object** is always all six fields, and is either wholly
 present or wholly absent - there is no partial location:
 
@@ -340,7 +365,9 @@ parent.
 **A caveat on location granularity.** The tables above are built from the
 compiled `%Statifier.Machine{}` layer, which carries element-level spans -
 a whole `<transition>`, a whole `<assign>` - plus a transition's own
-`cond_location` for its guard expression specifically. It does **not**
+`cond_location` for its guard expression specifically and a `<data>`
+element's own `value_location` for its declared value specifically. It
+does **not**
 carry attribute-level spans for every attribute (for example, a `<send>`
 element's individual `event`/`target`/`delay` attribute spans): that finer
 table, `attribute_locations`, lives one layer up, on the `Document` the
@@ -596,6 +623,11 @@ with `"kind"` naming the tuple's tag:
 | "invoke" | state_index (integer), invoke_index (integer) | one of an `<invoke>`'s own arguments failed to evaluate |
 | "finalize" | state_index (integer), invoke_index (integer) | an empty `<finalize>`'s own auto-assign write failed |
 
+A `d_index` anywhere in this format - here or on a future
+`Effect.DatamodelChange` message - resolves through `session.start`'s
+`data` table, the same way a `state_index` resolves through `states` and
+a `t_index` through `transitions`.
+
 ## Owners
 
 `Statifier.Machine.Content.owner/0`'s four variants, plus the one case
@@ -645,6 +677,10 @@ source for their values. The assignments that follow arrive as statifier's
 `Effect.DatamodelChange`, which this producer does not serialize yet;
 `sui-h92` owns that, and until it lands a consumer can observe the
 variable names but never a value.
+
+This message keys the datamodel by variable name; `session.start`'s
+`data` table keys the same elements by `d_index` and carries the `id`
+that joins the two.
 
 | Field | Type | Presence |
 |---|---|---|
