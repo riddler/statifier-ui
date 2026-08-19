@@ -54,15 +54,19 @@ consumer can share one channel across a session and, later, an invoke tree
 of related sessions. `seq` is a per-session monotonic integer, described
 fully under "Ordering" below.
 
-**`effect.*` messages carry `macrostep` and `microstep` but not `round`.**
-Every core (non-trace) statifier effect payload stamps `macrostep` and
-`microstep`, but no core effect payload stamps `round` - `round` is a
-trace-only counter today, upstream tracking issue `st-nbmj`. This is not an
-oversight this document papers over: the omission is real, and inventing a
-value would be a guess baked into the wire. When `st-nbmj` lands upstream
-and a core effect gains a `round`, this document's `effect.*` schemas gain
-the key. That is an additive change under the versioning rule above, not a
-version bump.
+**`effect.*` messages carry `macrostep` and `microstep` but not `round`,
+even though the engine now stamps `round` on every core effect.** As of
+ADR-0046 (`st-xb2b`), every core (non-trace) statifier effect payload
+carries `macrostep`, `microstep`, and `round` - effects emitted before that
+fold carry `round: 0`. This producer does not yet propagate the engine's
+`round` onto `effect.*` messages; that propagation is tracked as
+`sui-t36.5`. This is not an oversight this document papers over: the gap is
+in this producer, not upstream, and inventing a value on the wire ahead of
+the propagation work would be a guess baked into the format. When this
+producer's `effect.*` payloads gain `round`, this document's `effect.*`
+schemas gain the key. That is an additive change under the versioning rule
+above, not a version bump. The envelope table above reflects what this
+producer emits today: `round` on `trace.*` only.
 
 Beyond the fields in the table, every message carries a **payload**: the
 type-specific fields, documented below one type at a time. A payload key
@@ -97,27 +101,30 @@ multiple sessions onto one timeline sorts by `(session, seq)`, or by
 `(macrostep, round)` within a session, and never reads causality from
 arrival order.
 
-**The warning a coverage spike earned (`st-r6l9`).** A producer reading a
-live statifier session may deliver messages whose `seq` order does not
-match `(macrostep, round)` order, and may deliver `trace.*` messages *after*
-`session.halted`. This is not a defect this document is proposing be fixed;
-it is producer behavior this document describes because a consumer has to
-handle it. It arises on charts that exercise `<invoke>` or an internal
-`<send>` - live delivery is not guaranteed to be macrostep-ordered across
-that seam, and halting a session's interpreter loop does not stop its
-effect delivery.
+**Monotone delivery (`st-r6l9`, closed by ADR-0044).** A live statifier
+session used to be able to deliver messages whose `seq` order did not match
+`(macrostep, round)` order, and could deliver `trace.*` messages after
+`session.halted`, on charts that exercise `<invoke>` or an internal
+`<send>`. ADR-0044 closed that seam: re-entry effects are now enqueued and
+FIFO-drained after the outer batch rather than performed inline, so arrival
+order is non-decreasing in `(macrostep, round)` across a whole run, and
+`{:halted, reason}` is promised as end-of-stream. ADR-0044 also settled the
+uniqueness key for quiescence: more than one `trace.macrostep_stable` per
+macrostep is explicitly allowed, but exactly one per `(macrostep, round)`,
+with the last-arriving one being that macrostep's quiescence.
 
-Two consequences for anyone building on this format:
+One consequence still worth stating for anyone building on this format:
 
-- **Consumers sort by `(macrostep, round)`, never by arrival order, when
-  reconstructing the run's timeline**, and never treat `session.halted` as
-  end-of-stream - more `trace.*` messages may follow it.
-- **Golden-trace comparison on a chart that touches this seam is a
-  multiset or a `(macrostep, round)`-sorted comparison, never a byte
-  comparison.** A chart that never uses `<invoke>` or an internal `<send>`
-  does not hit this seam, and its trace remains byte-comparable run to run,
-  which is what makes the worked example and the golden test at the end of
-  this document possible.
+- **Consumers reconstruct the run's timeline by sorting on `(macrostep,
+  round)` rather than relying on arrival order** - that key names *when in
+  the run* a message belongs, independent of delivery, and it is still the
+  right key to sort by even though arrival order is now guaranteed
+  non-decreasing in it.
+
+A chart that never uses `<invoke>` or an internal `<send>` was never
+exposed to the old seam, and its trace remains byte-comparable run to run,
+which is what makes the worked example and the golden test at the end of
+this document possible.
 
 ## JSON discipline
 
@@ -637,9 +644,12 @@ Emitted when the session reports `{:halted, reason}` to its subscriber.
 |---|---|---|
 | reason | string | always - one of `"done"`, `"cancelled"`, `"budget_exhausted"` |
 
-Halting a session does not stop effect delivery: `trace.*` messages may
-still arrive after `session.halted` (see "Ordering" above, `st-r6l9`). A
-consumer must not treat this message as end-of-stream.
+As of ADR-0044 (`st-r6l9`), `session.halted` is terminal for that session
+id: no further messages for the same session id follow it (see "Ordering"
+above). Terminal is scoped **per session id, not per mailbox** - ADR-0050
+lets a subscriber observe an invoke tree of related sessions on one
+mailbox, and a parent's `session.halted` does not end the stream for a
+child session still running on the same mailbox.
 
 ### `session.terminated`
 
@@ -777,9 +787,10 @@ that test rather than drifting silently.
   fixtures sidecar object `session.start`'s `fixtures` field carries
   verbatim.
 - `st-nbmj` - the upstream gap behind `effect.*` messages carrying no
-  `round`.
-- `st-r6l9` - the upstream reordering seam behind the ordering warning
-  above.
+  `round`, closed by ADR-0046; this producer's own propagation of `round`
+  onto `effect.*` messages is tracked separately as `sui-t36.5`.
+- `st-r6l9` - the upstream reordering seam behind the old ordering warning
+  above, closed by ADR-0044.
 - `st-1xwh` - the upstream effect (`Statifier.Effect.DatamodelInit`) behind
   `session.datamodel`, above.
 - `st-oef3` - the upstream gap behind `Statifier.Effect.DatamodelChange`

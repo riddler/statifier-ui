@@ -490,10 +490,10 @@ chart or the test.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality` (full) is green
-- [ ] `mix test test/statifier_ui/trace/wire_format_spec_test.exs` passes -
+- [x] `mix quality` (full) is green
+- [x] `mix test test/statifier_ui/trace/wire_format_spec_test.exs` passes -
       the type index table's rows are untouched by this phase
-- [ ] `git diff --stat` for this phase touches only `docs/wire-format.md` and
+- [x] `git diff --stat` for this phase touches only `docs/wire-format.md` and
       `test/statifier_ui/trace/golden_trace_test.exs`
 
 #### Manual Verification:
@@ -673,6 +673,32 @@ execution, pause here for the human to confirm the manual testing before moving
 to the next phase. In looped (`--loop`) execution, this phase's Automated
 Verification gates advancement automatically (via `/wurk:commit --auto`), and
 Manual Verification items are deferred and surfaced once at the end instead of
+blocking here.
+
+---
+
+### Phase 2
+
+- [ ] Neither rewritten passage contradicts what Phase 1's producer actually
+      emits; where the spec describes an engine capability this producer has
+      not yet propagated, it says which bead owns the propagation
+- [ ] The cross-session interleaving paragraph is unchanged
+- [ ] Every surviving `st-r6l9` and `st-nbmj` mention (find them with
+      `grep -n 'st-r6l9\|st-nbmj' docs/wire-format.md`) reads as a historical
+      reference to a **closed** gap, not as an assertion that the gap is still
+      open. This is a manual check on purpose: the grep cannot tell a correct
+      backward reference from a stale claim, and a plain "no matches" would be
+      the wrong target - the References list legitimately keeps naming these
+      beads.
+- [ ] No regressions in related features: the spec still reads as one document,
+      not as a document with two patches in it
+
+**Implementation Note**: Use `mix quality --profile loop` between edits while
+iterating; run the bare `mix quality` as the phase gate. In interactive
+execution, pause here for the human to confirm the manual testing before
+finishing. In looped (`--loop`) execution, this phase's Automated Verification
+gates advancement automatically (via `/wurk:commit --auto`), and Manual
+Verification items are deferred and surfaced once at the end instead of
 blocking here.
 
 ---
