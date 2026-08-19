@@ -611,19 +611,19 @@ attribute-level spans are still absent.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] `mix quality` (full) is green (this phase changes no Elixir, so the
+- [x] `mix quality` (full) is green (this phase changes no Elixir, so the
       gate is a regression check rather than a review of new code)
-- [ ] `mix test test/statifier_ui/trace/wire_format_spec_test.exs` passes
+- [x] `mix test test/statifier_ui/trace/wire_format_spec_test.exs` passes
       with no edit to that file, and the type index still has 23 rows:
       ``grep -c '^| `[a-z._]*` |' docs/wire-format.md`` returns `23`
-- [ ] `grep -c '^| d_index | integer | always |' docs/wire-format.md`
+- [x] `grep -c '^| d_index | integer | always |' docs/wire-format.md`
       returns `1`
-- [ ] `grep -c 'value_location' docs/wire-format.md` returns at least `3`
+- [x] `grep -c 'value_location' docs/wire-format.md` returns at least `3`
       - the schema row, the identity-only paragraph, and the granularity
       caveat
-- [ ] `git diff --stat` shows exactly one file changed,
+- [x] `git diff --stat` shows exactly one file changed,
       `docs/wire-format.md`
-- [ ] Every field name in the new schema table appears in
+- [x] Every field name in the new schema table appears in
       `lib/statifier_ui/trace/manifest.ex`'s `data_object/1`:
       `for f in d_index id location value_location; grep -q "\"$f\"" lib/statifier_ui/trace/manifest.ex; end`
       exits 0
@@ -759,5 +759,27 @@ run full `mix quality` as the phase gate. In interactive execution, pause
 here for the human to confirm the manual items before phase 2. In looped
 execution the Automated Verification gates advancement and the Manual
 items are deferred to the end.
+
+---
+
+### Phase 2
+
+- [ ] The documented row schema matches the emitted one field for field,
+      checked against `head -1 test/support/trace/two_state.jsonl` for the
+      empty case and against a locally-run `Manifest.build/3` over a chart
+      with `<data>` elements for the populated case
+- [ ] The identity-only paragraph is intelligible to someone who has never
+      read this plan or ADR-0005 - it states the decision, the consumer's
+      alternative, and the reason, without requiring either
+- [ ] The file's existing typography and heading conventions are matched
+      (CLAUDE.md's house-style rule; this file already uses hyphens, so
+      keep hyphens)
+- [ ] No Elixir module, struct, or field name from statifier leaked into
+      the normative prose beyond the existing, deliberate producer notes
+
+**Implementation Note**: This phase touches no Elixir, so per CLAUDE.md's
+`git commit` row it has no gate to run of its own and may commit on review
+of the diff - but run full `mix quality` anyway, because the drift test
+reads this file.
 
 ---
