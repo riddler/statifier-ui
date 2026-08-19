@@ -31,7 +31,7 @@ defmodule StatifierUI.Trace.GoldenTraceTest do
   """
 
   @fixture_path Path.join([__DIR__, "..", "..", "support", "trace", "two_state.jsonl"])
-  @full_seq 14
+  @full_seq 15
 
   defp run_trace do
     machine = SessionCase.compile!(@two_state)

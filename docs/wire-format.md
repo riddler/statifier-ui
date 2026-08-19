@@ -599,17 +599,35 @@ in this format:
 | "finalize" | state_index (integer), invoke_index (integer) | an `<invoke>`'s own `<finalize>` block |
 | "global_script" | index (integer) | a top-level `<script>`, run at load time - only ever appears as `trace.content_executed`'s owner, since a top-level script belongs to no `<onentry>`/`<onexit>`/transition block |
 
-## The `session.*` lifecycle types
+## The `session.*` types
 
-Four types name a session's shape from the outside - its start, and the
-three ways a subscriber's own stream can end or change state. None of the
-four carry `macrostep`/`microstep`/`round`; they describe the *stream*,
-not a point inside a run.
+Five types name a session from the outside: its start, one snapshot of the
+values it started with, and the three ways a subscriber's own stream can
+end or change state. None of the five carry `macrostep`/`microstep`/
+`round` - the four lifecycle types because they describe the *stream*, not
+a point inside a run, and `session.datamodel` because it precedes the
+first macrostep entirely (its underlying effect payload carries `macrostep`/
+`microstep`/`round` internally, but this producer stays consistent with
+every other `session.*` type and leaves the envelope counters `nil`).
 
 ### `session.start`
 
 The definition message. Schema above under "`session.start`". Always
 `seq: 0`.
+
+### `session.datamodel`
+
+Emitted exactly once per session, unconditionally - even under
+`trace: false` - as the second message on the stream, right after
+`session.start`, from statifier's `Statifier.Effect.DatamodelInit`
+(`st-1xwh`). It carries the datamodel's starting values: spec 5.3.3's
+unconditional `<data>` creation plus the four spec 5.10 system variables,
+before the binding fold that follows it - so a `<data>` element with no
+value yet appears as `{"$undefined": true}` rather than being absent.
+
+| Field | Type | Presence |
+|---|---|---|
+| datamodel | object | always - the session's starting datamodel, keyed by variable name, values encoded by the `$`-tagged value discipline |
 
 ### `session.halted`
 
@@ -647,20 +665,6 @@ reachable.
 |---|---|---|
 | effect | object | always - the unrouted effect, encoded the same way its own `effect.*` or `trace.*` type would encode it, under a `kind` key naming that type |
 
-## Reserved and not yet emitted
-
-**`session.datamodel`** is reserved by this document and emits nothing
-today. Nothing on statifier's effect stream reports a datamodel change
-(tracked as `st-oef3`); polling the session's own snapshot from inside a
-subscriber would race the running session and be unreproducible under
-replay, so this document does not specify a polling-based `session.*`
-message as a substitute. The name is reserved so a future implementation
-of `st-oef3` has an uncontested type string to emit into, and so a second
-interpreter reading this document today knows the gap exists rather than
-discovering it by a consumer silently ignoring an unrecognized type. It
-appears in the type index below, marked reserved, so the drift test's type
-count accounts for it even though no producer emits it yet.
-
 ## Worked example
 
 The complete JSON Lines trace of a two-state chart with one external
@@ -695,26 +699,29 @@ wire form produces - the actual bytes, not a reformatting):
 
 ```json
 {"contents":[],"seq":0,"session":"sess_golden","states":[{"children":[1,2],"index":0,"kind":"scxml","location":{"end_column":9,"end_line":6,"end_offset":178,"start_column":1,"start_line":1,"start_offset":0},"transitions":[]},{"children":[],"id":"a","index":1,"kind":"state","location":{"end_column":13,"end_line":4,"end_offset":149,"start_column":5,"start_line":2,"start_offset":78},"parent":0,"transitions":[0]},{"children":[],"id":"b","index":2,"kind":"state","location":{"end_column":20,"end_line":5,"end_offset":169,"start_column":5,"start_line":5,"start_offset":154},"parent":0,"transitions":[]}],"transitions":[{"content":[],"events":[["go"]],"location":{"end_column":44,"end_line":3,"end_offset":136,"start_column":9,"start_line":3,"start_offset":101},"source":1,"t_index":0,"targets":[2],"type":"external"}],"type":"session.start","version":1}
-{"indexes":[0,1],"macrostep":1,"microstep":1,"round":0,"seq":1,"session":"sess_golden","type":"trace.entry_set"}
-{"macrostep":1,"microstep":1,"round":1,"seq":2,"session":"sess_golden","t_indexes":[],"type":"trace.transitions_selected"}
-{"invoke_ids":[],"macrostep":1,"microstep":1,"round":1,"seq":3,"session":"sess_golden","state_indexes":[0,1],"type":"trace.invoke_pass"}
-{"configuration":[0,1],"macrostep":1,"microstep":1,"round":1,"seq":4,"session":"sess_golden","type":"trace.macrostep_stable"}
-{"event":{"name":"go","type":"external"},"from":"external","macrostep":2,"microstep":0,"round":0,"seq":5,"session":"sess_golden","type":"trace.event_dequeued"}
-{"event":{"name":"go","type":"external"},"finalized":[],"forwarded":[],"macrostep":2,"microstep":0,"round":0,"seq":6,"session":"sess_golden","type":"trace.finalize_autoforward"}
-{"event":{"name":"go","type":"external"},"macrostep":2,"microstep":0,"round":0,"seq":7,"session":"sess_golden","t_indexes":[0],"type":"trace.transitions_selected"}
-{"indexes":[1],"macrostep":2,"microstep":1,"round":0,"seq":8,"session":"sess_golden","type":"trace.exit_set"}
-{"c_indexes":[],"macrostep":2,"microstep":1,"owner":{"kind":"transition","t_index":0},"round":0,"seq":9,"session":"sess_golden","type":"trace.content_executed"}
-{"indexes":[2],"macrostep":2,"microstep":1,"round":0,"seq":10,"session":"sess_golden","type":"trace.entry_set"}
-{"macrostep":2,"microstep":1,"round":1,"seq":11,"session":"sess_golden","t_indexes":[],"type":"trace.transitions_selected"}
-{"invoke_ids":[],"macrostep":2,"microstep":1,"round":1,"seq":12,"session":"sess_golden","state_indexes":[2],"type":"trace.invoke_pass"}
-{"configuration":[0,2],"macrostep":2,"microstep":1,"round":1,"seq":13,"session":"sess_golden","type":"trace.macrostep_stable"}
+{"datamodel":{"_event":{"$undefined":true},"_ioprocessors":{"http://www.w3.org/TR/scxml/#SCXMLEventProcessor":{"location":"#_scxml_sess_golden"}},"_name":{"$undefined":true},"_sessionid":"sess_golden"},"seq":1,"session":"sess_golden","type":"session.datamodel"}
+{"indexes":[0,1],"macrostep":1,"microstep":1,"round":0,"seq":2,"session":"sess_golden","type":"trace.entry_set"}
+{"macrostep":1,"microstep":1,"round":1,"seq":3,"session":"sess_golden","t_indexes":[],"type":"trace.transitions_selected"}
+{"invoke_ids":[],"macrostep":1,"microstep":1,"round":1,"seq":4,"session":"sess_golden","state_indexes":[0,1],"type":"trace.invoke_pass"}
+{"configuration":[0,1],"macrostep":1,"microstep":1,"round":1,"seq":5,"session":"sess_golden","type":"trace.macrostep_stable"}
+{"event":{"name":"go","type":"external"},"from":"external","macrostep":2,"microstep":0,"round":0,"seq":6,"session":"sess_golden","type":"trace.event_dequeued"}
+{"event":{"name":"go","type":"external"},"finalized":[],"forwarded":[],"macrostep":2,"microstep":0,"round":0,"seq":7,"session":"sess_golden","type":"trace.finalize_autoforward"}
+{"event":{"name":"go","type":"external"},"macrostep":2,"microstep":0,"round":0,"seq":8,"session":"sess_golden","t_indexes":[0],"type":"trace.transitions_selected"}
+{"indexes":[1],"macrostep":2,"microstep":1,"round":0,"seq":9,"session":"sess_golden","type":"trace.exit_set"}
+{"c_indexes":[],"macrostep":2,"microstep":1,"owner":{"kind":"transition","t_index":0},"round":0,"seq":10,"session":"sess_golden","type":"trace.content_executed"}
+{"indexes":[2],"macrostep":2,"microstep":1,"round":0,"seq":11,"session":"sess_golden","type":"trace.entry_set"}
+{"macrostep":2,"microstep":1,"round":1,"seq":12,"session":"sess_golden","t_indexes":[],"type":"trace.transitions_selected"}
+{"invoke_ids":[],"macrostep":2,"microstep":1,"round":1,"seq":13,"session":"sess_golden","state_indexes":[2],"type":"trace.invoke_pass"}
+{"configuration":[0,2],"macrostep":2,"microstep":1,"round":1,"seq":14,"session":"sess_golden","type":"trace.macrostep_stable"}
 ```
 
 `seq` starts at `0` on `session.start` and increments by one across every
 subsequent message, with no gaps - this chart never touches the `<invoke>`/
 internal-`<send>` reordering seam, so a producer's live delivery order and
 `(macrostep, round)` order agree throughout, and the trace above is
-byte-comparable run to run. `macrostep` `1` is the session's own
+byte-comparable run to run. `session.datamodel` at `seq` `1` always follows
+`session.start` and always precedes the first `trace.*` message, carrying
+no `macrostep`/`microstep`/`round` of its own. `macrostep` `1` is the session's own
 initialize burst (Appendix D's `initialize` procedure, entering `a` before
 any event is ever sent - `configuration` on `trace.macrostep_stable` is
 `[0, 2]` later, not `[2]`, because the synthesized root at index `0` is
@@ -727,14 +734,12 @@ would show it in the shape its schema above describes.
 ## Type index
 
 One row per type this document defines - 23 rows: 9 `trace.*`, 9
-`effect.*`, and 5 `session.*` (the four lifecycle types plus the reserved
+`effect.*`, and 5 `session.*` (the four lifecycle types plus
 `session.datamodel`). This table's first column is a machine boundary: a
 drift test parses exactly this table's backtick-quoted `type` strings and
 asserts them equal to the producer's own emitted type set, so a type
 documented here and not emitted, or emitted and not documented here, fails
-that test rather than drifting silently. `session.datamodel` is excluded
-from that equality on the emitted side, since this document states above
-that no producer emits it yet.
+that test rather than drifting silently.
 
 | Type | Family | Emitted when |
 |---|---|---|
@@ -760,7 +765,7 @@ that no producer emits it yet.
 | `session.halted` | session | the session reports `{:halted, reason}` |
 | `session.terminated` | session | the session's process exits |
 | `session.unroutable` | session | the session reports an unroutable effect |
-| `session.datamodel` | session | reserved, not yet emitted (`st-oef3`) |
+| `session.datamodel` | session | a session's datamodel is initialized |
 
 ## References
 
@@ -775,7 +780,10 @@ that no producer emits it yet.
   `round`.
 - `st-r6l9` - the upstream reordering seam behind the ordering warning
   above.
-- `st-oef3` - the upstream gap behind `session.datamodel` being reserved
-  rather than emitted.
+- `st-1xwh` - the upstream effect (`Statifier.Effect.DatamodelInit`) behind
+  `session.datamodel`, above.
+- `st-oef3` - the upstream gap behind `Statifier.Effect.DatamodelChange`
+  (a `<data>`/`<assign>` value change, distinct from `session.datamodel`'s
+  one-time starting snapshot) having no wire representation yet.
 - `sui-qay` - the gap behind `session.start`'s location tables carrying no
   attribute-level spans.

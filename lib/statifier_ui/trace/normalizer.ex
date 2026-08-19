@@ -38,6 +38,7 @@ defmodule StatifierUI.Trace.Normalizer do
   alias Statifier.Effect.BudgetExhausted
   alias Statifier.Effect.Cancel
   alias Statifier.Effect.CancelInvoke
+  alias Statifier.Effect.DatamodelInit
   alias Statifier.Effect.Done
   alias Statifier.Effect.Invoke
   alias Statifier.Effect.Log
@@ -94,8 +95,9 @@ defmodule StatifierUI.Trace.Normalizer do
   @doc """
   The closed, sorted list of every `type` string this format defines - the
   vocabulary's single definition site in code. 23 entries: 9 `trace.*`, 9
-  `effect.*`, and 5 `session.*` (the four lifecycle types plus the reserved,
-  not-yet-emitted `session.datamodel`). `docs/wire-format.md`'s type index
+  `effect.*`, and 5 `session.*` (the four lifecycle types plus
+  `session.datamodel`, emitted once per session from
+  `Statifier.Effect.DatamodelInit`). `docs/wire-format.md`'s type index
   table is the same 23, and `test/statifier_ui/trace/wire_format_spec_test.exs`
   asserts the two sets are equal.
   """
@@ -175,6 +177,7 @@ defmodule StatifierUI.Trace.Normalizer do
   defp decompose({:send, payload}), do: core_message(payload)
   defp decompose({:send_delayed, payload}), do: core_message(payload)
   defp decompose({:cancel, payload}), do: core_message(payload)
+  defp decompose({:datamodel_init, payload}), do: datamodel_message(payload)
   defp decompose({tag, _payload}), do: {:error, {:unknown_effect, tag}}
   defp decompose(other), do: {:error, {:unknown_effect, other}}
 
@@ -343,6 +346,21 @@ defmodule StatifierUI.Trace.Normalizer do
 
     with {:ok, base} <- put_owner(base, p.owner) do
       {:ok, {"effect.cancel", p.macrostep, p.microstep, nil, base}}
+    end
+  end
+
+  # -- session.datamodel -------------------------------------------------------
+
+  # The engine emits exactly one DatamodelInit per initialize/2 - first in
+  # the stream, unconditionally, even under `trace: false` (st-1xwh). It
+  # lands on the type `docs/wire-format.md` reserved for st-oef3, so the
+  # vocabulary does not grow and ADR-0005's version stays at 1. Like every
+  # other `session.*` message the envelope counters stay nil, even though
+  # the payload struct carries them.
+  @spec datamodel_message(struct()) :: {:ok, decomposed()} | {:error, term()}
+  defp datamodel_message(%DatamodelInit{} = p) do
+    with {:ok, encoded} <- Value.encode(p.datamodel) do
+      {:ok, {"session.datamodel", nil, nil, nil, %{"datamodel" => encoded}}}
     end
   end
 

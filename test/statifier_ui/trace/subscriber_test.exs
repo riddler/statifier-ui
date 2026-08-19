@@ -22,10 +22,12 @@ defmodule StatifierUI.Trace.SubscriberTest do
   </scxml>
   """
 
-  # 14 messages total for @two_state driven with one "go": seq 0
-  # (session.start) through seq 13 (the driven macrostep's
-  # trace.macrostep_stable) - see docs/wire-format.md's worked example.
-  @full_seq 14
+  # 15 messages total for @two_state driven with one "go": seq 0
+  # (session.start) through seq 14 (the driven macrostep's
+  # trace.macrostep_stable) - see docs/wire-format.md's worked example. seq 1
+  # is session.datamodel, emitted unconditionally on every initialize/2
+  # (st-1xwh).
+  @full_seq 15
 
   defp drive_and_wait(sub, session, target \\ @full_seq) do
     Session.send_event(session, "go")
@@ -40,12 +42,15 @@ defmodule StatifierUI.Trace.SubscriberTest do
       drive_and_wait(early_sub, early_session)
       early_messages = Subscriber.messages(early_sub)
 
-      # The initialize burst enters "a" (state index 1) before any event is
-      # driven - its trace.entry_set carries indexes [0, 1] (the
-      # synthesized root is always a member) at seq 1, right after the
-      # seq: 0 manifest.
-      assert [%{type: "session.start", seq: 0}, %{type: "trace.entry_set", seq: 1} = burst | _] =
-               early_messages
+      # session.datamodel is emitted unconditionally right after the seq: 0
+      # manifest (st-1xwh). The initialize burst then enters "a" (state
+      # index 1) before any event is driven - its trace.entry_set carries
+      # indexes [0, 1] (the synthesized root is always a member) at seq 2.
+      assert [
+               %{type: "session.start", seq: 0},
+               %{type: "session.datamodel", seq: 1},
+               %{type: "trace.entry_set", seq: 2} = burst | _
+             ] = early_messages
 
       assert burst.payload["indexes"] == [0, 1]
 
@@ -120,15 +125,15 @@ defmodule StatifierUI.Trace.SubscriberTest do
       machine = SessionCase.compile!(@two_state)
       {sub, session} = SessionCase.start_early!(machine, "sess_mid_listen")
 
-      # The initialize burst (seq 0..4) has already flowed by the time this
+      # The initialize burst (seq 0..5) has already flowed by the time this
       # returns true - nobody is listening yet.
-      SessionCase.wait_for_seq(sub, 5)
+      SessionCase.wait_for_seq(sub, 6)
 
       :ok = Subscriber.add_listener(sub, self())
       drive_and_wait(sub, session)
 
-      received = collect_listener_messages("sess_mid_listen", @full_seq - 5)
-      assert Enum.all?(received, &(&1.seq >= 5))
+      received = collect_listener_messages("sess_mid_listen", @full_seq - 6)
+      assert Enum.all?(received, &(&1.seq >= 6))
     end
 
     test "remove_listener/2 stops delivery to that pid" do
@@ -197,7 +202,7 @@ defmodule StatifierUI.Trace.SubscriberTest do
       send(sub, {:statifier, session_id, {:halted, :done}})
 
       late_effect =
-        {:log, %Log{label: "after-halt", macrostep: 99, microstep: 0}}
+        {:log, %Log{label: "after-halt", macrostep: 99, microstep: 0, round: 0}}
 
       send(sub, {:statifier, session_id, {:effect, late_effect}})
 
@@ -224,7 +229,7 @@ defmodule StatifierUI.Trace.SubscriberTest do
 
       seq_before = Subscriber.stats(sub).seq
 
-      late_effect = {:log, %Log{label: "foreign", macrostep: 1, microstep: 0}}
+      late_effect = {:log, %Log{label: "foreign", macrostep: 1, microstep: 0, round: 0}}
       send(sub, {:statifier, "some_other_session", {:effect, late_effect}})
 
       SessionCase.wait_until(sub, 500, fn stats -> stats.foreign == 1 end)
@@ -269,7 +274,7 @@ defmodule StatifierUI.Trace.SubscriberTest do
     # is rejected with `{:error, {:unsupported_value, term}}` rather than
     # passed through - sui-qlf. That makes it reachable here.
     defp out_of_domain_log(label, macrostep) do
-      {:log, %Log{label: label, value: self(), macrostep: macrostep, microstep: 0}}
+      {:log, %Log{label: label, value: self(), macrostep: macrostep, microstep: 0, round: 0}}
     end
 
     test "an out-of-domain value drives stats.errors up through a live subscriber" do
@@ -346,7 +351,9 @@ defmodule StatifierUI.Trace.SubscriberTest do
         SessionCase.wait_until(sub, 500, fn stats -> stats.errors == 1 end)
       end)
 
-      good_effect = {:log, %Log{label: "still-alive", value: "ok", macrostep: 99, microstep: 0}}
+      good_effect =
+        {:log, %Log{label: "still-alive", value: "ok", macrostep: 99, microstep: 0, round: 0}}
+
       send(sub, {:statifier, session_id, {:effect, good_effect}})
 
       SessionCase.wait_for_seq(sub, before_seq + 1)
