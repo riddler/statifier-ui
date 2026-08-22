@@ -146,10 +146,12 @@ defmodule StatifierUI.DatamodelExplorer do
      least one write stamped at that macrostep carried a decoded
      `prior_value` different from its decoded `new_value` - so a first
      binding, which has no `prior_value` at all, counts as a change from
-     `:undefined`. This is macrostep granularity, not round: every
-     `effect.*` type but `effect.budget_exhausted` carries a `nil` `round`
-     (`normalizer.ex:271`), so finer marking would need an upstream wire
-     change.
+     `:undefined`. This is macrostep granularity, not round - chosen when
+     `effect.datamodel_change` still carried a `nil` `round` envelope.
+     sui-67d has since stamped `round` on every `effect.*` message, so
+     round-granular marking is now a possible refinement here rather than
+     an upstream wire change; this pane deliberately stays at macrostep
+     granularity, and never reads the `round` field at all.
   7. `shape` and `label` are computed once, from each entry's final decoded
      value, so an entry written more than once in one macrostep is
      labelled from its end state.

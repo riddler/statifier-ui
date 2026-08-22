@@ -3,8 +3,9 @@ defmodule StatifierUI.Trace.Message do
   One message of the trace wire format (`docs/wire-format.md`), held as a
   struct in process and rendered to the documented JSON object by `to_map/1`.
 
-  The envelope fields (`type`, `session`, `seq`, and the `trace.*`-only
-  `macrostep`/`microstep`/`round`) live on the struct directly; everything
+  The envelope fields (`type`, `session`, `seq`, and the counters
+  `macrostep`/`microstep`/`round`, carried by `trace.*` and `effect.*`
+  messages and by no `session.*` message) live on the struct directly; everything
   type-specific lives in `payload`, already in wire shape - a string-keyed
   map ready to merge over the envelope. This is decision 1 of the plan: one
   envelope struct rather than one struct per message type, so the spec stays
@@ -73,7 +74,8 @@ defmodule StatifierUI.Trace.Message do
 
   `"type"`, `"session"`, and `"seq"` are always present; `"macrostep"`,
   `"microstep"`, and `"round"` are present only when non-`nil` (decisions 3
-  and 5 - `effect.*` messages carry no `round`, `session.*` messages carry
+  and 5, amended by sui-67d - `trace.*` and `effect.*` messages carry all
+  three, `session.*` messages carry
   none of the three). Specced for a valid message: call `validate/1` first,
   or construct through `StatifierUI.Trace.Normalizer`, which always does.
   """

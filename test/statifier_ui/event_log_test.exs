@@ -475,6 +475,31 @@ defmodule StatifierUI.EventLogTest do
       assert macrostep.rounds == []
     end
 
+    # Since sui-67d the live producer stamps `round` on every `effect.*`
+    # message, so this is the live-stream shape; the round-less case above
+    # remains what an older recorded stream looks like.
+    test "a round-carrying effect lands in its round, not in Macrostep.effects" do
+      messages = [
+        %Message{
+          type: "effect.log",
+          session: "s",
+          seq: 0,
+          macrostep: 2,
+          microstep: 1,
+          round: 3,
+          payload: %{"label" => "hi"}
+        }
+      ]
+
+      {:ok, log} = EventLog.build(messages)
+      [macrostep] = log.macrosteps
+      [round] = macrostep.rounds
+
+      assert macrostep.effects == []
+      assert round.round == 3
+      assert [%Message{type: "effect.log"}] = round.messages
+    end
+
     test "effect.budget_exhausted lands in its round, not in Macrostep.effects" do
       payload = %{
         "budget" => 10,

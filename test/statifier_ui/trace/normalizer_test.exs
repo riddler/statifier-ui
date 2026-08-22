@@ -211,10 +211,10 @@ defmodule StatifierUI.Trace.NormalizerTest do
         owner: {:transition, 0},
         macrostep: 1,
         microstep: 0,
-        round: 0
+        round: 2
       }
 
-      assert {:ok, %Message{type: "effect.log", macrostep: 1, microstep: 0, round: nil} = message} =
+      assert {:ok, %Message{type: "effect.log", macrostep: 1, microstep: 0, round: 2} = message} =
                Normalizer.normalize({:log, payload}, @ctx)
 
       assert message.payload == %{
@@ -234,14 +234,14 @@ defmodule StatifierUI.Trace.NormalizerTest do
         round: 0
       }
 
-      assert {:ok, %Message{type: "effect.done", round: nil} = message} =
+      assert {:ok, %Message{type: "effect.done", round: 0} = message} =
                Normalizer.normalize({:done, payload}, @ctx)
 
       assert message.payload == %{"configuration" => [0]}
       refute Map.has_key?(message.payload, "donedata")
     end
 
-    test "effect.budget_exhausted carries round, unlike every other core effect" do
+    test "effect.budget_exhausted carries round, like every core effect since sui-67d" do
       pending = [%Event{name: "go", type: :internal}]
 
       payload = %BudgetExhausted{
@@ -292,7 +292,7 @@ defmodule StatifierUI.Trace.NormalizerTest do
         round: 0
       }
 
-      assert {:ok, %Message{type: "effect.invoke", round: nil} = message} =
+      assert {:ok, %Message{type: "effect.invoke", round: 0} = message} =
                Normalizer.normalize({:invoke, payload}, @ctx)
 
       assert message.payload["invoke_id"] == "inv1"
@@ -349,7 +349,7 @@ defmodule StatifierUI.Trace.NormalizerTest do
         round: 0
       }
 
-      assert {:ok, %Message{type: "effect.send", round: nil} = message} =
+      assert {:ok, %Message{type: "effect.send", round: 0} = message} =
                Normalizer.normalize({:send, payload}, @ctx)
 
       assert message.payload["id_from_author"] == true
@@ -714,7 +714,7 @@ defmodule StatifierUI.Trace.NormalizerTest do
                 type: "effect.datamodel_change",
                 macrostep: 2,
                 microstep: 1,
-                round: nil
+                round: 0
               } = message} = Normalizer.normalize({:datamodel_change, payload}, @ctx)
 
       assert message.payload == %{

@@ -268,7 +268,7 @@ defmodule StatifierUI.Trace.Normalizer do
     with {:ok, base} <- put_owner(base, p.owner),
          {:ok, base} <- put_defined(base, "new_value", p.new_value),
          {:ok, base} <- put_defined(base, "prior_value", p.prior_value) do
-      {:ok, {"effect.datamodel_change", p.macrostep, p.microstep, nil, base}}
+      {:ok, {"effect.datamodel_change", p.macrostep, p.microstep, p.round, base}}
     end
   end
 
@@ -278,7 +278,7 @@ defmodule StatifierUI.Trace.Normalizer do
     with {:ok, base} <- put_owner(base, p.owner),
          {:ok, base} <- put_value(base, "value", p.value) do
       base = put_present(base, "c_index", p.c_index)
-      {:ok, {"effect.log", p.macrostep, p.microstep, nil, base}}
+      {:ok, {"effect.log", p.macrostep, p.microstep, p.round, base}}
     end
   end
 
@@ -286,7 +286,7 @@ defmodule StatifierUI.Trace.Normalizer do
     base = %{"configuration" => configuration(p.configuration)}
 
     with {:ok, payload} <- put_value(base, "donedata", p.donedata) do
-      {:ok, {"effect.done", p.macrostep, p.microstep, nil, payload}}
+      {:ok, {"effect.done", p.macrostep, p.microstep, p.round, payload}}
     end
   end
 
@@ -315,13 +315,13 @@ defmodule StatifierUI.Trace.Normalizer do
 
     with {:ok, base} <- put_value(base, "params", p.params),
          {:ok, base} <- put_value(base, "content", p.content) do
-      {:ok, {"effect.invoke", p.macrostep, p.microstep, nil, base}}
+      {:ok, {"effect.invoke", p.macrostep, p.microstep, p.round, base}}
     end
   end
 
   defp core_message(%CancelInvoke{} = p) do
     payload = %{"invoke_id" => p.invoke_id, "state_index" => p.state_index}
-    {:ok, {"effect.cancel_invoke", p.macrostep, p.microstep, nil, payload}}
+    {:ok, {"effect.cancel_invoke", p.macrostep, p.microstep, p.round, payload}}
   end
 
   defp core_message(%Autoforward{} = p) do
@@ -332,7 +332,7 @@ defmodule StatifierUI.Trace.Normalizer do
         "event" => event_obj
       }
 
-      {:ok, {"effect.autoforward", p.macrostep, p.microstep, nil, payload}}
+      {:ok, {"effect.autoforward", p.macrostep, p.microstep, p.round, payload}}
     end
   end
 
@@ -345,7 +345,7 @@ defmodule StatifierUI.Trace.Normalizer do
     with {:ok, base} <- put_owner(base, p.owner),
          {:ok, base} <- put_value(base, "data", p.data) do
       base = put_present(base, "c_index", p.c_index)
-      {:ok, {"effect.send", p.macrostep, p.microstep, nil, base}}
+      {:ok, {"effect.send", p.macrostep, p.microstep, p.round, base}}
     end
   end
 
@@ -363,7 +363,7 @@ defmodule StatifierUI.Trace.Normalizer do
     with {:ok, base} <- put_owner(base, p.owner),
          {:ok, base} <- put_value(base, "data", p.data) do
       base = put_present(base, "c_index", p.c_index)
-      {:ok, {"effect.send_delayed", p.macrostep, p.microstep, nil, base}}
+      {:ok, {"effect.send_delayed", p.macrostep, p.microstep, p.round, base}}
     end
   end
 
@@ -371,7 +371,7 @@ defmodule StatifierUI.Trace.Normalizer do
     base = put_present(%{"send_id" => p.send_id}, "c_index", p.c_index)
 
     with {:ok, base} <- put_owner(base, p.owner) do
-      {:ok, {"effect.cancel", p.macrostep, p.microstep, nil, base}}
+      {:ok, {"effect.cancel", p.macrostep, p.microstep, p.round, base}}
     end
   end
 
