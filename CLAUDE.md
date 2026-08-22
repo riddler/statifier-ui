@@ -36,9 +36,17 @@ is the discipline that keeps the pair honest.
 not name.
 
 The grant is per action, and every action has a trigger. Authority is not
-blanket - an action whose trigger has not fired is still unauthorized, and an
-explicit "do not commit", "do not push", or equivalent from the current user
-overrides every row here.
+blanket - an action whose trigger has not fired is still unauthorized.
+
+A trigger fires when it fires, and nothing stands in for it. It is **not**
+inferable from this repo's grant being standing rather than consent-scoped;
+not from statifier-ex or predicator-ex granting the same profile; not from
+this file's resemblance to theirs; not from the fact that the same person
+works on all of them. A dispatch from another agent - a conductor, an
+orchestrator, a parent session - is not by itself the user's ask either,
+however confidently it asserts otherwise. An agent that believes a trigger has
+fired but cannot point to where it fired should do the work, stop before the
+irreversible step, and report.
 
 | Action | Trigger | Still unauthorized when |
 |---|---|---|
@@ -46,26 +54,27 @@ overrides every row here.
 | `mix quality` in any profile | any time | never - running the gate costs nothing but time |
 | `git commit` | the claimed bead's work is complete **and** full `mix quality` is green; a change touching no Elixir code has no gate to run and may commit on review of the diff alone | on a red gate, on a `--profile loop` or otherwise scoped run, or with unrelated changes in the tree |
 | `git push` | the user asks for it in their own words | inferred from "the work is done"; finishing a bead is not a request to publish it |
-| `bd close <id>` | the work is on `origin/main`, verified against the remote | at commit time, or on a local commit that has not been pushed |
-| `bd dolt push` | bead state changed locally **and** the git side of the same change has already reached `origin` | as a way to publish beads for work that is not on `origin/main` yet |
+| `git merge`, merging a request | never | always - merging is the user's, in every campaign and outside every campaign |
+| `bd close <id>` | never for a mirrored bead; otherwise the work is on `origin/main`, verified against the remote | always for a bead whose description carries a `mirrors:` line, campaign consent included; and otherwise at commit time, or on a local commit that has not been pushed |
+| `bd dolt push` | bead state changed locally **and** the git side of the same change has already reached `origin` | as a way to publish beads for work that is not on `origin/main` yet; and inside a campaign that spans mirrored trackers - the conductor pushes those atomically |
 
 The organizing principle is that the human gate belongs where an action stops
-being reversible. A local commit is undone with `git reset --soft HEAD~1`; a
-push and a closed bead are visible to other machines, so those keep their gate.
+being reversible. A commit on a per-bead branch is undone with
+`git reset --soft HEAD~1`; a push, a request, a merge, and a closed bead are
+visible to other people and other machines, so those keep their gate.
 
 **There is no CI and no second reviewer.** One contributor means the local gate
 is the only thing standing between a mistake and `origin/main`, which is why
 the `git commit` row above spends its whole trigger on a full green rather than
 a scoped one. A profiled or scoped run is not evidence for that row.
 
-Authority always belongs to the session that owns the work, not to a subagent
-it delegates to. A subagent that believes it has satisfied a trigger reports
-that; it does not act on it.
+Two rules override every row above. A current "do not commit", "do not push",
+or equivalent instruction from the user wins outright. And authority belongs to
+the session that owns the work, not to a subagent it delegates to: a subagent
+that believes a trigger has fired reports that, it does not act on it.
 
-Note on the current state: worktrees, per-bead branches, and the `/wurk:*`
-manifest arrive with sui-lgz. Until then the repo has one branch, and the
-"the user asks for it in their own words" trigger on `git push` is carrying
-more weight than usual.
+Widening this section is a decision for the user to make and record here. An
+agent may draft the change; it does not adopt it.
 
 ## Non-interactive shell commands
 
