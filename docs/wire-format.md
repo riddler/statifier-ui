@@ -43,9 +43,9 @@ Every message is a JSON object. Every message carries:
 | type | string | always |
 | session | string | always |
 | seq | integer | always |
-| macrostep | integer | `trace.*` only |
-| microstep | integer | `trace.*` only |
-| round | integer | `trace.*` only |
+| macrostep | integer | `trace.*` and `effect.*` |
+| microstep | integer | `trace.*` and `effect.*` |
+| round | integer | `trace.*` and `effect.*` |
 
 `type` is a dotted-namespace string identifying the message shape; the
 remaining sections of this document define every value it may take.
@@ -54,19 +54,22 @@ consumer can share one channel across a session and, later, an invoke tree
 of related sessions. `seq` is a per-session monotonic integer, described
 fully under "Ordering" below.
 
-**`effect.*` messages carry `macrostep` and `microstep` but not `round`,
-even though the engine now stamps `round` on every core effect.** As of
-ADR-0046 (`st-xb2b`), every core (non-trace) statifier effect payload
-carries `macrostep`, `microstep`, and `round` - effects emitted before that
-fold carry `round: 0`. This producer does not yet propagate the engine's
-`round` onto `effect.*` messages; that propagation is tracked as
-`sui-t36.5`. This is not an oversight this document papers over: the gap is
-in this producer, not upstream, and inventing a value on the wire ahead of
-the propagation work would be a guess baked into the format. When this
-producer's `effect.*` payloads gain `round`, this document's `effect.*`
-schemas gain the key. That is an additive change under the versioning rule
-above, not a version bump. The envelope table above reflects what this
-producer emits today: `round` on `trace.*` only.
+**`effect.*` messages carry all three counters, `round` included**
+(`sui-67d`). The value is the engine's own stamp, carried verbatim: as of
+statifier ADR-0046 (`st-xb2b`), every core (non-trace) statifier effect
+payload carries `macrostep`, `microstep`, and `round` - effects emitted
+before that fold carry `round: 0` - and this producer propagates the
+stamp rather than inventing one. Between ADR-0046 landing upstream and
+`sui-67d` landing here, this producer emitted `round` on `trace.*`
+messages and `effect.budget_exhausted` only; the other `effect.*` types
+gained the key later. **Versioning decision, recorded rather than left
+implicit:** adding `round` to the remaining `effect.*` envelopes is an
+additive field change, exactly what the conformance section's MUST-ignore
+rule makes safe, so **the format version stays 1** - the same reasoning
+`effect.datamodel_change` records below for adding a whole type. A
+consumer reading an older recorded stream must still tolerate `effect.*`
+messages without `round` (the must-ignore rule's mirror image: absence of
+a field a newer producer would have written is not an error).
 
 Beyond the fields in the table, every message carries a **payload**: the
 type-specific fields, documented below one type at a time. A payload key
@@ -516,13 +519,12 @@ ADR-0005 leaves non-trace effect naming to this document
 because a bare top-level `done` type would sit confusingly next to
 `trace.done` - a different message about the same moment in the run.
 `effect.*` and `trace.*` are two visibly distinct halves of the vocabulary:
-`trace.*` are the nine Appendix D phase boundaries, stamped with all three
-counters; `effect.*` are the core effect vocabulary, stamped with
-`macrostep`/`microstep` only (see "The envelope" above for why `round` is
-absent).
+`trace.*` are the nine Appendix D phase boundaries and `effect.*` are the
+core effect vocabulary, both stamped with all three counters (see "The
+envelope" above; `round` joined the `effect.*` envelopes in `sui-67d`,
+after `effect.budget_exhausted` had carried it from the start).
 
-Every `effect.*` message carries `macrostep` and `microstep`, never
-`round`.
+Every `effect.*` message carries `macrostep`, `microstep`, and `round`.
 
 ### `effect.log`
 
@@ -547,8 +549,9 @@ The terminal effect, emitted once after top-level final entry.
 ### `effect.budget_exhausted`
 
 Emitted when a macrostep's fold spends its round budget without reaching
-quiescence (ADR-0019). This is the one core effect that does carry `round`
-- see "The envelope" above.
+quiescence (ADR-0019). This was the one core effect that carried `round`
+before `sui-67d` propagated the key onto the rest of the `effect.*`
+family - see "The envelope" above.
 
 | Field | Type | Presence |
 |---|---|---|
@@ -912,9 +915,11 @@ that test rather than drifting silently.
 - ADR-0003 (`docs/adr/0003-fixtures-as-the-example-data-contract.md`) - the
   fixtures sidecar object `session.start`'s `fixtures` field carries
   verbatim.
-- `st-nbmj` - the upstream gap behind `effect.*` messages carrying no
-  `round`, closed by ADR-0046; this producer's own propagation of `round`
-  onto `effect.*` messages is tracked separately as `sui-t36.5`.
+- `st-nbmj` - the upstream gap behind `effect.*` messages once carrying no
+  `round`, superseded by `st-xb2b`, whose ADR-0046 settled it (the two ids
+  name one thread of work: `st-nbmj` filed the gap, `st-xb2b` decided it);
+  this producer's own propagation of `round` onto `effect.*` messages was
+  `sui-67d`, above.
 - `st-r6l9` - the upstream reordering seam behind the old ordering warning
   above, closed by ADR-0044.
 - `st-1xwh` - the upstream effect (`Statifier.Effect.DatamodelInit`) behind

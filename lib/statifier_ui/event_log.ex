@@ -23,15 +23,15 @@ defmodule StatifierUI.EventLog do
 
   ## Routing `effect.*` messages
 
-  Every `trace.*` message carries a `round`; eight of the nine `effect.*`
-  types do not and are routed to their macrostep's `effects` instead. The
-  ninth, `effect.budget_exhausted`, is "the one core effect that does carry
-  `round`" (`docs/wire-format.md:546-547`), so it is routed to its round
-  bucket instead of `effects`. The routing rule is therefore "does this
-  message carry a `round`", never a check against the `"effect."` prefix -
-  which is also what makes a future propagation of `round` onto the
-  remaining `effect.*` types (tracked separately, not part of this plan) a
-  pure data change that needs no change here.
+  The routing rule is "does this message carry a `round`", never a check
+  against the `"effect."` prefix. When this module was written only
+  `trace.*` messages and `effect.budget_exhausted` carried `round`, so the
+  other `effect.*` types landed in their macrostep's `effects`; sui-67d
+  then propagated `round` onto every `effect.*` type, and - exactly as
+  planned - that was a pure data change needing no change here: an
+  `effect.*` message carrying a `round` is routed to its round bucket, and
+  `effects` still catches any message without one (an older recorded
+  stream, for example - the must-ignore rule cuts both ways).
 
   ## Errors
 
