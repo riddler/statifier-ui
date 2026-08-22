@@ -22,6 +22,10 @@ statifier_ui-*.tar
 # Temporary files, for example, from tests.
 /tmp/
 
+# Changelog fragments are tracked. A global gitignore rule for `*.d` (C/C++
+# dependency files) matches this directory name and would otherwise hide them.
+!changelog.d/
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db

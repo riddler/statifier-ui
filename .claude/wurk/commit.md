@@ -3,20 +3,24 @@
 Additional required steps. Adds only - see
 `~/.claude/skills/wurk:commit/SKILL.md` for everything this does not repeat.
 
-## Changelog: none
+## Changelog: fragments
 
-`changelog.mode` is `none` in the manifest, so there is no fragment step and
-nothing to ask about.
+`changelog.mode` is `fragments` with `changelog.dir` at `changelog.d`
+(sui-6vy, adopted fleet-wide 2026-08-21 so the convention exists before
+parallel work starts, not after the first conflict). A user-facing change
+gets one file per bead under `changelog.d/`; the rules - when a fragment is
+and is not warranted, format, naming - live in `changelog.d/README.md`.
 
-This is a decision, not an omission. While the package is `0.1.0-dev` with no
-users and no public API, every entry would say some version of "the package
-started existing" - and 0.1.0's changelog is better written in one pass from
-git history than assembled from a pile of per-bead fragments, which is only
-possible while there is no prior release to diff against.
+While the package is `0.1.0-dev` with no users and no public API, most
+changes still warrant no fragment: apply the README test (could someone who
+only ever calls the public API tell the difference?) and expect the answer
+to usually be no. 0.1.0's own changelog section is still written in one
+pass from git history at release time (sui-n0r), which is only possible
+while there is no prior release to diff against; fragments cover what lands
+after that pass makes sense.
 
-sui-n0r switches this to `fragments` when the first release is on the horizon,
-and says why fragments rather than a single `CHANGELOG.md`. Do not start
-writing changelog entries before then; do not let `none` outlive the release.
+`CHANGELOG.md` itself does not exist yet and is never edited outside a
+release.
 
 ## Version bump: none
 
