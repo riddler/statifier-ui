@@ -214,15 +214,31 @@ defmodule StatifierUI.Trace.SubscriberTest do
 
     test "remove_listener/2 stops delivery to that pid" do
       machine = SessionCase.compile!(@two_state)
-      {sub, session} = SessionCase.start_early!(machine, "sess_remove_listen")
-      :ok = Subscriber.add_listener(sub, self())
 
-      SessionCase.wait_for_seq(sub, 5)
+      # The listener is registered at start_link time, not via
+      # add_listener/2: an add_listener call races the initialize burst's
+      # delivery into the subscriber's mailbox (different senders, no
+      # ordering guarantee), so the listener could catch a stray burst
+      # message and trip the refutation below (sui-hmm).
+      {sub, session} =
+        SessionCase.start_early!(machine, "sess_remove_listen", listeners: [self()])
+
+      # Delivery is live before removal: the whole burst arrives here.
+      SessionCase.wait_for_seq(sub, 6)
+      received = collect_listener_messages("sess_remove_listen", 6)
+      assert Enum.map(received, & &1.seq) == Enum.to_list(0..5)
+
+      # remove_listener/2 is synchronous and the driven event is sent only
+      # after it returns, so every subsequent message is fanned out to an
+      # already-empty listener set.
       :ok = Subscriber.remove_listener(sub, self())
 
       drive_and_wait(sub, session)
 
-      refute_receive {:statifier_ui, "sess_remove_listen", _message}, 100
+      # drive_and_wait's final stats call returned after the subscriber
+      # processed the last message; any fan-out it did was sent before that
+      # reply, so an unwanted message would already be in this mailbox.
+      refute_received {:statifier_ui, "sess_remove_listen", _message}
     end
   end
 
