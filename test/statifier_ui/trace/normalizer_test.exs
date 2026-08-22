@@ -5,6 +5,7 @@ defmodule StatifierUI.Trace.NormalizerTest do
   alias Statifier.Effect.BudgetExhausted
   alias Statifier.Effect.Cancel
   alias Statifier.Effect.CancelInvoke
+  alias Statifier.Effect.DatamodelChange
   alias Statifier.Effect.DatamodelInit
   alias Statifier.Effect.Done
   alias Statifier.Effect.Invoke
@@ -19,11 +20,19 @@ defmodule StatifierUI.Trace.NormalizerTest do
 
   @ctx %{session: "sess_1", seq: 7}
 
-  # The eighteen {tag, payload_module} pairs the engine can emit today
-  # (nine trace payloads, nine core effects) - the table Success Criteria
-  # names, so a payload module added upstream and not handled here fails
-  # the first assertion below, and a field dropped from a payload fails the
-  # second.
+  # The nineteen {tag, payload_module} pairs the engine can emit today
+  # (nine trace payloads, ten core effects; DatamodelInit is exercised in
+  # its own "session.datamodel" describe instead, since its maximal shape
+  # is the probe fixture there) - the table Success Criteria names, so a
+  # payload module added upstream and not handled here fails the first
+  # assertion below, and a field dropped from a payload fails the second.
+  #
+  # DatamodelChange's maximal literal populates d_index and c_index
+  # together, a shape the engine never emits (they are mutually exclusive
+  # identities) - deliberate here, because the convention below is "every
+  # optional field populated" so the produced key set covers the full
+  # documented schema; the mutually-exclusive real shapes get their own
+  # tests in the effect.datamodel_change describe.
   @coverage [
     {:trace, Trace.EventDequeued},
     {:trace, Trace.TransitionsSelected},
@@ -35,6 +44,7 @@ defmodule StatifierUI.Trace.NormalizerTest do
     {:trace, Trace.InvokePass},
     {:trace, Trace.FinalizeAutoforward},
     {:log, Log},
+    {:datamodel_change, DatamodelChange},
     {:done, Done},
     {:budget_exhausted, BudgetExhausted},
     {:invoke, Invoke},
@@ -674,13 +684,121 @@ defmodule StatifierUI.Trace.NormalizerTest do
   end
 
   describe "types/0" do
-    test "returns exactly 23 sorted, unique type strings" do
+    test "returns exactly 24 sorted, unique type strings" do
       types = Normalizer.types()
 
-      assert length(types) == 23
+      assert length(types) == 24
       assert Enum.uniq(types) == types
       assert Enum.sort(types) == types
       assert "session.datamodel" in types
+      assert "effect.datamodel_change" in types
+    end
+  end
+
+  describe "normalize/2 - effect.datamodel_change" do
+    test "an <assign> write: c_index and owner, prior_value :undefined omits the key" do
+      payload = %DatamodelChange{
+        location_path: ["user", "items", 0, "name"],
+        location_source: "user.items[i].name",
+        new_value: "renamed",
+        prior_value: :undefined,
+        c_index: 3,
+        owner: {:onentry, 1, 0},
+        macrostep: 2,
+        microstep: 1,
+        round: 0
+      }
+
+      assert {:ok,
+              %Message{
+                type: "effect.datamodel_change",
+                macrostep: 2,
+                microstep: 1,
+                round: nil
+              } = message} = Normalizer.normalize({:datamodel_change, payload}, @ctx)
+
+      assert message.payload == %{
+               "location_path" => ["user", "items", 0, "name"],
+               "location_source" => "user.items[i].name",
+               "new_value" => "renamed",
+               "c_index" => 3,
+               "owner" => %{"kind" => "onentry", "state_index" => 1, "ordinal" => 0}
+             }
+
+      refute Map.has_key?(message.payload, "prior_value")
+      refute Map.has_key?(message.payload, "d_index")
+    end
+
+    test "a <data> binding: d_index only, no c_index, no owner" do
+      payload = %DatamodelChange{
+        location_path: ["count"],
+        location_source: "count",
+        new_value: 42,
+        prior_value: :undefined,
+        d_index: 0,
+        c_index: nil,
+        owner: nil,
+        macrostep: 1,
+        microstep: 0,
+        round: 0
+      }
+
+      assert {:ok, %Message{type: "effect.datamodel_change"} = message} =
+               Normalizer.normalize({:datamodel_change, payload}, @ctx)
+
+      assert message.payload == %{
+               "location_path" => ["count"],
+               "location_source" => "count",
+               "new_value" => 42,
+               "d_index" => 0
+             }
+    end
+
+    test "an <invoke idlocation> write: the widened invoke owner, no d_index/c_index" do
+      payload = %DatamodelChange{
+        location_path: ["inv_id"],
+        location_source: "inv_id",
+        new_value: "inv_1",
+        prior_value: nil,
+        c_index: nil,
+        owner: {:invoke, 2, 0},
+        macrostep: 1,
+        microstep: 1,
+        round: 0
+      }
+
+      assert {:ok, %Message{} = message} =
+               Normalizer.normalize({:datamodel_change, payload}, @ctx)
+
+      assert message.payload["owner"] == %{
+               "kind" => "invoke",
+               "state_index" => 2,
+               "invoke_index" => 0
+             }
+
+      # A previously stored null is present as JSON null, distinct from the
+      # omitted key an :undefined prior produces - the three-way rule.
+      assert Map.fetch(message.payload, "prior_value") == {:ok, nil}
+    end
+
+    test "values go through the $-tagged codec" do
+      payload = %DatamodelChange{
+        location_path: ["when"],
+        location_source: "when",
+        new_value: ~D[2026-08-22],
+        prior_value: [1, :undefined],
+        c_index: 0,
+        owner: {:transition, 0},
+        macrostep: 2,
+        microstep: 0,
+        round: 0
+      }
+
+      assert {:ok, %Message{} = message} =
+               Normalizer.normalize({:datamodel_change, payload}, @ctx)
+
+      assert message.payload["new_value"] == %{"$date" => "2026-08-22"}
+      assert message.payload["prior_value"] == [1, %{"$undefined" => true}]
     end
   end
 
@@ -804,6 +922,21 @@ defmodule StatifierUI.Trace.NormalizerTest do
     }
   end
 
+  defp maximal(:datamodel_change, DatamodelChange) do
+    %DatamodelChange{
+      location_path: ["items", 0, "name"],
+      location_source: "items[0].name",
+      new_value: "new",
+      prior_value: "old",
+      d_index: 0,
+      c_index: 1,
+      owner: {:transition, 0},
+      macrostep: 1,
+      microstep: 0,
+      round: 0
+    }
+  end
+
   defp maximal(:done, Done) do
     %Done{donedata: 1, configuration: MapSet.new([0]), macrostep: 1, microstep: 0, round: 0}
   end
@@ -907,6 +1040,10 @@ defmodule StatifierUI.Trace.NormalizerTest do
     do: MapSet.new(~w(event finalized forwarded))
 
   defp expected_keys(:log, Log), do: MapSet.new(~w(label value c_index owner))
+
+  defp expected_keys(:datamodel_change, DatamodelChange),
+    do: MapSet.new(~w(location_path location_source new_value prior_value d_index c_index owner))
+
   defp expected_keys(:done, Done), do: MapSet.new(~w(donedata configuration))
 
   defp expected_keys(:budget_exhausted, BudgetExhausted),

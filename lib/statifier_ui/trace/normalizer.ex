@@ -10,7 +10,8 @@ defmodule StatifierUI.Trace.Normalizer do
 
   Anything from the engine that occupies a *value* position -
   `Event.data`, `Log.value`, `Trace.Done.donedata`, `Effect.Done.donedata`,
-  `Send.data`, `SendDelayed.data`, `Invoke.params`, `Invoke.content` - goes
+  `Send.data`, `SendDelayed.data`, `Invoke.params`, `Invoke.content`,
+  `DatamodelChange.new_value`, `DatamodelChange.prior_value` - goes
   through `StatifierUI.Value.encode/1`; its `{:error, _}` is propagated,
   never rescued. Everything structural is reduced first (decision 6):
   `MapSet`s to sorted lists (`configuration/1`), atoms to `"kind"`-tagged
@@ -25,7 +26,11 @@ defmodule StatifierUI.Trace.Normalizer do
 
   `_event.data` keeps ADR-0005's three-way rule unchanged: `:undefined`
   omits the key, `nil` is present as JSON `null`, `%{}` is present as `{}`
-  (`put_event_data/2`). Every other nullable field in this vocabulary has no
+  (`put_defined/3`). `DatamodelChange.new_value` and
+  `DatamodelChange.prior_value` follow the same three-way rule, because they
+  share `_event.data`'s property: the engine spells "unbound" as
+  `:undefined` there (ADR-0037), so `nil` genuinely means a stored null.
+  Every other nullable field in this vocabulary has no
   engine-side way to distinguish "no value" from "a genuinely null value" -
   `Statifier.Effect.Log.value` and the two `donedata` fields default to
   plain `nil` for "nothing here", never `:undefined` - so `put_present/3`
@@ -38,6 +43,7 @@ defmodule StatifierUI.Trace.Normalizer do
   alias Statifier.Effect.BudgetExhausted
   alias Statifier.Effect.Cancel
   alias Statifier.Effect.CancelInvoke
+  alias Statifier.Effect.DatamodelChange
   alias Statifier.Effect.DatamodelInit
   alias Statifier.Effect.Done
   alias Statifier.Effect.Invoke
@@ -77,6 +83,7 @@ defmodule StatifierUI.Trace.Normalizer do
     "trace.invoke_pass",
     "trace.finalize_autoforward",
     "effect.log",
+    "effect.datamodel_change",
     "effect.done",
     "effect.budget_exhausted",
     "effect.invoke",
@@ -94,11 +101,12 @@ defmodule StatifierUI.Trace.Normalizer do
 
   @doc """
   The closed, sorted list of every `type` string this format defines - the
-  vocabulary's single definition site in code. 23 entries: 9 `trace.*`, 9
-  `effect.*`, and 5 `session.*` (the four lifecycle types plus
-  `session.datamodel`, emitted once per session from
+  vocabulary's single definition site in code. 24 entries: 9 `trace.*`, 10
+  `effect.*` (the nine core effects plus `effect.datamodel_change`, from
+  `Statifier.Effect.DatamodelChange`), and 5 `session.*` (the four
+  lifecycle types plus `session.datamodel`, emitted once per session from
   `Statifier.Effect.DatamodelInit`). `docs/wire-format.md`'s type index
-  table is the same 23, and `test/statifier_ui/trace/wire_format_spec_test.exs`
+  table is the same 24, and `test/statifier_ui/trace/wire_format_spec_test.exs`
   asserts the two sets are equal.
   """
   @spec types() :: [String.t()]
@@ -177,6 +185,7 @@ defmodule StatifierUI.Trace.Normalizer do
   defp decompose({:send, payload}), do: core_message(payload)
   defp decompose({:send_delayed, payload}), do: core_message(payload)
   defp decompose({:cancel, payload}), do: core_message(payload)
+  defp decompose({:datamodel_change, payload}), do: core_message(payload)
   defp decompose({:datamodel_init, payload}), do: datamodel_message(payload)
   defp decompose({tag, _payload}), do: {:error, {:unknown_effect, tag}}
   defp decompose(other), do: {:error, {:unknown_effect, other}}
@@ -243,9 +252,26 @@ defmodule StatifierUI.Trace.Normalizer do
 
   defp trace_message(payload), do: {:error, {:unknown_effect, {:trace, payload.__struct__}}}
 
-  # -- The nine effect.* payloads --------------------------------------------
+  # -- The ten effect.* payloads ----------------------------------------------
 
   @spec core_message(struct()) :: {:ok, decomposed()} | {:error, term()}
+  defp core_message(%DatamodelChange{} = p) do
+    # `location_path` is emitted structurally, not through
+    # `StatifierUI.Value.encode/1`: its segments are only strings (object
+    # keys) and integers (array indexes), both JSON-native, and the path is
+    # an identity like `c_index`, not a value.
+    base =
+      %{"location_path" => p.location_path, "location_source" => p.location_source}
+      |> put_present("d_index", p.d_index)
+      |> put_present("c_index", p.c_index)
+
+    with {:ok, base} <- put_owner(base, p.owner),
+         {:ok, base} <- put_defined(base, "new_value", p.new_value),
+         {:ok, base} <- put_defined(base, "prior_value", p.prior_value) do
+      {:ok, {"effect.datamodel_change", p.macrostep, p.microstep, nil, base}}
+    end
+  end
+
   defp core_message(%Log{} = p) do
     base = put_present(%{}, "label", p.label)
 
@@ -389,7 +415,7 @@ defmodule StatifierUI.Trace.Normalizer do
   defp event(%Event{} = ev) do
     base = %{"name" => ev.name, "type" => Atom.to_string(ev.type)}
 
-    with {:ok, base} <- put_event_data(base, ev.data),
+    with {:ok, base} <- put_defined(base, "data", ev.data),
          {:ok, base} <- put_cause(base, ev.cause) do
       base =
         base
@@ -469,7 +495,11 @@ defmodule StatifierUI.Trace.Normalizer do
     {:ok, %{"kind" => "finalize", "state_index" => state_index, "invoke_index" => invoke_index}}
   end
 
-  @spec owner(Statifier.Machine.Content.owner() | Trace.ContentExecuted.owner()) ::
+  @spec owner(
+          Statifier.Machine.Content.owner()
+          | Trace.ContentExecuted.owner()
+          | DatamodelChange.owner()
+        ) ::
           {:ok, map()} | {:error, term()}
   defp owner({:onentry, state_index, ordinal}) do
     {:ok, %{"kind" => "onentry", "state_index" => state_index, "ordinal" => ordinal}}
@@ -491,7 +521,11 @@ defmodule StatifierUI.Trace.Normalizer do
     {:ok, %{"kind" => "global_script", "index" => index}}
   end
 
-  @spec put_owner(map(), Statifier.Machine.Content.owner() | nil) ::
+  defp owner({:invoke, state_index, invoke_index}) do
+    {:ok, %{"kind" => "invoke", "state_index" => state_index, "invoke_index" => invoke_index}}
+  end
+
+  @spec put_owner(map(), Statifier.Machine.Content.owner() | DatamodelChange.owner() | nil) ::
           {:ok, map()} | {:error, term()}
   defp put_owner(map, nil), do: {:ok, map}
 
@@ -515,16 +549,18 @@ defmodule StatifierUI.Trace.Normalizer do
 
   # -- Absence ----------------------------------------------------------------
 
-  # `_event.data`'s three-way rule (decision 5, unchanged): `:undefined`
-  # omits the key, everything else - including `nil` - goes through
+  # The three-way rule (decision 5, unchanged): `:undefined` omits the key,
+  # everything else - including `nil` - goes through
   # `StatifierUI.Value.encode/1` and is kept, even when the encoded result is
-  # JSON `null`.
-  @spec put_event_data(map(), term()) :: {:ok, map()} | {:error, term()}
-  defp put_event_data(map, :undefined), do: {:ok, map}
+  # JSON `null`. Applies where the engine genuinely distinguishes unbound
+  # (`:undefined`) from a stored null (`nil`): `_event.data`, and
+  # `DatamodelChange`'s `new_value`/`prior_value`.
+  @spec put_defined(map(), String.t(), term()) :: {:ok, map()} | {:error, term()}
+  defp put_defined(map, _key, :undefined), do: {:ok, map}
 
-  defp put_event_data(map, data) do
-    with {:ok, encoded} <- Value.encode(data) do
-      {:ok, Map.put(map, "data", encoded)}
+  defp put_defined(map, key, value) do
+    with {:ok, encoded} <- Value.encode(value) do
+      {:ok, Map.put(map, key, encoded)}
     end
   end
 
