@@ -18,7 +18,9 @@ effects; the engine needs nothing changed to support it.
 ## Status
 
 Early. Nothing is published to hex yet, and the engine dependency is a git dep
-until statifier publishes. The first milestone is the Livebook inspector.
+until statifier publishes. The first milestone is the Livebook inspector:
+`StatifierUI.Kino.inspect/3` over a running `Statifier.Session` -
+[`notebooks/inspector.livemd`](notebooks/inspector.livemd) walks it end to end.
 
 ## Development
 

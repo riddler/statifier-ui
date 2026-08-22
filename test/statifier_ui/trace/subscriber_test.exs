@@ -71,6 +71,82 @@ defmodule StatifierUI.Trace.SubscriberTest do
     end
   end
 
+  describe "catch-up attach (statifier ADR-0049)" do
+    test "reconstructs the full stream after the fact - prefix, then live suffix" do
+      machine = SessionCase.compile!(@two_state)
+      session = SessionCase.start_recorded!(machine, "sess_catch_up")
+
+      # Drive the transition BEFORE any subscriber exists, and wait until
+      # the session has fully processed it (the driven macrostep is 2).
+      Session.send_event(session, "go")
+      SessionCase.wait_for_macrostep(session, 2)
+
+      sub = SessionCase.attach_catch_up!(machine, session)
+
+      # The replayed prefix is available synchronously - attach/3 folds it
+      # into the buffer inside its own call.
+      messages = Subscriber.messages(sub)
+      assert length(messages) == @full_seq
+      assert Enum.map(messages, & &1.seq) == Enum.to_list(0..(@full_seq - 1))
+
+      # The initialize burst a plain late attach can never see is present.
+      assert [
+               %{type: "session.start", seq: 0},
+               %{type: "session.datamodel", seq: 1},
+               %{type: "trace.entry_set", seq: 2} = burst | _
+             ] = messages
+
+      assert burst.payload["indexes"] == [0, 1]
+
+      # No :late_attach diagnostic - this stream is whole.
+      assert Subscriber.stats(sub).diagnostics == []
+
+      # The live suffix continues seamlessly: nothing more to transition
+      # to, but the dequeue itself is notified and lands after the prefix.
+      Session.send_event(session, "go")
+      stats = SessionCase.wait_for_seq(sub, @full_seq + 1)
+      assert stats.seq > @full_seq
+      seqs = Enum.map(Subscriber.messages(sub), & &1.seq)
+      assert seqs == Enum.to_list(0..(length(seqs) - 1))
+    end
+
+    test "an unrecorded session falls back to live-only with a :not_recorded diagnostic" do
+      machine = SessionCase.compile!(@two_state)
+      {:ok, session} = Session.start_link(machine, trace: true, session_id: "sess_unrecorded")
+
+      {:ok, sub} = Subscriber.start_link(machine: machine)
+      :ok = Subscriber.attach(sub, session, catch_up: true)
+
+      assert [%{kind: :not_recorded}] = Subscriber.stats(sub).diagnostics
+
+      # The fallback did subscribe live: a driven event still arrives, but
+      # the initialize burst stays missing - exactly the late-attach shape.
+      Session.send_event(session, "go")
+      SessionCase.wait_until(sub, 1000, fn stats -> stats.seq > 0 end)
+
+      entry_sets =
+        Enum.filter(Subscriber.messages(sub), &(&1.type == "trace.entry_set"))
+
+      assert Enum.all?(entry_sets, &(&1.payload["indexes"] != [0, 1]))
+      assert Enum.any?(entry_sets, &(&1.payload["indexes"] == [2]))
+    end
+
+    test "catch-up attach monitors the session: a kill still yields session.terminated" do
+      machine = SessionCase.compile!(@two_state)
+      session = SessionCase.start_recorded!(machine, "sess_catch_up_down")
+      SessionCase.wait_for_macrostep(session, 1)
+
+      sub = SessionCase.attach_catch_up!(machine, session)
+
+      Process.unlink(session)
+      Process.exit(session, :kill)
+
+      stats = SessionCase.wait_until(sub, 1000, fn stats -> stats.status == :terminated end)
+      assert stats.status == :terminated
+      assert List.last(Subscriber.messages(sub)).type == "session.terminated"
+    end
+  end
+
   describe "seq stamping" do
     test "session.start is seq 0, the first effect is seq 1, and seq is monotone with no gaps" do
       machine = SessionCase.compile!(@two_state)

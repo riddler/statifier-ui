@@ -35,6 +35,27 @@ defmodule StatifierUI.Trace.Subscriber do
   the initialize burst is gone by the time this call can run, because
   `Statifier.Session.start_link/2` already returned.
 
+  ## The catch-up attach path
+
+  `attach(sub, session, catch_up: true)` closes the late-attach gap for a
+  session started with `record: true` (statifier ADR-0049): the
+  subscription and the recording snapshot happen in the *same* session
+  `handle_call`, the missed prefix is `Statifier.Replay.run/1`'s `stream`,
+  and this subscriber folds that prefix into its buffer inside its own
+  `attach` call - before any live suffix from its mailbox is processed.
+  Prefix and suffix are one uniform stream with no overlap, no gap, and no
+  dedup key (the ADR's mid-run invariant; trust the seam). The session id
+  is read from the recording's resolved `:session_id` option, so the
+  `session.start` manifest is emitted as `seq: 0` ahead of the prefix.
+
+  On a session started *without* `record: true` the session answers
+  `{:error, :not_recorded}` and does not subscribe, so this subscriber
+  falls back to `Statifier.Session.subscribe/2` and records a
+  `:not_recorded` diagnostic in `stats/1` - the stream is live-only and
+  says so; it is never silently presented as whole. A `Statifier.Replay.run/1`
+  failure records `:catch_up_failed` the same way (the live subscription
+  from the catch-up call itself is already in place in that case).
+
   ## Session id discovery
 
   This subscriber never asks the session for its id (decision 9 of the
@@ -67,6 +88,7 @@ defmodule StatifierUI.Trace.Subscriber do
 
   require Logger
 
+  alias Statifier.Session.Recording
   alias StatifierUI.Fixtures
   alias StatifierUI.Trace.Buffer
   alias StatifierUI.Trace.Manifest
@@ -171,6 +193,11 @@ defmodule StatifierUI.Trace.Subscriber do
   where `session` already carries this subscriber's pid in its own
   `:subscribers` start option.
 
+  `opts[:catch_up]` (default `false`) selects the catch-up path described
+  in the moduledoc - `Statifier.Session.subscribe/3` with `catch_up: true`,
+  the replayed prefix folded in before this call returns. When set,
+  `opts[:subscribe]` is ignored: catch-up decides its own subscription.
+
   Idempotent about the monitor: a second `attach/3` call for the same
   `session` pid does not stack a second monitor. It does not attempt to
   detect an existing subscription, which is why the two paths are
@@ -178,8 +205,14 @@ defmodule StatifierUI.Trace.Subscriber do
   """
   @spec attach(server(), session :: pid(), opts :: keyword()) :: :ok
   def attach(server, session, opts \\ []) when is_pid(session) do
-    subscribe? = Keyword.get(opts, :subscribe, true)
-    GenServer.call(server, {:attach, session, subscribe?})
+    mode =
+      cond do
+        Keyword.get(opts, :catch_up, false) -> :catch_up
+        Keyword.get(opts, :subscribe, true) -> :late
+        true -> :early
+      end
+
+    GenServer.call(server, {:attach, session, mode})
   end
 
   @doc """
@@ -228,27 +261,23 @@ defmodule StatifierUI.Trace.Subscriber do
   end
 
   @impl GenServer
-  def handle_call({:attach, session_pid, subscribe?}, _from, state) do
+  def handle_call({:attach, session_pid, mode}, _from, state) do
     monitor_ref = ensure_monitor(state, session_pid)
 
-    if subscribe? do
-      :ok = Statifier.Session.subscribe(session_pid, self())
-    end
+    state = %{state | session_pid: session_pid, monitor_ref: monitor_ref, status: :attached}
 
-    diagnostics =
-      if subscribe? do
-        state.diagnostics ++ [late_attach_diagnostic()]
-      else
-        state.diagnostics
+    state =
+      case mode do
+        :early ->
+          state
+
+        :late ->
+          :ok = Statifier.Session.subscribe(session_pid, self())
+          %{state | diagnostics: state.diagnostics ++ [late_attach_diagnostic()]}
+
+        :catch_up ->
+          attach_catch_up(state, session_pid)
       end
-
-    state = %{
-      state
-      | session_pid: session_pid,
-        monitor_ref: monitor_ref,
-        status: :attached,
-        diagnostics: diagnostics
-    }
 
     {:reply, :ok, state}
   end
@@ -321,6 +350,55 @@ defmodule StatifierUI.Trace.Subscriber do
     }
   end
 
+  # -- catch-up -------------------------------------------------------------
+
+  # The subscription is already made by the time either branch runs:
+  # `Statifier.Session.subscribe/3` with `catch_up: true` adds this pid in
+  # the same session handle_call that snapshots the recording, so the
+  # replayed prefix and the mailbox suffix meet with no overlap and no gap
+  # (statifier ADR-0049). Only `:not_recorded` leaves this pid
+  # unsubscribed, and that branch subscribes live itself.
+  @spec attach_catch_up(State.t(), pid()) :: State.t()
+  defp attach_catch_up(state, session_pid) do
+    case Statifier.Session.subscribe(session_pid, self(), catch_up: true) do
+      {:ok, recording} ->
+        replay_prefix(state, recording)
+
+      {:error, :not_recorded} ->
+        :ok = Statifier.Session.subscribe(session_pid, self())
+
+        record_diagnostic(
+          state,
+          :not_recorded,
+          "catch-up requested but the session was not started with record: true - " <>
+            "attached live-only; everything before this attach is missing from the stream"
+        )
+    end
+  end
+
+  @spec replay_prefix(State.t(), Recording.t()) :: State.t()
+  defp replay_prefix(state, recording) do
+    session_id = recording |> Recording.opts() |> Keyword.fetch!(:session_id)
+
+    case Statifier.Replay.run(recording) do
+      {:ok, %{stream: stream}} ->
+        state = emit_manifest(%{state | session: session_id})
+        Enum.reduce(stream, state, &handle_statifier_message(&2, session_id, &1))
+
+      {:error, reason} ->
+        # Subscribed live (the catch-up call added this pid); the prefix is
+        # simply unavailable. `session` stays nil so the first live message
+        # still emits the manifest.
+        record_diagnostic(
+          state,
+          :catch_up_failed,
+          "catch-up subscribed, but replaying the recording failed " <>
+            "(#{inspect(reason)}) - live-only; everything before this attach " <>
+            "is missing from the stream"
+        )
+    end
+  end
+
   # -- message handling -----------------------------------------------------
 
   @spec handle_statifier_message(State.t(), String.t(), term()) :: State.t()
@@ -361,7 +439,8 @@ defmodule StatifierUI.Trace.Subscriber do
 
   @spec record_diagnostic(State.t(), atom(), term()) :: State.t()
   defp record_diagnostic(state, kind, reason) do
-    diagnostic = %{kind: kind, message: inspect(reason), path: [], source: nil}
+    message = if is_binary(reason), do: reason, else: inspect(reason)
+    diagnostic = %{kind: kind, message: message, path: [], source: nil}
     %{state | diagnostics: state.diagnostics ++ [diagnostic]}
   end
 
