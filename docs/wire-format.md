@@ -20,7 +20,7 @@ interpreter's author needs first.
 - MUST, when tracing is enabled, emit the nine `trace.*` types at the phase
   boundaries Appendix D names, with the envelope fields this document
   requires.
-- MAY emit further message families (this document also specifies nine
+- MAY emit further message families (this document also specifies ten
   `effect.*` types and four `session.*` lifecycle types) and MAY add fields
   to any message beyond what this document requires.
 
@@ -503,10 +503,14 @@ pass, including when nothing was finalized or forwarded.
 | finalized | array of strings | always - `invoke_id`s of every invocation `<finalize>` ran for |
 | forwarded | array of strings | always - `invoke_id`s of every invocation `event` was autoforwarded to, in the pass's own walk order |
 
-## The nine `effect.*` schemas
+## The ten `effect.*` schemas
 
-The nine core (non-trace) statifier effects, mapped one-to-one onto their
-own namespace. ADR-0005 leaves non-trace effect naming to this document
+The core (non-trace) statifier effects, mapped one-to-one onto their
+own namespace: the nine originals plus `effect.datamodel_change`
+(`Statifier.Effect.DatamodelChange`, `st-oef3`). The engine's eleventh
+core effect, `Statifier.Effect.DatamodelInit`, is the one exception to
+the one-to-one mapping - it serializes as `session.datamodel`, below.
+ADR-0005 leaves non-trace effect naming to this document
 ("their own namespaces as consumers need them"); this document uses one
 `effect.*` family rather than several separate top-level namespaces,
 because a bare top-level `done` type would sit confusingly next to
@@ -622,6 +626,60 @@ Payload for `<cancel>` (spec 6.3).
 | c_index | integer | present only when known |
 | owner | owner object | present only when known |
 
+### `effect.datamodel_change`
+
+Emitted once per successful datamodel write (`st-oef3`): an `<assign>`, a
+`<data>` binding during the binding fold, a `<send idlocation>` write, an
+`<invoke idlocation>` write, or an empty-`<finalize>` auto-assign. A failed
+write emits nothing - the datamodel did not change, and the failure is
+already on the error channel. Together with `session.datamodel`'s starting
+snapshot, the sequence of these messages reconstructs the datamodel at any
+point in the run from the stream alone.
+
+| Field | Type | Presence |
+|---|---|---|
+| location_path | array of strings and integers | always - the resolved write path; see below |
+| location_source | string | always - the raw author string that named the location (`items[i].name` as written) |
+| new_value | value | present unless the write stored the unbound sentinel; a stored null is present as `null` (three-way absence rule) |
+| prior_value | value | present unless nothing stood at the path before the write; a previously stored null is present as `null` (three-way absence rule) |
+| d_index | integer | present only for a `<data>` binding - resolves through `session.start`'s `data` table |
+| c_index | integer | present only when a content node performed the write (`<assign>`, `<send idlocation>`) |
+| owner | owner object | present only when known - which construct performed the write |
+
+**`location_path` is a heterogeneous JSON array.** Each segment is either a
+string - an object key, the variable name first - or an integer, a 0-based
+array index: `user.items[0].name` resolved against `i = 0` arrives as
+`["user", "items", 0, "name"]`. JSON's own typing carries the distinction -
+the string `"0"` is a key, the number `0` is an index - so no tagging or
+escaping is needed, and a consumer applies the segments in order to its own
+copy of the datamodel to reproduce the write. It is the *resolved* path:
+an index expression like `[i]` has already been evaluated by the engine,
+which is what makes the path applicable without the pre-assignment
+datamodel. `location_source` is the raw author string kept alongside for
+display; neither substitutes for the other.
+
+**`new_value` and `prior_value` follow the `_event.data` three-way rule**,
+because the engine genuinely distinguishes unbound from null here
+(statifier ADR-0037 spells unbound as `:undefined`): key absence means the
+slot was or became unbound - for `prior_value`, that nothing stood at the
+path before the write, the common case for a first assignment - while JSON
+`null` means a genuinely stored null.
+
+**`d_index` and `c_index` are mutually exclusive** on this message: a
+`d_index` means the write was a `<data>` binding, which belongs to no
+content block and therefore also carries no `owner`; a `c_index` means a
+content node performed it. The two runner-side writes - the
+empty-`<finalize>` auto-assign and `<invoke idlocation>` - carry neither,
+identified by `owner` alone (`"finalize"` and `"invoke"` kinds
+respectively).
+
+**Versioning decision, recorded rather than left implicit:** this type
+joined the format after version 1 shipped with 23 types. Adding a type is
+exactly what the conformance section's MUST-ignore rule makes additive, so
+**the format version stays 1** - unlike `session.datamodel`, which kept
+version 1 because its type string was already reserved, this one keeps it
+because new types never bump the version at all.
+
 ## Origins
 
 `Statifier.Event.Cause.origin/0`'s eight variants, each a tagged object
@@ -638,17 +696,18 @@ with `"kind"` naming the tuple's tag:
 | "invoke" | state_index (integer), invoke_index (integer) | one of an `<invoke>`'s own arguments failed to evaluate |
 | "finalize" | state_index (integer), invoke_index (integer) | an empty `<finalize>`'s own auto-assign write failed |
 
-A `d_index` anywhere in this format - here or on a future
-`Effect.DatamodelChange` message - resolves through `session.start`'s
+A `d_index` anywhere in this format - here or on
+`effect.datamodel_change` - resolves through `session.start`'s
 `data` table, the same way a `state_index` resolves through `states` and
 a `t_index` through `transitions`.
 
 ## Owners
 
-`Statifier.Machine.Content.owner/0`'s four variants, plus the one case
+`Statifier.Machine.Content.owner/0`'s four variants, plus the case
 `Statifier.Effect.Trace.ContentExecuted` widens it with for a top-level
-`<script>`, together the five variants an `owner` field may take anywhere
-in this format:
+`<script>` and the case `Statifier.Effect.DatamodelChange` widens it with
+for `<invoke idlocation>`, together the six variants an `owner` field may
+take anywhere in this format:
 
 | "kind" | Fields | Meaning |
 |---|---|---|
@@ -657,6 +716,7 @@ in this format:
 | "transition" | t_index (integer) | a transition's own executable content |
 | "finalize" | state_index (integer), invoke_index (integer) | an `<invoke>`'s own `<finalize>` block |
 | "global_script" | index (integer) | a top-level `<script>`, run at load time - only ever appears as `trace.content_executed`'s owner, since a top-level script belongs to no `<onentry>`/`<onexit>`/transition block |
+| "invoke" | state_index (integer), invoke_index (integer) | an `<invoke idlocation>` write - only ever appears as `effect.datamodel_change`'s owner, since the write belongs to no content block |
 
 ## The `session.*` types
 
@@ -688,10 +748,10 @@ as `{"$undefined": true}`, not only the ones declared without a value: a
 `<data id="count" expr="41 + 1"/>` is present under `count` as
 `{"$undefined": true}` here, and is assigned its `42` afterwards. This
 message therefore names the datamodel's variables reliably, but is not a
-source for their values. The assignments that follow arrive as statifier's
-`Effect.DatamodelChange`, which this producer does not serialize yet;
-`sui-h92` owns that, and until it lands a consumer can observe the
-variable names but never a value.
+source for their values. The assignments that follow arrive as
+`effect.datamodel_change` messages (`sui-h92`), one per successful write,
+binding fold included - a consumer folds them over this snapshot to hold
+the current datamodel at any point in the run.
 
 This message keys the datamodel by variable name; `session.start`'s
 `data` table keys the same elements by `d_index` and carries the `id`
@@ -808,7 +868,7 @@ would show it in the shape its schema above describes.
 
 ## Type index
 
-One row per type this document defines - 23 rows: 9 `trace.*`, 9
+One row per type this document defines - 24 rows: 9 `trace.*`, 10
 `effect.*`, and 5 `session.*` (the four lifecycle types plus
 `session.datamodel`). This table's first column is a machine boundary: a
 drift test parses exactly this table's backtick-quoted `type` strings and
@@ -836,6 +896,7 @@ that test rather than drifting silently.
 | `effect.send` | effect | `<send>` fires immediately |
 | `effect.send_delayed` | effect | `<send>` with a delay is scheduled |
 | `effect.cancel` | effect | `<cancel>` runs |
+| `effect.datamodel_change` | effect | a datamodel location is successfully written |
 | `session.start` | session | a session's stream opens |
 | `session.halted` | session | the session reports `{:halted, reason}` |
 | `session.terminated` | session | the session's process exits |
@@ -858,8 +919,9 @@ that test rather than drifting silently.
   above, closed by ADR-0044.
 - `st-1xwh` - the upstream effect (`Statifier.Effect.DatamodelInit`) behind
   `session.datamodel`, above.
-- `st-oef3` - the upstream gap behind `Statifier.Effect.DatamodelChange`
-  (a `<data>`/`<assign>` value change, distinct from `session.datamodel`'s
-  one-time starting snapshot) having no wire representation yet.
+- `st-oef3` - the upstream effect (`Statifier.Effect.DatamodelChange`)
+  behind `effect.datamodel_change` - a per-write value change, distinct
+  from `session.datamodel`'s one-time starting snapshot; serialized here
+  by `sui-h92`.
 - `sui-qay` - the gap behind `session.start`'s location tables carrying no
   attribute-level spans.
