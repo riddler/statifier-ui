@@ -111,10 +111,11 @@ tripping a substring match the rule was never meant to catch.
 Decision: **do not add a `commit-msg` hook.** Enforcement stays inside
 `/wurk:commit` (Step 2 pre-commit, Step 4.4 post-commit verification).
 
-Reasons: this repo has one contributor and no CI (`CLAUDE.md`'s authority
-table), so `/wurk:commit` is already the only path a commit takes in
-practice - a plain `git commit` bypassing it would be a self-inflicted
-problem, not an outside contributor's. A hook is also another uninstalled-by-
+Reasons: this repo has one contributor, and CI (`.github/workflows/ci.yml`)
+replays the quality gate but checks nothing about commit messages, so
+`/wurk:commit` is already the only message check a commit gets in practice -
+a plain `git commit` bypassing it would be a self-inflicted problem, not an
+outside contributor's. A hook is also another uninstalled-by-
 default file: git hooks are not checked in or wired up automatically, so
 shipping one here would need its own installer step this repo does not have,
 for a case (bypassing the one workflow the one contributor uses) that has not
@@ -122,11 +123,14 @@ come up. This repo removed `.beads/hooks` for the same reason - nothing read
 them. Revisit if a second contributor, or a habit of using plain `git commit`,
 actually shows up.
 
-## No CI means the gate is the whole check
+## CI replays the gate; the local run is still the trigger
 
 The authority table in `CLAUDE.md` makes a full green `mix quality` the trigger
-for `git commit`, and there is no second net behind it - no CI run, no
-reviewer. So:
+for `git commit`. CI (`.github/workflows/ci.yml`) runs the same full gate on
+pushes to `main` and on pull requests, reading the command out of
+`.claude/wurk.json`'s `gate.full` so the two stay one definition - but it
+runs after a push, not before a commit, and there is still no second
+reviewer. The local full green remains the trigger:
 
 - A `--profile loop` green is not the trigger. It skips dialyzer, doctor,
   dependencies, and coverage.

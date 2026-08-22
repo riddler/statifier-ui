@@ -3,17 +3,19 @@
 Two project facts. Adds only - see `~/.claude/skills/wurk:mr/SKILL.md` for
 everything this does not repeat.
 
-## The request is a record, not a review gate
+## The request is a record and a CI run, not a human review gate
 
-One contributor, no CI. Nothing runs when the request opens and nobody else is
-going to look at it, so:
+One contributor, no second reviewer. CI (`.github/workflows/ci.yml`) runs the
+full gate on every pull request, so a check does run when the request opens -
+but nobody else is going to read the diff, so:
 
-- **Do not wait for checks or review.** There are none to wait for. A request
-  that sits open pending a signal that will never arrive is just a branch that
-  has not landed.
-- **The gate ran before the push or it did not run at all.** Step 4's full
-  `mix quality` is the only thing that ever verified this branch. Treat a
-  skipped or scoped gate here as a hard stop, not a formality to catch up on
+- **Do not wait for human review.** There is none to wait for. The CI check is
+  worth confirming green, but a request that sits open pending a reviewer who
+  will never arrive is just a branch that has not landed.
+- **The gate still runs before the push.** Step 4's full `mix quality` is what
+  verifies this branch before it becomes public; CI replays the same command
+  (read from `.claude/wurk.json`'s `gate.full`) only after. Treat a skipped
+  or scoped local gate here as a hard stop, not something CI will catch up on
   later.
 
 What the request is for is the record: a diff with a written rationale, linked
