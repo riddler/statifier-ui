@@ -52,6 +52,49 @@ defmodule StatifierUI.Test.Support.Trace.SessionCase do
   end
 
   @doc """
+  The catch-up attach path (statifier ADR-0049): starts a session over
+  `machine` with `record: true` and `session_id` pinned - and no
+  subscriber, so everything up to the attach is missed mail - then starts
+  a subscriber and attaches with `catch_up: true`. The caller drives
+  events between the two halves via the returned session; use
+  `wait_for_macrostep/3` to know the session has processed them before
+  attaching. Returns the session; pair with `attach_catch_up!/2`.
+  """
+  @spec start_recorded!(Statifier.Machine.t(), String.t()) :: pid()
+  def start_recorded!(machine, session_id) do
+    {:ok, session} =
+      Session.start_link(machine, trace: true, record: true, session_id: session_id)
+
+    session
+  end
+
+  @doc "Starts a subscriber over `machine` and attaches it to `session` with `catch_up: true`."
+  @spec attach_catch_up!(Statifier.Machine.t(), pid(), keyword()) :: pid()
+  def attach_catch_up!(machine, session, subscriber_opts \\ []) do
+    {:ok, sub} = Subscriber.start_link(Keyword.put(subscriber_opts, :machine, machine))
+    :ok = Subscriber.attach(sub, session, catch_up: true)
+    sub
+  end
+
+  @doc """
+  Polls `Statifier.Session.status/1` until `macrostep` reaches at least
+  `target` with an empty external queue, or `timeout` milliseconds elapse.
+  Returns the last observed status projection either way.
+  """
+  @spec wait_for_macrostep(pid(), non_neg_integer(), timeout()) :: map()
+  def wait_for_macrostep(session, target, timeout \\ 1000) do
+    status = Session.status(session)
+
+    if (status.macrostep >= target and status.queued_events == 0) or timeout <= 0 do
+      status
+    else
+      step = min(10, timeout)
+      Process.sleep(step)
+      wait_for_macrostep(session, target, timeout - step)
+    end
+  end
+
+  @doc """
   Polls `Subscriber.stats/1` until `seq` reaches at least `target`, or
   `timeout` milliseconds elapse. Returns the last observed `stats()` map
   either way, so a caller can assert on it directly instead of getting a
