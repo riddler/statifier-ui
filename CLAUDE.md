@@ -128,9 +128,10 @@ mix test                     # tests only
 ```
 
 Run `mix quality --profile loop` between edits; full `mix quality` must be green
-before any commit. The gate formats your code for you - do not run `mix format`
-as a separate step. See the ExQuality section at the end of this file for the
-rules the gate expects you to follow.
+before any commit. The format stage runs in check mode (`format: [check: true]`
+in `.quality.exs`, sui-b5y): drift fails the gate and nothing is rewritten, so
+run `mix format` yourself before committing. See the ExQuality section at the
+end of this file for the rules the gate expects you to follow.
 
 Toolchain lives in `mise.toml`, and it is deliberately thin: no JRE (the Saxon
 corpus transform is statifier-ex's), no Node (the JavaScript ships as source and
