@@ -1,7 +1,7 @@
 defmodule StatifierUI.MixProject do
   use Mix.Project
 
-  @version "0.1.0-dev"
+  @version "0.1.0"
   @source_url "https://github.com/riddler/statifier-ui"
 
   def project do
@@ -15,6 +15,8 @@ defmodule StatifierUI.MixProject do
       name: "StatifierUI",
       description: "UI components for authoring, observing, and debugging statifier statecharts",
       source_url: @source_url,
+      docs: docs(),
+      package: package(),
       test_coverage: [tool: ExCoveralls],
       preferred_cli_env: [
         coveralls: :test,
@@ -33,12 +35,47 @@ defmodule StatifierUI.MixProject do
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_env), do: ["lib"]
 
+  # Hexdocs configuration. These paths are read off the publisher's disk at
+  # `mix docs` time and need no entry in package()'s files: list - the docs
+  # tarball hexdocs hosts is built separately from the package tarball
+  # `mix deps.get` fetches.
+  defp docs do
+    [
+      name: "StatifierUI",
+      source_ref: "v#{@version}",
+      canonical: "https://hexdocs.pm/statifier_ui",
+      source_url: @source_url,
+      main: "readme",
+      extras:
+        [
+          "README.md",
+          "CHANGELOG.md",
+          "docs/architecture.md",
+          "docs/wire-format.md",
+          {"docs/adr/README.md", [title: "Architecture Decision Records", filename: "adr-index"]}
+        ] ++ Enum.sort(Path.wildcard("docs/adr/0*.md")),
+      groups_for_extras: [
+        Guides: ~r{docs/(?!adr)},
+        "Architecture Decision Records": ~r{docs/adr}
+      ]
+    ]
+  end
+
+  defp package do
+    [
+      name: "statifier_ui",
+      licenses: ["MIT"],
+      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md),
+      links: %{
+        "GitHub" => @source_url,
+        "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md"
+      }
+    ]
+  end
+
   defp deps do
     [
-      # Statifier is not published to hex yet, so the engine is a git dep and
-      # mix.lock pins the SHA. This becomes a version requirement the day
-      # statifier publishes; nothing else here depends on which form it takes.
-      {:statifier, github: "riddler/statifier-ex"},
+      statifier_dep(),
 
       # Both integrations are optional: the package is a component library, and
       # a Livebook host has no reason to pull LiveView, or the reverse. Anything
@@ -55,5 +92,15 @@ defmodule StatifierUI.MixProject do
       {:ex_doc, "~> 0.34", only: :dev, runtime: false},
       {:doctor, "~> 0.23", only: :dev, runtime: false}
     ]
+  end
+
+  # Export STATIFIER_PATH to point at a local checkout while co-developing a
+  # change that spans both repos. It is an env var rather than a mix.exs edit
+  # so the override never lands in a commit by accident.
+  defp statifier_dep do
+    case System.get_env("STATIFIER_PATH") do
+      nil -> {:statifier, "~> 2.0"}
+      path -> {:statifier, path: path, override: true}
+    end
   end
 end

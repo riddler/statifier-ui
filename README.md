@@ -15,10 +15,22 @@ stamps them with `(macrostep, round)` counters, and retains source locations on
 states, transitions, and expressions. A UI is one more interpreter of those
 effects; the engine needs nothing changed to support it.
 
+## Installation
+
+```elixir
+def deps do
+  [
+    {:statifier_ui, "~> 0.1"}
+  ]
+end
+```
+
+The `:kino` (Livebook) and `:phoenix_live_view` integrations are optional
+dependencies - add whichever your host actually renders with.
+
 ## Status
 
-Early. Nothing is published to hex yet, and the engine dependency is a git dep
-until statifier publishes. The first milestone is the Livebook inspector:
+Early. The first milestone is the Livebook inspector:
 `StatifierUI.Kino.inspect/3` over a running `Statifier.Session` -
 [`notebooks/inspector.livemd`](notebooks/inspector.livemd) walks it end to end.
 
