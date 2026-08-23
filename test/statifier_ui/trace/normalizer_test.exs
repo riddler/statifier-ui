@@ -370,7 +370,8 @@ defmodule StatifierUI.Trace.NormalizerTest do
         macrostep: 1,
         microstep: 0,
         id_from_author?: false,
-        round: 0
+        round: 0,
+        ordinal: 1
       }
 
       assert {:ok, %Message{type: "effect.send_delayed"} = message} =
@@ -391,7 +392,8 @@ defmodule StatifierUI.Trace.NormalizerTest do
         owner: {:transition, 0},
         macrostep: 1,
         microstep: 0,
-        round: 0
+        round: 0,
+        ordinal: 1
       }
 
       assert {:ok, %Message{type: "effect.cancel"} = message} =
@@ -1012,7 +1014,8 @@ defmodule StatifierUI.Trace.NormalizerTest do
       macrostep: 1,
       microstep: 0,
       id_from_author?: true,
-      round: 0
+      round: 0,
+      ordinal: 1
     }
   end
 
@@ -1023,7 +1026,8 @@ defmodule StatifierUI.Trace.NormalizerTest do
       owner: {:transition, 0},
       macrostep: 1,
       microstep: 0,
-      round: 0
+      round: 0,
+      ordinal: 1
     }
   end
 
