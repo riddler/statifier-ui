@@ -10,6 +10,23 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into a version section at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [0.1.1] 2026-08-24
+
+Documentation-only release: brings the hexdocs to the shared fleet standard.
+No code changes.
+
+### Changed
+
+- Unpublishes the ADRs from hexdocs; they remain in the repository under
+  `docs/adr/`.
+- Fixes the five broken links in the published docs - repo-relative
+  references (research doc, ADRs, inspector notebook, architecture's
+  research link, LICENSE) now resolve as absolute GitHub URLs or badges.
+- Adds a badge row (CI, Hex version, downloads, hexdocs, license) and a
+  Documentation index to the README, and corrects the stale claim that the
+  project has no CI.
+- `mix docs` now builds with zero warnings.
+
 ## [0.1.0] 2026-08-22
 
 First release: authoring, observing, and debugging components for the
