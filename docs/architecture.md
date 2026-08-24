@@ -356,4 +356,4 @@ do not settle. They are recorded here rather than resolved by invention:
   statifier-ui commits to offering it alongside the `file:../deps/` source
   path, or only the latter.
 
-[research]: research/260816-sui-kua-gui-research-and-direction.md
+[research]: https://github.com/riddler/statifier-ui/blob/main/docs/research/260816-sui-kua-gui-research-and-direction.md

@@ -685,8 +685,8 @@ because new types never bump the version at all.
 
 ## Origins
 
-`Statifier.Event.Cause.origin/0`'s eight variants, each a tagged object
-with `"kind"` naming the tuple's tag:
+The `origin` type on `Statifier.Event.Cause` has eight variants, each a
+tagged object with `"kind"` naming the tuple's tag:
 
 | "kind" | Fields | Meaning |
 |---|---|---|
@@ -706,7 +706,7 @@ a `t_index` through `transitions`.
 
 ## Owners
 
-`Statifier.Machine.Content.owner/0`'s four variants, plus the case
+The `owner` type on `Statifier.Machine.Content` has four variants, plus the case
 `Statifier.Effect.Trace.ContentExecuted` widens it with for a top-level
 `<script>` and the case `Statifier.Effect.DatamodelChange` widens it with
 for `<invoke idlocation>`, together the six variants an `owner` field may
