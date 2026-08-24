@@ -40,7 +40,7 @@ if Code.ensure_loaded?(Kino) do
     Builds the inspector for `session` and returns the composed
     `Kino.Layout` for the cell to render.
 
-    `fixtures` is a `StatifierUI.Fixtures.t/0` (or `nil`): it feeds the
+    `fixtures` is a `t:StatifierUI.Fixtures.t/0` (or `nil`): it feeds the
     injection palette's per-event buttons. `opts`:
 
       * `:source` - the SCXML text, forwarded to the subscriber for the

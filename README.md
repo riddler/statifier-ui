@@ -1,14 +1,21 @@
 # StatifierUI
 
+[![CI](https://github.com/riddler/statifier-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/riddler/statifier-ui/actions/workflows/ci.yml)
+[![Hex.pm Version](https://img.shields.io/hexpm/v/statifier_ui.svg)](https://hex.pm/packages/statifier_ui)
+[![Hex Downloads](https://img.shields.io/hexpm/dt/statifier_ui.svg)](https://hex.pm/packages/statifier_ui)
+[![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/statifier_ui/)
+[![License](https://img.shields.io/hexpm/l/statifier_ui.svg)](https://github.com/riddler/statifier-ui/blob/main/LICENSE)
+
 UI components for authoring, observing, inspecting, and debugging
 [statifier](https://github.com/riddler/statifier-ex) statecharts and
 [predicator](https://github.com/riddler/predicator) expressions.
 
 Debug-first and text-first: SCXML is the source of truth, and the visualization
-reads it. See
-[`docs/research/260816-sui-kua-gui-research-and-direction.md`](docs/research/260816-sui-kua-gui-research-and-direction.md)
-for how that direction was reached, and [`docs/adr/`](docs/adr/) for the
-decisions themselves.
+reads it. See the
+[GUI research and direction document](https://github.com/riddler/statifier-ui/blob/main/docs/research/260816-sui-kua-gui-research-and-direction.md)
+for how that direction was reached, and the
+[architecture decision records](https://github.com/riddler/statifier-ui/tree/main/docs/adr)
+for the decisions themselves.
 
 Statifier already emits trace effects at every Appendix D phase boundary,
 stamps them with `(macrostep, round)` counters, and retains source locations on
@@ -32,7 +39,17 @@ dependencies - add whichever your host actually renders with.
 
 Early. The first milestone is the Livebook inspector:
 `StatifierUI.Kino.inspect/3` over a running `Statifier.Session` -
-[`notebooks/inspector.livemd`](notebooks/inspector.livemd) walks it end to end.
+[`notebooks/inspector.livemd`](https://github.com/riddler/statifier-ui/blob/main/notebooks/inspector.livemd)
+walks it end to end.
+
+## Documentation
+
+Published guides on [hexdocs](https://hexdocs.pm/statifier_ui/):
+
+- [Architecture](docs/architecture.md) - the layers of statifier-ui, what
+  each piece is for, and the boundary with the engine it visualizes.
+- [Trace wire format](docs/wire-format.md) - the normative specification of
+  the language-neutral JSON trace stream a UI consumes.
 
 ## Development
 
@@ -45,8 +62,9 @@ mix quality      # the full gate: format, compile, credo, dialyzer, docs, tests
 `mix quality --profile loop` is the faster inner-loop variant - it skips
 dialyzer and coverage and runs only the tests covering changed code.
 
-There is no CI; the local gate is the only gate. See `.quality.exs`.
+CI runs the same gate on every push and pull request. See `.quality.exs`.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See
+[LICENSE](https://github.com/riddler/statifier-ui/blob/main/LICENSE).
