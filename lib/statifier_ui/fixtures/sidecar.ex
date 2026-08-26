@@ -8,10 +8,11 @@ defmodule StatifierUI.Fixtures.Sidecar do
   `phoenix_live_view` dependency and must not become load-bearing for core
   fixture loading.
 
-  Every top-level key beyond `"version"`, `"scenarios"`, `"events"`, and
-  `"datasets"` is ignored with a `:unknown_key` diagnostic (ADR-0006's
-  extension-friendly requirement), and every value under `"scenarios"`,
-  `"events"`, and `"datasets"` is decoded through `StatifierUI.Value.decode/1`.
+  Every top-level key beyond `"version"`, `"scenarios"`, `"events"`,
+  `"datasets"`, and `"expressions"` is ignored with a `:unknown_key`
+  diagnostic (ADR-0006's extension-friendly requirement), and every value
+  under `"scenarios"`, `"events"`, and `"datasets"` is decoded through
+  `StatifierUI.Value.decode/1`.
 
   A `$duration` cannot appear inside `"scenarios"` or `"datasets"`: it decodes
   to an atom-keyed map, and a datamodel forbids atom keys at every level (the
@@ -19,6 +20,14 @@ defmodule StatifierUI.Fixtures.Sidecar do
   sidecar is rejected with `{:duration_in_scenario, path}` or
   `{:duration_in_dataset, path}`. Durations under `"events"` are fine - an
   `_event.data` payload has no key constraint.
+
+  An `"expressions"` entry is an object rather than a free value, so it is
+  decoded on its own: `"source"` passes through untouched (it is source text,
+  never a tagged value), each `"expect"` value is decoded through
+  `StatifierUI.Value.decode/1` (a duration is fine there - `"expect"` values
+  are predicator values, not datamodel keys), and any other key in the entry
+  is copied through verbatim rather than rejected or flagged, per ADR-0006's
+  ignore-unknown-keys discipline extended to this depth.
   """
 
   alias StatifierUI.Fixtures
@@ -26,7 +35,7 @@ defmodule StatifierUI.Fixtures.Sidecar do
 
   require Logger
 
-  @known_top_level_keys ~w(version scenarios events datasets)
+  @known_top_level_keys ~w(version scenarios events datasets expressions)
 
   @doc """
   Derives a sidecar path from a chart path, per ADR-0003's naming:
@@ -96,10 +105,16 @@ defmodule StatifierUI.Fixtures.Sidecar do
     with {:ok, version_diagnostics} <- validate_version(json, source),
          {:ok, scenarios} <- decode_section(json, "scenarios"),
          {:ok, events} <- decode_section(json, "events"),
-         {:ok, datasets} <- decode_section(json, "datasets") do
+         {:ok, datasets} <- decode_section(json, "datasets"),
+         {:ok, expressions} <- decode_expressions(json) do
       unknown_key_diagnostics = unknown_key_diagnostics(json, source)
 
-      case Fixtures.new(scenarios: scenarios, events: events, datasets: datasets) do
+      case Fixtures.new(
+             scenarios: scenarios,
+             events: events,
+             datasets: datasets,
+             expressions: expressions
+           ) do
         {:ok, fixtures} ->
           diagnostics = version_diagnostics ++ unknown_key_diagnostics
           Enum.each(diagnostics, &log_diagnostic/1)
@@ -181,6 +196,61 @@ defmodule StatifierUI.Fixtures.Sidecar do
   end
 
   defp decode_map_of_values(other, section), do: {:error, {:invalid_section, section, other}}
+
+  # An expression entry is an object, not a free value: `decode_map_of_values/2`
+  # cannot be reused, because running `Value.decode/1` over the whole entry
+  # would try to interpret the entry itself as a tagged value. Structural
+  # rejections (missing "source", a non-map "expect") are left to
+  # `Fixtures.new/1`; this decoder's only errors are decode failures.
+  @spec decode_expressions(map()) :: {:ok, map()} | {:error, term()}
+  defp decode_expressions(json) do
+    case Map.get(json, "expressions", %{}) do
+      map when is_map(map) -> decode_expression_entries(map)
+      other -> {:error, {:invalid_section, "expressions", other}}
+    end
+  end
+
+  @spec decode_expression_entries(map()) :: {:ok, map()} | {:error, term()}
+  defp decode_expression_entries(map) do
+    Enum.reduce_while(map, {:ok, %{}}, fn {name, entry}, {:ok, acc} ->
+      case decode_expression_entry(name, entry) do
+        {:ok, decoded} -> {:cont, {:ok, Map.put(acc, name, decoded)}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  # "source" passes through untouched (it is source text, never a tagged
+  # value); "expect" values are decoded through `Value.decode/1` so tagged
+  # shapes mean here what they mean everywhere else; any other key is copied
+  # through verbatim (Open Question #1: preserved, not flagged or rejected).
+  @spec decode_expression_entry(term(), term()) :: {:ok, map()} | {:error, term()}
+  defp decode_expression_entry(name, entry) when is_map(entry) do
+    Enum.reduce_while(entry, {:ok, %{}}, fn
+      {"expect", expect}, {:ok, acc} ->
+        case decode_expect(expect) do
+          {:ok, decoded} -> {:cont, {:ok, Map.put(acc, "expect", decoded)}}
+          {:error, reason} -> {:halt, {:error, {:invalid_value, "expressions", name, reason}}}
+        end
+
+      {key, value}, {:ok, acc} ->
+        {:cont, {:ok, Map.put(acc, key, value)}}
+    end)
+  end
+
+  defp decode_expression_entry(_name, entry), do: {:ok, entry}
+
+  @spec decode_expect(term()) :: {:ok, map()} | {:error, term()}
+  defp decode_expect(expect) when is_map(expect) do
+    Enum.reduce_while(expect, {:ok, %{}}, fn {dataset_name, value}, {:ok, acc} ->
+      case Value.decode(value) do
+        {:ok, decoded} -> {:cont, {:ok, Map.put(acc, dataset_name, decoded)}}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp decode_expect(other), do: {:ok, other}
 
   @spec unknown_key_diagnostics(map(), Path.t() | nil) :: [Fixtures.diagnostic()]
   defp unknown_key_diagnostics(json, source) do

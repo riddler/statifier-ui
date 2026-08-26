@@ -13,5 +13,21 @@
         "country": "US"
       }
     }
+  },
+  "expressions": {
+    "is-adult-us": {
+      "source": "user.age >= 18 and user.country == 'US'",
+      "expect": {
+        "minor": false,
+        "adult-us": true
+      }
+    },
+    "signup-date": {
+      "source": "user.signup_date",
+      "expect": {
+        "minor": { "$undefined": true },
+        "adult-us": { "$date": "2026-01-15" }
+      }
+    }
   }
 }

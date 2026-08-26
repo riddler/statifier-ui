@@ -78,6 +78,15 @@ defmodule StatifierUI.Fixtures.SidecarTest do
     test "rejects a negative version" do
       assert {:error, {:invalid_version, -1}} = Sidecar.from_json(%{"version" => -1})
     end
+
+    test "accepts version 1 with both datasets and expressions, no version diagnostic" do
+      assert {:ok, %Fixtures{diagnostics: []}} =
+               Sidecar.from_json(%{
+                 "version" => 1,
+                 "datasets" => %{"minor" => %{"age" => 15}},
+                 "expressions" => %{"e" => %{"source" => "age >= 18"}}
+               })
+    end
   end
 
   describe "from_json/1 - shape" do
@@ -94,7 +103,7 @@ defmodule StatifierUI.Fixtures.SidecarTest do
       %{decoded: decoded}
     end
 
-    test "loads with two :unknown_key diagnostics naming expressions and the nonsense key",
+    test "loads with exactly one :unknown_key diagnostic, for the nonsense key",
          %{decoded: decoded} do
       assert {:ok, %Fixtures{diagnostics: diagnostics}} = Sidecar.from_json(decoded)
 
@@ -104,7 +113,7 @@ defmodule StatifierUI.Fixtures.SidecarTest do
         |> Enum.map(&hd(&1.path))
         |> Enum.sort()
 
-      assert unknown_key_names == ["expressions", "nonsense"]
+      assert unknown_key_names == ["nonsense"]
     end
 
     test "a diagnostic from from_json/2 without a source records source: nil",
@@ -135,6 +144,63 @@ defmodule StatifierUI.Fixtures.SidecarTest do
       assert map_size(datasets) == 2
       assert datasets["minor"] == %{"user" => %{"age" => 15, "country" => "US"}}
       assert datasets["adult-us"] == %{"user" => %{"age" => 30, "country" => "US"}}
+    end
+
+    test "expressions loads with the is-adult-us entry and its two expectations",
+         %{decoded: decoded} do
+      assert {:ok, %Fixtures{} = fixtures} = Sidecar.from_json(decoded)
+
+      assert {:ok, %{"source" => source, "expect" => expect}} =
+               Fixtures.expression(fixtures, "is-adult-us")
+
+      assert source == "user.age >= 18 and user.country == 'US'"
+      assert expect == %{"minor" => false, "adult-us" => true}
+    end
+  end
+
+  describe "from_json/1 - expression expect values" do
+    test "a {\"$undefined\": true} expect value decodes to :undefined" do
+      assert {:ok, fixtures} =
+               Sidecar.from_json(%{
+                 "version" => 1,
+                 "expressions" => %{
+                   "e" => %{
+                     "source" => "x",
+                     "expect" => %{"minor" => %{"$undefined" => true}}
+                   }
+                 }
+               })
+
+      assert {:ok, %{"expect" => %{"minor" => :undefined}}} = Fixtures.expression(fixtures, "e")
+    end
+
+    test "a $duration expect value decodes, proving expect values are not key-walked" do
+      assert {:ok, fixtures} =
+               Sidecar.from_json(%{
+                 "version" => 1,
+                 "expressions" => %{
+                   "e" => %{
+                     "source" => "x",
+                     "expect" => %{"minor" => %{"$duration" => %{"days" => 14}}}
+                   }
+                 }
+               })
+
+      assert {:ok, %{"expect" => %{"minor" => duration}}} = Fixtures.expression(fixtures, "e")
+      assert duration.days == 14
+    end
+
+    test "an unrecognized key inside an expression entry is preserved verbatim" do
+      assert {:ok, fixtures} =
+               Sidecar.from_json(%{
+                 "version" => 1,
+                 "expressions" => %{
+                   "e" => %{"source" => "x", "note" => "future field"}
+                 }
+               })
+
+      assert {:ok, %{"note" => "future field"}} = Fixtures.expression(fixtures, "e")
+      assert Enum.all?(fixtures.diagnostics, &(&1.kind != :unknown_key))
     end
   end
 

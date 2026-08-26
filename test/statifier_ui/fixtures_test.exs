@@ -19,8 +19,9 @@ defmodule StatifierUI.FixturesTest do
       assert fixtures.diagnostics == []
     end
 
-    test "defaults scenarios, events, and datasets to empty maps" do
-      assert {:ok, %Fixtures{scenarios: %{}, events: %{}, datasets: %{}}} = Fixtures.new()
+    test "defaults scenarios, events, datasets, and expressions to empty maps" do
+      assert {:ok, %Fixtures{scenarios: %{}, events: %{}, datasets: %{}, expressions: %{}}} =
+               Fixtures.new()
     end
 
     test "rejects a non-map scenarios value" do
@@ -131,6 +132,132 @@ defmodule StatifierUI.FixturesTest do
     end
   end
 
+  describe "new/1 - expressions" do
+    test "builds a valid bundle" do
+      assert {:ok, %Fixtures{expressions: expressions}} =
+               Fixtures.new(
+                 expressions: %{
+                   "is-adult-us" => %{
+                     "source" => "user.age >= 18",
+                     "expect" => %{"minor" => false, "adult-us" => true}
+                   }
+                 }
+               )
+
+      assert expressions == %{
+               "is-adult-us" => %{
+                 "source" => "user.age >= 18",
+                 "expect" => %{"minor" => false, "adult-us" => true}
+               }
+             }
+    end
+
+    test "rejects a non-map expressions value" do
+      assert {:error, {:invalid_expressions, [{"a", %{}}]}} =
+               Fixtures.new(expressions: [{"a", %{}}])
+    end
+
+    test "rejects a non-binary expression name" do
+      assert {:error, {:invalid_expression_name, :e}} =
+               Fixtures.new(expressions: %{e: %{"source" => "x"}})
+    end
+
+    test "rejects a non-map expression entry, naming the expression" do
+      assert {:error, {:invalid_expression, "e"}} =
+               Fixtures.new(expressions: %{"e" => "not-a-map"})
+    end
+
+    test "rejects an entry with no source key" do
+      assert {:error, {:invalid_expression_source, "e"}} =
+               Fixtures.new(expressions: %{"e" => %{}})
+    end
+
+    test "rejects an entry whose source is not a binary" do
+      assert {:error, {:invalid_expression_source, "e"}} =
+               Fixtures.new(expressions: %{"e" => %{"source" => 1}})
+    end
+
+    test "accepts an entry with no expect key" do
+      assert {:ok, %Fixtures{}} = Fixtures.new(expressions: %{"e" => %{"source" => "x"}})
+    end
+
+    test "rejects an entry whose expect is not a map" do
+      assert {:error, {:invalid_expect, "e"}} =
+               Fixtures.new(expressions: %{"e" => %{"source" => "x", "expect" => "not-a-map"}})
+    end
+
+    test "rejects an entry whose expect has a non-binary key" do
+      assert {:error, {:invalid_expect, "e"}} =
+               Fixtures.new(
+                 expressions: %{"e" => %{"source" => "x", "expect" => %{minor: false}}}
+               )
+    end
+
+    test "accepts a duration as an expect value, since expect values are not key-walked" do
+      assert {:ok, %Fixtures{}} =
+               Fixtures.new(
+                 expressions: %{
+                   "e" => %{"source" => "x", "expect" => %{"minor" => %{days: 14}}}
+                 }
+               )
+    end
+
+    test "rejects an entry with a non-binary key other than source or expect" do
+      assert {:error, {:invalid_expression_key, "e", :note}} =
+               Fixtures.new(expressions: %{"e" => %{"source" => "x", note: "hi"}})
+    end
+
+    test "preserves an entry key other than source and expect verbatim" do
+      assert {:ok, fixtures} =
+               Fixtures.new(expressions: %{"e" => %{"source" => "x", "note" => "hi"}})
+
+      assert {:ok, %{"note" => "hi"}} = Fixtures.expression(fixtures, "e")
+    end
+  end
+
+  describe "expression_names/1" do
+    test "returns names in sorted order" do
+      {:ok, fixtures} =
+        Fixtures.new(
+          expressions: %{
+            "z" => %{"source" => "x"},
+            "a" => %{"source" => "x"}
+          }
+        )
+
+      assert Fixtures.expression_names(fixtures) == ["a", "z"]
+    end
+  end
+
+  describe "expect/3" do
+    setup do
+      {:ok, fixtures} =
+        Fixtures.new(
+          expressions: %{
+            "is-adult-us" => %{
+              "source" => "user.age >= 18",
+              "expect" => %{"minor" => false, "adult-us" => true}
+            },
+            "no-expectations" => %{"source" => "x"}
+          }
+        )
+
+      %{fixtures: fixtures}
+    end
+
+    test "returns the stated expectation", %{fixtures: fixtures} do
+      assert Fixtures.expect(fixtures, "is-adult-us", "adult-us") == {:ok, true}
+    end
+
+    test "returns :error when no expectation is stated for a real dataset", %{fixtures: fixtures} do
+      assert Fixtures.expect(fixtures, "no-expectations", "adult-us") == :error
+    end
+
+    test "returns :error for an unknown expression", %{fixtures: fixtures} do
+      assert Fixtures.expect(fixtures, "no-such-expression", "adult-us") == :error
+    end
+  end
+
   describe "from_source/1" do
     test "builds a bundle from a full source" do
       assert {:ok, fixtures} = Fixtures.from_source(PaymentSource)
@@ -142,8 +269,8 @@ defmodule StatifierUI.FixturesTest do
                {:ok, %{"amount" => 1999, "currency" => "USD"}}
     end
 
-    test "builds a bundle from an events-only source, defaulting scenarios and datasets to %{}" do
-      assert {:ok, %Fixtures{scenarios: %{}, datasets: %{}}} =
+    test "builds a bundle from an events-only source, defaulting scenarios, datasets, and expressions to %{}" do
+      assert {:ok, %Fixtures{scenarios: %{}, datasets: %{}, expressions: %{}}} =
                Fixtures.from_source(EventsOnlySource)
     end
 

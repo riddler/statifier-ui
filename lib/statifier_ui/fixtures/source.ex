@@ -5,12 +5,12 @@ defmodule StatifierUI.Fixtures.Source do
   A host implements `scenarios/0` and `example_events/0`; `StatifierUI.Fixtures.from_source/1`
   calls both and routes the results through the same validation `new/1` applies
   to a JSON sidecar, so the two delivery paths in ADR-0003 converge on one
-  struct. `datasets/0` is optional (ADR-0006): a host with no expressions to
-  evaluate need not implement it.
+  struct. `datasets/0` and `expressions/0` are optional (ADR-0006): a host
+  with no expressions to evaluate need not implement either.
 
-  `use StatifierUI.Fixtures.Source` injects empty defaults for all three
+  `use StatifierUI.Fixtures.Source` injects empty defaults for all four
   callbacks, so a host that only has scenarios (or only events, or only
-  datasets) can implement just the one it has.
+  datasets, or only expressions) can implement just the one it has.
   """
 
   @typedoc "A named example datamodel, as `scenarios/0` returns it."
@@ -21,6 +21,9 @@ defmodule StatifierUI.Fixtures.Source do
 
   @typedoc "A named example datamodel for evaluating expressions, as `datasets/0` returns it."
   @type datasets :: %{optional(String.t()) => map()}
+
+  @typedoc "A named free-standing expression fixture, as `expressions/0` returns it."
+  @type expressions :: %{optional(String.t()) => map()}
 
   @doc """
   Named example datamodels: a scenario name mapped to a complete example
@@ -41,7 +44,14 @@ defmodule StatifierUI.Fixtures.Source do
   """
   @callback datasets() :: datasets()
 
-  @optional_callbacks datasets: 0
+  @doc """
+  Named free-standing expression fixtures (ADR-0006): an expression name
+  mapped to a predicator `"source"` string and an optional `"expect"` map of
+  expected results keyed by dataset name.
+  """
+  @callback expressions() :: expressions()
+
+  @optional_callbacks datasets: 0, expressions: 0
 
   defmacro __using__(_opts) do
     quote do
@@ -59,7 +69,11 @@ defmodule StatifierUI.Fixtures.Source do
       @spec datasets() :: StatifierUI.Fixtures.Source.datasets()
       def datasets, do: %{}
 
-      defoverridable scenarios: 0, example_events: 0, datasets: 0
+      @impl StatifierUI.Fixtures.Source
+      @spec expressions() :: StatifierUI.Fixtures.Source.expressions()
+      def expressions, do: %{}
+
+      defoverridable scenarios: 0, example_events: 0, datasets: 0, expressions: 0
     end
   end
 end
