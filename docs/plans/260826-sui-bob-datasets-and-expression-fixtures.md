@@ -926,10 +926,10 @@ predicator dependency.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes (format check-mode covers markdown only
+- [x] Full quality gate passes (format check-mode covers markdown only
       incidentally, but the suite and doctor stages must stay green)
-- [ ] `changelog.d/sui-bob.md` exists and uses only Keep-a-Changelog headings
-- [ ] `docs/architecture.md`'s module count matches the actual count of
+- [x] `changelog.d/sui-bob.md` exists and uses only Keep-a-Changelog headings
+- [x] `docs/architecture.md`'s module count matches the actual count of
       modules under `lib/statifier_ui/` named in its inventory
 
 #### Manual Verification:
@@ -1117,6 +1117,24 @@ items are deferred and surfaced once at the end instead of blocking here.
       expression message should make the near-miss case obvious
 - [ ] The `guard_matches/2` output shape is what a truth-table or
       guard-annotation consumer (`sui-t0a`) would actually want
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 4
+
+- [ ] The `check!/2` failure message is readable enough to act on without
+      opening the fixture file
+- [ ] A host wiring `check!/2` into one ExUnit test gets a useful failure, not
+      a wall of inspected terms
+- [ ] The helper-over-mix-task choice still looks right once the failure
+      output is in front of a human
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 full `mix quality` as the phase gate. In interactive execution, pause here for
