@@ -194,6 +194,21 @@ exists to prevent. `StatifierUI.TruthTable.Markdown` renders the matrix with
 each cell's value spelled out as a word and emphasis added on top of it, so
 the three values stay three even where styling does not render.
 
+`StatifierUI.Fixtures.Bundle` addresses the same bundle by **fragment name**
+rather than by chart path, for an embedder composing charts from a palette of
+reusable fragments: the fragment is a module or a palette entry, the chart it
+will land in does not exist yet, and its examples still have to travel with
+it. It adds no fixture shape - a bundle's `fixtures` field is the same struct
+both ADR-0003 delivery paths produce - only identity, provenance, and
+discovery, over a palette of modules or a directory of sidecars. The two
+delivery paths reappear one level up as `discover/2` and `discover_dir/2`,
+and neither is all-or-nothing: one fragment's malformed bundle is reported
+against that fragment and the rest still load.
+`StatifierUI.Fixtures.Bundle.Markdown` renders one fragment's panel as its
+truth table plus its expectation results - the reading surface and the
+checking surface together, since neither alone tells an author what a step
+does and what it was meant to do. See `docs/fixture-bundles.md`.
+
 Fixtures are how a chart moves between statifier-ex and this repository:
 statifier-ex is the engine and the compiler, and does not need fixtures to
 run a chart; this repository is the consumer that needs example data to

@@ -7,6 +7,7 @@ defmodule StatifierUI.KinoTest do
 
   alias Statifier.Session
   alias StatifierUI.Fixtures
+  alias StatifierUI.Fixtures.Bundle
   alias StatifierUI.Test.Support.Trace.SessionCase
   alias StatifierUI.Trace.Subscriber
 
@@ -104,6 +105,48 @@ defmodule StatifierUI.KinoTest do
       refute text =~ "| adult-us |"
       refute text =~ "| sparse |"
       assert text =~ "| minor | false |"
+    end
+  end
+
+  describe "test_panel/2 and palette_panel/2" do
+    setup do
+      {:ok, bundle} =
+        Bundle.load("myapp.score", %{
+          datasets: %{"hot-lead" => %{"record" => %{"pages_viewed" => 14}}},
+          expressions: %{
+            "needs_review" => %{
+              "source" => "record.pages_viewed < 5",
+              "expect" => %{"hot-lead" => false}
+            }
+          }
+        })
+
+      %{bundle: bundle}
+    end
+
+    test "test_panel/2 renders one fragment's panel as Markdown", %{bundle: bundle} do
+      assert %Kino.Markdown{text: text} = StatifierUI.Kino.test_panel(bundle)
+
+      assert text =~ "# myapp.score"
+      assert text =~ "## Expectations"
+      assert text =~ "1 matched, 0 mismatched, 0 errored,"
+    end
+
+    test "test_panel/2 forwards its options to the renderer", %{bundle: bundle} do
+      assert %Kino.Markdown{text: text} =
+               StatifierUI.Kino.test_panel(bundle, heading: nil, expectations: false)
+
+      refute text =~ "# myapp.score"
+      refute text =~ "## Expectations"
+    end
+
+    test "palette_panel/2 renders every bundle a discovery found", %{bundle: bundle} do
+      discovery = %{bundles: [bundle], without: ["myapp.plain"], errors: []}
+
+      assert %Kino.Markdown{text: text} = StatifierUI.Kino.palette_panel(discovery)
+
+      assert text =~ "# myapp.score"
+      refute text =~ "myapp.plain"
     end
   end
 end
