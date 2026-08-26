@@ -1,6 +1,6 @@
 # ADR-0012: Trace projection and redaction
 
-Status: proposed (2026-08-26)
+Status: accepted (2026-08-26)
 
 Extends ADR-0005 additively: one new reserved value shape, one new
 `session.start` field, and a producer-side transform. No type is added,
