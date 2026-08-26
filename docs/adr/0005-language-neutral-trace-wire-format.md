@@ -2,7 +2,9 @@
 
 Status: accepted (2026-08-16), amended in part by ADR-0011 (2026-08-17):
 exit and entry sets are engine-ordered sequences, not canonically sorted
-sets
+sets; extended by ADR-0012 (2026-08-26): the `$`-prefixed reserved value
+set gains exactly one form, `{"$redacted": true}`, producible by the
+projection layer; format version stays 1
 
 ## Context
 
