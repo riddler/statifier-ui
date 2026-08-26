@@ -66,7 +66,7 @@ the top-level module with its `@moduledoc` and a `version/0` function.
 
 What is built is the fixtures contract described below, plus the trace
 plumbing described under "The wire format boundary." `lib/statifier_ui/`
-holds thirteen core modules, none of which reference `Kino` or
+holds fifteen core modules, none of which reference `Kino` or
 `Phoenix.LiveView`:
 
 - `StatifierUI.Fixtures` - the consumed struct and its validation.
@@ -80,6 +80,10 @@ holds thirteen core modules, none of which reference `Kino` or
 - `StatifierUI.Fixtures.Expectations` - ADR-0006's executable-expectations
   runner: evaluates every `expect` entry against its named dataset and
   reports whether the stated value held.
+- `StatifierUI.TruthTable` - ADR-0006's result matrix: every expression
+  evaluated across every dataset, with a six-way verdict per cell.
+- `StatifierUI.TruthTable.Markdown` - renders that matrix as Markdown, in
+  either orientation.
 - `StatifierUI.Value` - the codec for ADR-0005's `$`-tagged JSON encoding of
   predicator values, used by the sidecar loader.
 - `StatifierUI.Shape` - pure shape inference from an example value to a
@@ -177,6 +181,18 @@ ADR-0006's executable side: it evaluates every `expect` entry against its
 named dataset and reports whether the stated value held, so a host wires it
 into its own test suite and fixture documentation goes red the moment it
 drifts from what its expressions actually evaluate to.
+
+`StatifierUI.TruthTable` is the reading surface over the same two maps, and
+asks the complementary question: not "did every stated expectation hold" but
+"what does every expression actually evaluate to under every dataset",
+whether or not an expectation was stated. Its cells carry a six-way verdict
+rather than a boolean, because predicator's `undefined` is a third truth
+value and sparse example records make it the common case: an encoding where
+`:undefined` can be reached through Elixir truthiness is an encoding where a
+reader eventually sees it as `false`, which is the misreading a truth table
+exists to prevent. `StatifierUI.TruthTable.Markdown` renders the matrix with
+each cell's value spelled out as a word and emphasis added on top of it, so
+the three values stay three even where styling does not render.
 
 Fixtures are how a chart moves between statifier-ex and this repository:
 statifier-ex is the engine and the compiler, and does not need fixtures to

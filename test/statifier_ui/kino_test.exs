@@ -62,4 +62,48 @@ defmodule StatifierUI.KinoTest do
 
     assert %Kino.Layout{} = StatifierUI.Kino.inspect(session)
   end
+
+  describe "truth_table/2" do
+    setup do
+      {:ok, fixtures} =
+        Fixtures.new(
+          datasets: %{
+            "adult-us" => %{"user" => %{"age" => 30, "country" => "US"}},
+            "minor" => %{"user" => %{"age" => 15, "country" => "US"}},
+            "sparse" => %{"user" => %{"country" => "US"}}
+          },
+          expressions: %{
+            "is-adult-us" => %{"source" => "user.age >= 18 and user.country == 'US'"}
+          }
+        )
+
+      %{fixtures: fixtures}
+    end
+
+    test "renders the matrix as Markdown with no session and no chart", %{fixtures: fixtures} do
+      assert %Kino.Markdown{text: text} = StatifierUI.Kino.truth_table(fixtures)
+
+      assert text =~ "# Truth table"
+      assert text =~ "| dataset | is-adult-us |"
+      assert text =~ "| adult-us | **true** |"
+      assert text =~ "| minor | false |"
+      assert text =~ "| sparse | _undefined_ |"
+    end
+
+    test "splits its options between the builder and the renderer", %{fixtures: fixtures} do
+      assert %Kino.Markdown{text: text} =
+               StatifierUI.Kino.truth_table(fixtures,
+                 datasets: ["minor"],
+                 title: nil,
+                 legend: false,
+                 sources: false
+               )
+
+      refute text =~ "# Truth table"
+      refute text =~ "Expressions:"
+      refute text =~ "| adult-us |"
+      refute text =~ "| sparse |"
+      assert text =~ "| minor | false |"
+    end
+  end
 end
