@@ -1144,3 +1144,27 @@ advancement automatically (via `/wurk:commit --auto`), and Manual Verification
 items are deferred and surfaced once at the end instead of blocking here.
 
 ---
+
+### Phase 5
+
+- [ ] The architecture section teaches the scenario/dataset distinction rather
+      than restating it
+- [ ] The wire-format edit reads as descriptive, not normative, so it does not
+      pre-empt ADR-0006's second open question
+- [ ] Cross-references to ADR-0006 are by number, per ADR-0001's convention
+- [ ] **Terminology firewall.** This repo is public and has no scanner of its
+      own; the phrasing table and the pre-push scan command live in the private
+      umbrella at `docs/terminology-firewall.md`, one level above this
+      checkout. Run that scan over the changed files before pushing. It is
+      manual because the command is not available from inside this repo, not
+      because it is optional - no employer or product terminology may appear in
+      any changed file, commit message, or branch name.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
