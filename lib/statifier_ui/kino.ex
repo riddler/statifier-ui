@@ -35,6 +35,28 @@ if Code.ensure_loaded?(Kino) do
     alias StatifierUI.Fixtures
     alias StatifierUI.Kino.Updater
     alias StatifierUI.Trace.Subscriber
+    alias StatifierUI.TruthTable
+
+    @doc """
+    Renders `fixtures`' truth table - every expression evaluated across every
+    dataset (ADR-0006) - as a `Kino.Markdown` widget.
+
+    Independent of `inspect/3` and of any session: a truth table is a fact
+    about expressions and datasets, so this needs no running chart and no
+    Phoenix. `opts` are split by owner - `:expressions`, `:datasets`,
+    `:functions`, and `:providers` go to `StatifierUI.TruthTable.build/2`,
+    and the rest to `StatifierUI.TruthTable.Markdown.render/2`.
+    """
+    @spec truth_table(Fixtures.t(), keyword()) :: Kino.Markdown.t()
+    def truth_table(%Fixtures{} = fixtures, opts \\ []) do
+      {build_opts, render_opts} =
+        Keyword.split(opts, [:expressions, :datasets, :functions, :providers])
+
+      fixtures
+      |> TruthTable.build(build_opts)
+      |> TruthTable.Markdown.render(render_opts)
+      |> Kino.Markdown.new()
+    end
 
     @doc """
     Builds the inspector for `session` and returns the composed
@@ -254,6 +276,21 @@ else
       raise RuntimeError,
             "StatifierUI.Kino.inspect/3 needs the optional :kino dependency - " <>
               "add {:kino, \"~> 0.14\"} to your deps and restart"
+    end
+
+    @doc """
+    Raises: the widget needs the optional `:kino` dependency.
+
+    The table itself does not - `StatifierUI.TruthTable.build/2` and
+    `StatifierUI.TruthTable.Markdown.render/2` are pure and always compiled,
+    so a host without Kino still gets the Markdown to render its own way.
+    """
+    @spec truth_table(term(), keyword()) :: no_return()
+    def truth_table(_fixtures, _opts \\ []) do
+      raise RuntimeError,
+            "StatifierUI.Kino.truth_table/2 needs the optional :kino dependency - " <>
+              "add {:kino, \"~> 0.14\"} to your deps and restart, or call " <>
+              "StatifierUI.TruthTable.Markdown.render/2 directly"
     end
   end
 end
