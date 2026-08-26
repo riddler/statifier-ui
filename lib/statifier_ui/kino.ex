@@ -33,6 +33,7 @@ if Code.ensure_loaded?(Kino) do
 
     alias StatifierUI.EventInjection
     alias StatifierUI.Fixtures
+    alias StatifierUI.Fixtures.Bundle
     alias StatifierUI.Kino.Updater
     alias StatifierUI.Trace.Subscriber
     alias StatifierUI.TruthTable
@@ -55,6 +56,38 @@ if Code.ensure_loaded?(Kino) do
       fixtures
       |> TruthTable.build(build_opts)
       |> TruthTable.Markdown.render(render_opts)
+      |> Kino.Markdown.new()
+    end
+
+    @doc """
+    Renders one fragment's fixture bundle as its "test this step" panel - its
+    truth table plus its expectation results (sui-13q) - as a
+    `Kino.Markdown` widget.
+
+    Like `truth_table/2`, independent of `inspect/3` and of any session: a
+    bundle is a fact about one palette entry's examples, so this needs no
+    running chart. `opts` go to
+    `StatifierUI.Fixtures.Bundle.Markdown.render/2`, which forwards each one
+    to the layer that owns it.
+    """
+    @spec test_panel(Bundle.t(), keyword()) :: Kino.Markdown.t()
+    def test_panel(%Bundle{} = bundle, opts \\ []) do
+      bundle
+      |> Bundle.Markdown.render(opts)
+      |> Kino.Markdown.new()
+    end
+
+    @doc """
+    Renders every bundle a palette discovery found, one panel after another,
+    as a single `Kino.Markdown` widget.
+
+    `discovery` is what `StatifierUI.Fixtures.Bundle.discover/2` or
+    `discover_dir/2` returned.
+    """
+    @spec palette_panel(Bundle.discovery(), keyword()) :: Kino.Markdown.t()
+    def palette_panel(discovery, opts \\ []) when is_map(discovery) do
+      discovery
+      |> Bundle.Markdown.render_discovery(opts)
       |> Kino.Markdown.new()
     end
 
@@ -291,6 +324,35 @@ else
             "StatifierUI.Kino.truth_table/2 needs the optional :kino dependency - " <>
               "add {:kino, \"~> 0.14\"} to your deps and restart, or call " <>
               "StatifierUI.TruthTable.Markdown.render/2 directly"
+    end
+
+    @doc """
+    Raises: the widget needs the optional `:kino` dependency.
+
+    The panel itself does not - `StatifierUI.Fixtures.Bundle.Markdown.render/2`
+    is pure and always compiled, so a host without Kino still gets the
+    Markdown to render its own way.
+    """
+    @spec test_panel(term(), keyword()) :: no_return()
+    def test_panel(_bundle, _opts \\ []) do
+      raise RuntimeError,
+            "StatifierUI.Kino.test_panel/2 needs the optional :kino dependency - " <>
+              "add {:kino, \"~> 0.14\"} to your deps and restart, or call " <>
+              "StatifierUI.Fixtures.Bundle.Markdown.render/2 directly"
+    end
+
+    @doc """
+    Raises: the widget needs the optional `:kino` dependency.
+
+    `StatifierUI.Fixtures.Bundle.Markdown.render_discovery/2` is the pure
+    equivalent.
+    """
+    @spec palette_panel(term(), keyword()) :: no_return()
+    def palette_panel(_discovery, _opts \\ []) do
+      raise RuntimeError,
+            "StatifierUI.Kino.palette_panel/2 needs the optional :kino dependency - " <>
+              "add {:kino, \"~> 0.14\"} to your deps and restart, or call " <>
+              "StatifierUI.Fixtures.Bundle.Markdown.render_discovery/2 directly"
     end
   end
 end

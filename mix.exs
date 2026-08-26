@@ -50,6 +50,7 @@ defmodule StatifierUI.MixProject do
         "README.md",
         "CHANGELOG.md",
         "docs/architecture.md",
+        "docs/fixture-bundles.md",
         "docs/wire-format.md"
       ],
       groups_for_extras: [
