@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "datasets": {
+    "minor": {
+      "user": {
+        "age": 15,
+        "country": "US"
+      }
+    },
+    "adult-us": {
+      "user": {
+        "age": 30,
+        "country": "US"
+      }
+    }
+  }
+}

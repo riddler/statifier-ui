@@ -8,16 +8,17 @@ defmodule StatifierUI.Fixtures.Sidecar do
   `phoenix_live_view` dependency and must not become load-bearing for core
   fixture loading.
 
-  Every top-level key beyond `"version"`, `"scenarios"`, and `"events"` is
-  ignored with a `:unknown_key` diagnostic (ADR-0006's extension-friendly
-  requirement), and every value under `"scenarios"` and `"events"` is
-  decoded through `StatifierUI.Value.decode/1`.
+  Every top-level key beyond `"version"`, `"scenarios"`, `"events"`, and
+  `"datasets"` is ignored with a `:unknown_key` diagnostic (ADR-0006's
+  extension-friendly requirement), and every value under `"scenarios"`,
+  `"events"`, and `"datasets"` is decoded through `StatifierUI.Value.decode/1`.
 
-  A `$duration` cannot appear inside `"scenarios"`: it decodes to an
-  atom-keyed map, and a datamodel forbids atom keys at every level (the
+  A `$duration` cannot appear inside `"scenarios"` or `"datasets"`: it decodes
+  to an atom-keyed map, and a datamodel forbids atom keys at every level (the
   engine's own invariant, tightened in `StatifierUI.Fixtures`). Such a
-  sidecar is rejected with `{:duration_in_scenario, path}`. Durations under
-  `"events"` are fine - an `_event.data` payload has no key constraint.
+  sidecar is rejected with `{:duration_in_scenario, path}` or
+  `{:duration_in_dataset, path}`. Durations under `"events"` are fine - an
+  `_event.data` payload has no key constraint.
   """
 
   alias StatifierUI.Fixtures
@@ -25,7 +26,7 @@ defmodule StatifierUI.Fixtures.Sidecar do
 
   require Logger
 
-  @known_top_level_keys ~w(version scenarios events)
+  @known_top_level_keys ~w(version scenarios events datasets)
 
   @doc """
   Derives a sidecar path from a chart path, per ADR-0003's naming:
@@ -94,10 +95,11 @@ defmodule StatifierUI.Fixtures.Sidecar do
 
     with {:ok, version_diagnostics} <- validate_version(json, source),
          {:ok, scenarios} <- decode_section(json, "scenarios"),
-         {:ok, events} <- decode_section(json, "events") do
+         {:ok, events} <- decode_section(json, "events"),
+         {:ok, datasets} <- decode_section(json, "datasets") do
       unknown_key_diagnostics = unknown_key_diagnostics(json, source)
 
-      case Fixtures.new(scenarios: scenarios, events: events) do
+      case Fixtures.new(scenarios: scenarios, events: events, datasets: datasets) do
         {:ok, fixtures} ->
           diagnostics = version_diagnostics ++ unknown_key_diagnostics
           Enum.each(diagnostics, &log_diagnostic/1)
