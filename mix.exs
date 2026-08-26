@@ -75,6 +75,13 @@ defmodule StatifierUI.MixProject do
     [
       statifier_dep(),
 
+      # Declared directly because lib/ calls Predicator.* (the expectations
+      # runner). predicator already arrives transitively through statifier at
+      # this same version - see mix.lock - so this states a fact rather than
+      # adding a dependency; without it, warnings_as_errors: true fails the
+      # gate on the first cross-application call.
+      {:predicator, "~> 9.0"},
+
       # Both integrations are optional: the package is a component library, and
       # a Livebook host has no reason to pull LiveView, or the reverse. Anything
       # under lib/ that touches one of these has to tolerate its absence at
