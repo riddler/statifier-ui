@@ -549,13 +549,13 @@ decoder's only errors are decode failures, reported as
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes
-- [ ] `extended.fixtures.json` loads with exactly one `:unknown_key`
+- [x] Full quality gate passes
+- [x] `extended.fixtures.json` loads with exactly one `:unknown_key`
       diagnostic, for `"nonsense"`
-- [ ] The convergence test compares all four maps across three pairs, and the
+- [x] The convergence test compares all four maps across three pairs, and the
       third pair's `expressions` map is non-empty on both sides and contains at
       least one `$`-tagged expect value
-- [ ] A sidecar declaring `"version": 1` with both new keys loads without a
+- [x] A sidecar declaring `"version": 1` with both new keys loads without a
       version diagnostic (ADR-0006's version-stays-1 decision, made mechanical)
 
 #### Manual Verification:
@@ -1072,3 +1072,25 @@ default chosen above and reversible either way.
    cost of making callers extract. The plan takes the machine, with the
    extraction isolated in one private function so the second arity is a small
    later addition.
+
+## Deferred Manual Verification
+
+Manual verification items are deferred during looped (--loop) execution and
+surfaced here once, rather than blocking after each phase. Confirm these
+before considering the plan fully landed.
+
+### Phase 1
+
+- [ ] The dataset-versus-scenario distinction in the `StatifierUI.Fixtures`
+      moduledoc reads as teachable to someone who has not read ADR-0006
+- [ ] Error tuples for a malformed dataset name the dataset, not just the key,
+      when read in a terminal
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
