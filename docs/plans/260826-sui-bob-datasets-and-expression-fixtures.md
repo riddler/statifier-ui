@@ -836,21 +836,21 @@ one module per file under `lib/statifier_ui/`.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes, including dialyzer over the new `Predicator`
+- [x] Full quality gate passes, including dialyzer over the new `Predicator`
       call sites
-- [ ] `mix.exs` declares `{:predicator, "~> 9.0"}`, and `git diff mix.lock`
+- [x] `mix.exs` declares `{:predicator, "~> 9.0"}`, and `git diff mix.lock`
       shows no change to the resolved version or checksum of any package -
       declaring a dependency that already resolves transitively should move
       nothing. A resolver-metadata-only touch is acceptable; any actual
       dependency-graph change is read and called out in the commit message
       rather than committed silently
-- [ ] The repo's suite runs `check/2` over `test/support/fixtures/extended.fixtures.json`
+- [x] The repo's suite runs `check/2` over `test/support/fixtures/extended.fixtures.json`
       and asserts `:ok` - the drift alarm is armed on a real file
-- [ ] A drifted-expectation test asserts `check!/2` raises
+- [x] A drifted-expectation test asserts `check!/2` raises
       `StatifierUI.Fixtures.ExpectationError`
-- [ ] The duration canonicalization test passes (a `$duration` expectation
+- [x] The duration canonicalization test passes (a `$duration` expectation
       matching a seven-key evaluated duration)
-- [ ] No module under `lib/` references `ExUnit`
+- [x] No module under `lib/` references `ExUnit`
 
 #### Manual Verification:
 - [ ] The `check!/2` failure message is readable enough to act on without
@@ -1101,6 +1101,22 @@ items are deferred and surfaced once at the end instead of blocking here.
       "no expectation stated", not "expected to be absent"
 - [ ] Preserving unrecognized entry keys verbatim looks right against a
       hand-written sidecar carrying a future key
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] Diagnostic messages read usefully in a terminal - an unmatched
+      expression message should make the near-miss case obvious
+- [ ] The `guard_matches/2` output shape is what a truth-table or
+      guard-annotation consumer (`sui-t0a`) would actually want
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 full `mix quality` as the phase gate. In interactive execution, pause here for
