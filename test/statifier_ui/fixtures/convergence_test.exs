@@ -11,18 +11,20 @@ defmodule StatifierUI.Fixtures.ConvergenceTest do
 
   alias StatifierUI.Fixtures
   alias StatifierUI.Fixtures.Sidecar
+  alias StatifierUI.Test.Support.Fixtures.ExpressionsSource
   alias StatifierUI.Test.Support.Fixtures.PaymentSource
   alias StatifierUI.Test.Support.Fixtures.TaggedSource
 
   @fixtures_dir "test/support/fixtures"
 
   describe "the plain-scalar bundle" do
-    test "the behaviour and sidecar paths agree on scenarios and events" do
+    test "the behaviour and sidecar paths agree on scenarios, events, and datasets" do
       assert {:ok, source} = Fixtures.from_source(PaymentSource)
       assert {:ok, sidecar} = Sidecar.load(Path.join(@fixtures_dir, "payment.fixtures.json"))
 
       assert source.scenarios == sidecar.scenarios
       assert source.events == sidecar.events
+      assert source.datasets == sidecar.datasets
 
       assert source.diagnostics == []
       assert sidecar.diagnostics == []
@@ -30,12 +32,29 @@ defmodule StatifierUI.Fixtures.ConvergenceTest do
   end
 
   describe "the tagged-value bundle" do
-    test "the behaviour and sidecar paths agree on scenarios and events" do
+    test "the behaviour and sidecar paths agree on scenarios, events, and datasets" do
       assert {:ok, source} = Fixtures.from_source(TaggedSource)
       assert {:ok, sidecar} = Sidecar.load(Path.join(@fixtures_dir, "tagged.fixtures.json"))
 
       assert source.scenarios == sidecar.scenarios
       assert source.events == sidecar.events
+      assert source.datasets == sidecar.datasets
+
+      assert source.diagnostics == []
+      assert sidecar.diagnostics == []
+    end
+  end
+
+  describe "the datasets-and-expressions bundle" do
+    test "the behaviour and sidecar paths agree on scenarios, events, and datasets" do
+      assert {:ok, source} = Fixtures.from_source(ExpressionsSource)
+      assert {:ok, sidecar} = Sidecar.load(Path.join(@fixtures_dir, "expressions.fixtures.json"))
+
+      assert source.scenarios == sidecar.scenarios
+      assert source.events == sidecar.events
+      assert source.datasets == sidecar.datasets
+
+      assert source.datasets != %{}
 
       assert source.diagnostics == []
       assert sidecar.diagnostics == []

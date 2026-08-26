@@ -2,6 +2,7 @@ defmodule StatifierUI.FixturesTest do
   use ExUnit.Case, async: true
 
   alias StatifierUI.Fixtures
+  alias StatifierUI.Test.Support.Fixtures.BehaviourOnlySource
   alias StatifierUI.Test.Support.Fixtures.EventsOnlySource
   alias StatifierUI.Test.Support.Fixtures.PaymentSource
 
@@ -18,8 +19,8 @@ defmodule StatifierUI.FixturesTest do
       assert fixtures.diagnostics == []
     end
 
-    test "defaults scenarios and events to empty maps" do
-      assert {:ok, %Fixtures{scenarios: %{}, events: %{}}} = Fixtures.new()
+    test "defaults scenarios, events, and datasets to empty maps" do
+      assert {:ok, %Fixtures{scenarios: %{}, events: %{}, datasets: %{}}} = Fixtures.new()
     end
 
     test "rejects a non-map scenarios value" do
@@ -92,6 +93,44 @@ defmodule StatifierUI.FixturesTest do
     end
   end
 
+  describe "new/1 - datasets" do
+    test "builds a valid bundle" do
+      assert {:ok, %Fixtures{datasets: datasets}} =
+               Fixtures.new(datasets: %{"minor" => %{"user" => %{"age" => 15}}})
+
+      assert datasets == %{"minor" => %{"user" => %{"age" => 15}}}
+    end
+
+    test "rejects a non-map datasets value" do
+      assert {:error, {:invalid_datasets, [{"a", %{}}]}} =
+               Fixtures.new(datasets: [{"a", %{}}])
+    end
+
+    test "rejects a non-binary dataset name" do
+      assert {:error, {:invalid_dataset_name, :minor}} =
+               Fixtures.new(datasets: %{minor: %{}})
+    end
+
+    test "rejects a non-map dataset entry, naming the dataset" do
+      assert {:error, {:invalid_dataset, "minor"}} =
+               Fixtures.new(datasets: %{"minor" => "not-a-map"})
+    end
+
+    test "rejects an atom key at depth, naming the dataset in its path" do
+      dataset = %{"user" => %{ok: 1}}
+
+      assert {:error, {:invalid_key, :ok, ["minor", "user"]}} =
+               Fixtures.new(datasets: %{"minor" => dataset})
+    end
+
+    test "a duration in dataset data says :duration_in_dataset, naming the path" do
+      dataset = %{"trial_left" => %{days: 14}}
+
+      assert {:error, {:duration_in_dataset, ["minor", "trial_left"]}} =
+               Fixtures.new(datasets: %{"minor" => dataset})
+    end
+  end
+
   describe "from_source/1" do
     test "builds a bundle from a full source" do
       assert {:ok, fixtures} = Fixtures.from_source(PaymentSource)
@@ -103,8 +142,9 @@ defmodule StatifierUI.FixturesTest do
                {:ok, %{"amount" => 1999, "currency" => "USD"}}
     end
 
-    test "builds a bundle from an events-only source, defaulting scenarios to %{}" do
-      assert {:ok, %Fixtures{scenarios: %{}}} = Fixtures.from_source(EventsOnlySource)
+    test "builds a bundle from an events-only source, defaulting scenarios and datasets to %{}" do
+      assert {:ok, %Fixtures{scenarios: %{}, datasets: %{}}} =
+               Fixtures.from_source(EventsOnlySource)
     end
 
     test "errors on a module that is not a source" do
@@ -115,27 +155,43 @@ defmodule StatifierUI.FixturesTest do
       assert {:error, {:not_a_source, StatifierUI.NoSuchModule}} =
                Fixtures.from_source(StatifierUI.NoSuchModule)
     end
+
+    test "builds a bundle from a hand-written @behaviour module (no use), defaulting datasets to %{}" do
+      assert {:ok, %Fixtures{datasets: %{}} = fixtures} =
+               Fixtures.from_source(BehaviourOnlySource)
+
+      assert Fixtures.scenario(fixtures, "handwritten") == {:ok, %{"ok" => true}}
+    end
   end
 
-  describe "scenario_names/1 and event_names/1" do
+  describe "scenario_names/1, event_names/1, and dataset_names/1" do
     test "return keys in sorted order" do
       {:ok, fixtures} =
         Fixtures.new(
           scenarios: %{"b" => %{}, "a" => %{}, "c" => %{}},
-          events: %{"z" => nil, "a" => nil}
+          events: %{"z" => nil, "a" => nil},
+          datasets: %{"y" => %{}, "b" => %{}}
         )
 
       assert Fixtures.scenario_names(fixtures) == ["a", "b", "c"]
       assert Fixtures.event_names(fixtures) == ["a", "z"]
+      assert Fixtures.dataset_names(fixtures) == ["b", "y"]
     end
   end
 
-  describe "scenario/2 and event/2" do
+  describe "scenario/2, event/2, and dataset/2" do
     test "return :error for a missing key" do
       {:ok, fixtures} = Fixtures.new()
 
       assert Fixtures.scenario(fixtures, "missing") == :error
       assert Fixtures.event(fixtures, "missing") == :error
+      assert Fixtures.dataset(fixtures, "missing") == :error
+    end
+
+    test "dataset/2 fetches a dataset by name" do
+      {:ok, fixtures} = Fixtures.new(datasets: %{"minor" => %{"user" => %{"age" => 15}}})
+
+      assert Fixtures.dataset(fixtures, "minor") == {:ok, %{"user" => %{"age" => 15}}}
     end
   end
 end

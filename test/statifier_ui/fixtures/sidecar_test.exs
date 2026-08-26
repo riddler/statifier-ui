@@ -94,7 +94,7 @@ defmodule StatifierUI.Fixtures.SidecarTest do
       %{decoded: decoded}
     end
 
-    test "loads with three :unknown_key diagnostics naming datasets, expressions, and the nonsense key",
+    test "loads with two :unknown_key diagnostics naming expressions and the nonsense key",
          %{decoded: decoded} do
       assert {:ok, %Fixtures{diagnostics: diagnostics}} = Sidecar.from_json(decoded)
 
@@ -104,7 +104,7 @@ defmodule StatifierUI.Fixtures.SidecarTest do
         |> Enum.map(&hd(&1.path))
         |> Enum.sort()
 
-      assert unknown_key_names == ["datasets", "expressions", "nonsense"]
+      assert unknown_key_names == ["expressions", "nonsense"]
     end
 
     test "a diagnostic from from_json/2 without a source records source: nil",
@@ -127,8 +127,14 @@ defmodule StatifierUI.Fixtures.SidecarTest do
       assert log =~ path
     end
 
-    test "scenarios and events load as empty maps", %{decoded: decoded} do
-      assert {:ok, %Fixtures{scenarios: %{}, events: %{}}} = Sidecar.from_json(decoded)
+    test "scenarios and events load as empty maps, and datasets loads with two entries",
+         %{decoded: decoded} do
+      assert {:ok, %Fixtures{scenarios: %{}, events: %{}, datasets: datasets}} =
+               Sidecar.from_json(decoded)
+
+      assert map_size(datasets) == 2
+      assert datasets["minor"] == %{"user" => %{"age" => 15, "country" => "US"}}
+      assert datasets["adult-us"] == %{"user" => %{"age" => 30, "country" => "US"}}
     end
   end
 
@@ -158,6 +164,27 @@ defmodule StatifierUI.Fixtures.SidecarTest do
 
       assert {:ok, duration} = Fixtures.event(fixtures, "grace.granted")
       assert duration.days == 14
+    end
+  end
+
+  describe "load/1 - a $duration in dataset data" do
+    test "is rejected, naming the dataset and the key path rather than a unit key" do
+      path =
+        Path.join(
+          System.tmp_dir!(),
+          "sidecar_dataset_dur_#{System.unique_integer([:positive])}.json"
+        )
+
+      File.write!(path, ~s({
+        "version": 1,
+        "datasets": {"minor": {"trial_left": {"$duration": {"days": 14}}}}
+      }))
+
+      on_exit(fn -> File.rm(path) end)
+
+      assert {:error,
+              {:invalid_sidecar_contents, ^path, {:duration_in_dataset, ["minor", "trial_left"]}}} =
+               Sidecar.load(path)
     end
   end
 

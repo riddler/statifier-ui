@@ -1,14 +1,27 @@
 defmodule StatifierUI.Fixtures do
   @moduledoc """
-  Example data a host supplies for a chart: named scenario datamodels and
-  example event payloads (ADR-0003).
+  Example data a host supplies for a chart: named scenario datamodels, example
+  event payloads, and named datasets for evaluating expressions (ADR-0003,
+  ADR-0006).
 
-  A fixture bundle is two maps:
+  A fixture bundle is a set of maps:
 
     * `scenarios` - a scenario name (for example `"gold-tier-user"`) mapped to
       a complete example of the host-supplied datamodel for that situation.
     * `events` - an event name (for example `"payment.success"`) mapped to a
       sample `_event.data` payload for that event.
+    * `datasets` - a dataset name mapped to a situation for evaluating a
+      free-standing expression against.
+
+  A scenario and a dataset are not the same thing, even though both are
+  string-keyed example data. A scenario is a complete example of the
+  host-supplied datamodel for running a chart; it stands in for the whole
+  state a chart would actually see. A dataset exists only to evaluate
+  expressions and may be as small as the expression needs - a two-key map
+  naming just the variables a single guard reads, with nothing else a real
+  chart run would carry. ADR-0006 keeps datasets separate from scenarios
+  rather than asking a scenario to double as both, so a dataset can stay
+  minimal and a scenario can stay a faithful example.
 
   Two delivery paths converge on this one struct: a host module implementing
   `StatifierUI.Fixtures.Source` (`from_source/1`), and a JSON sidecar next to
@@ -28,6 +41,12 @@ defmodule StatifierUI.Fixtures do
   key is always a string, so a scenario a behaviour source could supply but
   a sidecar could never express would break the one-struct guarantee
   ADR-0003 rests on. Rejecting it in both paths keeps them interchangeable.
+
+  A dataset is validated exactly as a scenario is - string keys at every
+  depth, for the same convergence reason - so a predicator duration cannot
+  appear inside a dataset either: it decodes to a bare atom-keyed map, and
+  the same rule that rejects it inside a scenario
+  (`test/support/fixtures/tagged_source.ex`) rejects it here.
   """
 
   alias StatifierUI.Shape
@@ -40,6 +59,9 @@ defmodule StatifierUI.Fixtures do
 
   @typedoc "An example datamodel: string keys at every level."
   @type datamodel :: %{optional(String.t()) => term()}
+
+  @typedoc "The name of a fixture dataset."
+  @type dataset_name :: String.t()
 
   @typedoc """
   A diagnostic surfaced while loading a fixture bundle. `path` is the key
@@ -56,22 +78,25 @@ defmodule StatifierUI.Fixtures do
   @type t :: %__MODULE__{
           scenarios: %{optional(scenario_name()) => datamodel()},
           events: %{optional(event_name()) => term()},
+          datasets: %{optional(dataset_name()) => datamodel()},
           diagnostics: [diagnostic()]
         }
 
-  defstruct scenarios: %{}, events: %{}, diagnostics: []
+  defstruct scenarios: %{}, events: %{}, datasets: %{}, diagnostics: []
 
   @doc """
-  Builds a validated fixture bundle from `:scenarios` and `:events` options.
+  Builds a validated fixture bundle from `:scenarios`, `:events`, and
+  `:datasets` options.
 
-  Both options default to `%{}`. Returns `{:error, reason}` rather than
-  raising when a scenario or event key is not a string, when a scenario
-  datamodel is not a map, or when a scenario datamodel contains a non-string
-  key at any depth. A non-string key found inside a datamodel is reported as
-  `{:invalid_key, key, path}`, where `path` starts with the scenario name -
-  or, when the offending map is a predicator duration, as
-  `{:duration_in_scenario, path}`, which says why rather than naming a unit
-  key the author never wrote.
+  All three options default to `%{}`. Returns `{:error, reason}` rather than
+  raising when a scenario, event, or dataset key is not a string, when a
+  scenario or dataset datamodel is not a map, or when one contains a
+  non-string key at any depth. A non-string key found inside a datamodel is
+  reported as `{:invalid_key, key, path}`, where `path` starts with the
+  scenario or dataset name - or, when the offending map is a predicator
+  duration, as `{:duration_in_scenario, path}` or `{:duration_in_dataset,
+  path}`, which says why rather than naming a unit key the author never
+  wrote.
 
   ## Examples
 
@@ -83,10 +108,13 @@ defmodule StatifierUI.Fixtures do
   def new(opts \\ []) do
     scenarios = Keyword.get(opts, :scenarios, %{})
     events = Keyword.get(opts, :events, %{})
+    datasets = Keyword.get(opts, :datasets, %{})
 
     with :ok <- validate_scenarios(scenarios),
-         :ok <- validate_events(events) do
-      {:ok, %__MODULE__{scenarios: scenarios, events: events, diagnostics: []}}
+         :ok <- validate_events(events),
+         :ok <- validate_datasets(datasets) do
+      {:ok,
+       %__MODULE__{scenarios: scenarios, events: events, datasets: datasets, diagnostics: []}}
     end
   end
 
@@ -94,16 +122,26 @@ defmodule StatifierUI.Fixtures do
   Builds a validated fixture bundle from a `StatifierUI.Fixtures.Source`
   module.
 
-  Calls `module.scenarios()` and `module.example_events()` and routes both
-  through `new/1`, so this path and the sidecar loader share exactly one
-  validation implementation. Returns `{:error, {:not_a_source, module}}` when
-  `module` does not implement the behaviour.
+  Calls `module.scenarios()` and `module.example_events()`, and - when the
+  module implements the optional `datasets/0` callback - `module.datasets()`,
+  and routes all of them through `new/1`, so this path and the sidecar loader
+  share exactly one validation implementation. Returns `{:error,
+  {:not_a_source, module}}` when `module` does not implement the behaviour.
   """
   @spec from_source(module()) :: {:ok, t()} | {:error, term()}
   def from_source(module) do
     with :ok <- ensure_source(module) do
-      new(scenarios: module.scenarios(), events: module.example_events())
+      new(
+        scenarios: module.scenarios(),
+        events: module.example_events(),
+        datasets: optional_callback(module, :datasets)
+      )
     end
+  end
+
+  @spec optional_callback(module(), atom()) :: map()
+  defp optional_callback(module, fun) do
+    if function_exported?(module, fun, 0), do: apply(module, fun, []), else: %{}
   end
 
   @doc """
@@ -132,6 +170,18 @@ defmodule StatifierUI.Fixtures do
   """
   @spec event_names(t()) :: [event_name()]
   def event_names(%__MODULE__{events: events}), do: events |> Map.keys() |> Enum.sort()
+
+  @doc """
+  Fetches a dataset by name.
+  """
+  @spec dataset(t(), dataset_name()) :: {:ok, datamodel()} | :error
+  def dataset(%__MODULE__{datasets: datasets}, name), do: Map.fetch(datasets, name)
+
+  @doc """
+  Dataset names, sorted (ADR-0005's canonical-order rule).
+  """
+  @spec dataset_names(t()) :: [dataset_name()]
+  def dataset_names(%__MODULE__{datasets: datasets}), do: datasets |> Map.keys() |> Enum.sort()
 
   @spec ensure_source(module()) :: :ok | {:error, {:not_a_source, module()}}
   defp ensure_source(module) do
@@ -171,7 +221,30 @@ defmodule StatifierUI.Fixtures do
   # The path is seeded with the scenario name so a key error names the
   # scenario it came from; a bundle with several scenarios is otherwise
   # ambiguous about which one to go fix.
-  defp validate_scenario_entry(name, datamodel), do: check_keys(datamodel, [name])
+  defp validate_scenario_entry(name, datamodel), do: check_keys(datamodel, [name], :scenario)
+
+  @spec validate_datasets(term()) :: :ok | {:error, term()}
+  defp validate_datasets(datasets) when is_map(datasets) do
+    Enum.reduce_while(datasets, :ok, fn {name, datamodel}, :ok ->
+      case validate_dataset_entry(name, datamodel) do
+        :ok -> {:cont, :ok}
+        {:error, _reason} = error -> {:halt, error}
+      end
+    end)
+  end
+
+  defp validate_datasets(other), do: {:error, {:invalid_datasets, other}}
+
+  @spec validate_dataset_entry(term(), term()) :: :ok | {:error, term()}
+  defp validate_dataset_entry(name, _datamodel) when not is_binary(name),
+    do: {:error, {:invalid_dataset_name, name}}
+
+  defp validate_dataset_entry(name, datamodel) when not is_map(datamodel),
+    do: {:error, {:invalid_dataset, name}}
+
+  # The path is seeded with the dataset name for the same reason as a
+  # scenario's: a key error should name the dataset it came from.
+  defp validate_dataset_entry(name, datamodel), do: check_keys(datamodel, [name], :dataset)
 
   @spec validate_events(term()) :: :ok | {:error, term()}
   defp validate_events(events) when is_map(events) do
@@ -188,46 +261,54 @@ defmodule StatifierUI.Fixtures do
   # (deps/statifier/lib/statifier/machine_state.ex:500-516) - descends maps
   # and lists, stops at structs - but stricter about what counts as an
   # offending key, for the convergence reason in this module's @moduledoc.
-  @spec check_keys(term(), [term()]) :: :ok | {:error, term()}
-  defp check_keys(list, path) when is_list(list) do
+  #
+  # `section` picks the duration-report atom (`:scenario` or `:dataset`) so a
+  # single walk serves both callers without duplicating it; it is threaded
+  # through every recursive call but never appears in the reported path.
+  @spec check_keys(term(), [term()], :scenario | :dataset) :: :ok | {:error, term()}
+  defp check_keys(list, path, section) when is_list(list) do
     list
     |> Enum.with_index()
     |> Enum.reduce_while(:ok, fn {element, index}, :ok ->
-      case check_keys(element, [index | path]) do
+      case check_keys(element, [index | path], section) do
         :ok -> {:cont, :ok}
         {:error, _reason} = error -> {:halt, error}
       end
     end)
   end
 
-  defp check_keys(%_struct{}, _path), do: :ok
+  defp check_keys(%_struct{}, _path, _section), do: :ok
 
   # A duration is reported as itself rather than as the first offending unit
   # key: the author wrote `$duration` (or an atom-keyed map), never `:seconds`,
   # so naming the unit describes the decoding rather than the mistake.
-  defp check_keys(map, path) when is_map(map) do
+  defp check_keys(map, path, section) when is_map(map) do
     if Shape.duration?(map) do
-      {:error, {:duration_in_scenario, Enum.reverse(path)}}
+      {:error, {duration_error(section), Enum.reverse(path)}}
     else
-      check_each_key(map, path)
+      check_each_key(map, path, section)
     end
   end
 
-  defp check_keys(_scalar, _path), do: :ok
+  defp check_keys(_scalar, _path, _section), do: :ok
 
-  @spec check_each_key(map(), [term()]) :: :ok | {:error, term()}
-  defp check_each_key(map, path) do
+  @spec duration_error(:scenario | :dataset) :: :duration_in_scenario | :duration_in_dataset
+  defp duration_error(:scenario), do: :duration_in_scenario
+  defp duration_error(:dataset), do: :duration_in_dataset
+
+  @spec check_each_key(map(), [term()], :scenario | :dataset) :: :ok | {:error, term()}
+  defp check_each_key(map, path, section) do
     Enum.reduce_while(map, :ok, fn {key, value}, :ok ->
-      case check_key(key, value, path) do
+      case check_key(key, value, path, section) do
         :ok -> {:cont, :ok}
         {:error, _reason} = error -> {:halt, error}
       end
     end)
   end
 
-  @spec check_key(term(), term(), [term()]) :: :ok | {:error, term()}
-  defp check_key(key, _value, path) when not is_binary(key),
+  @spec check_key(term(), term(), [term()], :scenario | :dataset) :: :ok | {:error, term()}
+  defp check_key(key, _value, path, _section) when not is_binary(key),
     do: {:error, {:invalid_key, key, Enum.reverse(path)}}
 
-  defp check_key(key, value, path), do: check_keys(value, [key | path])
+  defp check_key(key, value, path, section), do: check_keys(value, [key | path], section)
 end
