@@ -663,15 +663,15 @@ Cases:
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes
-- [ ] The `t_index`-shift test passes: matching survives an edit that
+- [x] Full quality gate passes
+- [x] The `t_index`-shift test passes: matching survives an edit that
       renumbers transitions
-- [ ] A whitespace-only difference produces an `:unmatched_expression`
+- [x] A whitespace-only difference produces an `:unmatched_expression`
       diagnostic and no match
-- [ ] `StatifierUI.Fixtures.Lint` has no `{:error, _}` return path anywhere in
+- [x] `StatifierUI.Fixtures.Lint` has no `{:error, _}` return path anywhere in
       its public API (checked by the specs and by a test asserting lint on a
       deliberately broken-looking bundle still returns a list)
-- [ ] No `Predicator.*` call appears in this module (it reads source strings
+- [x] No `Predicator.*` call appears in this module (it reads source strings
       out of the machine; it does not evaluate), so `mix.exs` still needs no
       change in this phase
 
@@ -1085,6 +1085,22 @@ before considering the plan fully landed.
       moduledoc reads as teachable to someone who has not read ADR-0006
 - [ ] Error tuples for a malformed dataset name the dataset, not just the key,
       when read in a terminal
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] The `expect` semantics read correctly in the moduledoc: an absent key is
+      "no expectation stated", not "expected to be absent"
+- [ ] Preserving unrecognized entry keys verbatim looks right against a
+      hand-written sidecar carrying a future key
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 full `mix quality` as the phase gate. In interactive execution, pause here for
