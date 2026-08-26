@@ -370,7 +370,10 @@ context rather than recovering it. Absence means the host supplied none.
 **`fixtures`**, when present, is the ADR-0003 sidecar's decoded JSON object,
 carried through verbatim, its own `version` field included. This document's
 producer does not construct or validate a fixtures bundle; the caller
-supplies an already-decoded object, or supplies none.
+supplies an already-decoded object, or supplies none. The carried object may
+contain ADR-0006's `datasets` and `expressions` keys alongside ADR-0003's
+`scenarios` and `events`; this producer neither constructs nor validates
+either of the two additive keys, the same as it does not for the other two.
 
 **`parent_session`** and **`invokeid`**, when present, name the session
 that started this one via `<invoke>` and the `invokeid` this session
@@ -915,6 +918,9 @@ that test rather than drifting silently.
 - ADR-0003 (`docs/adr/0003-fixtures-as-the-example-data-contract.md`) - the
   fixtures sidecar object `session.start`'s `fixtures` field carries
   verbatim.
+- ADR-0006 (`docs/adr/0006-datasets-and-expression-fixtures.md`) - the
+  `datasets` and `expressions` keys the same carried object may additionally
+  contain.
 - `st-nbmj` - the upstream gap behind `effect.*` messages once carrying no
   `round`, superseded by `st-xb2b`, whose ADR-0046 settled it (the two ids
   name one thread of work: `st-nbmj` filed the gap, `st-xb2b` decided it);

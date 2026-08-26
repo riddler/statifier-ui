@@ -66,7 +66,7 @@ the top-level module with its `@moduledoc` and a `version/0` function.
 
 What is built is the fixtures contract described below, plus the trace
 plumbing described under "The wire format boundary." `lib/statifier_ui/`
-holds eleven core modules, none of which reference `Kino` or
+holds thirteen core modules, none of which reference `Kino` or
 `Phoenix.LiveView`:
 
 - `StatifierUI.Fixtures` - the consumed struct and its validation.
@@ -74,6 +74,12 @@ holds eleven core modules, none of which reference `Kino` or
   supply fixtures from Elixir.
 - `StatifierUI.Fixtures.Sidecar` - the `<chart>.fixtures.json` loader for
   corpus and CLI use.
+- `StatifierUI.Fixtures.Lint` - ADR-0006's lint over datasets and
+  expressions: an expression matching no guard, and an `expect` key naming
+  no dataset, both reported as warnings.
+- `StatifierUI.Fixtures.Expectations` - ADR-0006's executable-expectations
+  runner: evaluates every `expect` entry against its named dataset and
+  reports whether the stated value held.
 - `StatifierUI.Value` - the codec for ADR-0005's `$`-tagged JSON encoding of
   predicator values, used by the sidecar loader.
 - `StatifierUI.Shape` - pure shape inference from an example value to a
@@ -141,11 +147,36 @@ One fixture bundle is meant to power four features from a single artifact:
 - a simulator's event palette - without fixtures a simulator can only fire
   events with empty payloads.
 
+The bundle carries two more maps, both additive and both optional (ADR-0006):
+**datasets** are named, reusable example datamodels for evaluating
+expressions against - smaller in intent than a scenario, and named so a
+truth table's columns read as situations a human recognizes (`"minor"`,
+`"adult-us"`) rather than inline duplicates. **Expressions** are named,
+free-standing predicator source strings paired with an `expect` map keyed by
+dataset name, each entry a claim ("this expression evaluates to `true` under
+this dataset") a test suite can check rather than merely assert in prose.
+Datasets are shared across expressions rather than inlined per expression
+because a truth table is only a matrix when its columns are the same named
+situations for every row; inlining would duplicate the same situation into
+every expression that needs it, and the copies would drift apart. An
+expression is matched to a chart's guards by source-text equality only -
+never by `t_index` or any other position - because a compiled transition's
+index is a document-order position that shifts under an unrelated edit
+earlier in the chart, while the author-written source text is the one
+identity that survives reformatting the chart around it.
+
 Fixture-aware linting is a corollary rather than separate machinery: walking
 the compiled instruction stream for identifier references that no scenario
 or event fixture defines catches the common statechart bug of a typo'd path
 that silently evaluates to undefined, at author time rather than at run
-time.
+time. `StatifierUI.Fixtures.Lint` is ADR-0006's own lint over the two new
+maps - an expression matching no guard, and an `expect` key naming no
+dataset - both reported as warnings rather than errors, since neither is a
+defect of the contract on its own. `StatifierUI.Fixtures.Expectations` is
+ADR-0006's executable side: it evaluates every `expect` entry against its
+named dataset and reports whether the stated value held, so a host wires it
+into its own test suite and fixture documentation goes red the moment it
+drifts from what its expressions actually evaluate to.
 
 Fixtures are how a chart moves between statifier-ex and this repository:
 statifier-ex is the engine and the compiler, and does not need fixtures to
@@ -165,8 +196,9 @@ summary, and both paths converge on the one struct ADR-0003 names:
   completions use.
 
 How the sidecar file is named and how predicator values are encoded as
-`$`-tagged JSON are settled by ADR-0003 and ADR-0005 respectively; see those
-ADRs for the reasoning.
+`$`-tagged JSON are settled by ADR-0003 and ADR-0005 respectively, and the
+two additive maps described above are settled by ADR-0006; see those ADRs
+for the reasoning.
 
 ## The LiveComponents
 
