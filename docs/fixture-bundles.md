@@ -12,10 +12,10 @@ for how one travels with a fragment.
 
 ## The problem this solves
 
-ADR-0003 pairs a bundle with a chart. A chart at `payment.scxml` carries
-`payment.fixtures.json` beside it, and every consumer downstream of the
-loader gets one `StatifierUI.Fixtures` struct whichever delivery path
-produced it.
+ADR-0003 pairs a bundle with a chart. A chart at `authorization.scxml`
+carries `authorization.fixtures.json` beside it, and every consumer
+downstream of the loader gets one `StatifierUI.Fixtures` struct whichever
+delivery path produced it.
 
 An embedder composing charts from a palette of reusable fragments has no such
 file to sit beside. The fragment is a module in the host's code, or an entry
@@ -60,10 +60,69 @@ of a function call.
 A fragment that ships no examples at all is never an error. Discovery reports
 it as an absence.
 
+## Fragment names and invoke types are two namespaces
+
+A fragment name here is spelled with a **dot** - `myapp.authorize`. The
+family's invoke types are spelled with a **colon** - `myapp:authorize`. That
+is not a typo on either side, and the difference is load-bearing.
+
+The operator's ruling of 2026-08-27 settles it:
+
+> D5) two namespaces, with a documented one-to-one mapping convention.
+
+So: **two namespaces**, and this is the documented mapping convention.
+
+- A **fragment name** (`myapp.authorize`) names an entry in a palette. It is
+  the key `Bundle.load/2` and `Bundle.discover/1` are given, the name a
+  bundle is reported under, and - via `name_from_path/1` - the stem of a
+  sidecar filename. It is an *authoring-surface* identifier: what an author
+  picks out of a palette.
+- An **invoke type** (`myapp:authorize`) names something the engine can
+  invoke at runtime. It is an *execution* identifier, resolved through the
+  per-session invoke registry, and it is statifier-ex's contract, not this
+  package's.
+
+Both spellings are `<namespace><separator><local name>`, and the mapping
+between them is one to one in both directions: **swap the separator, change
+nothing else**. `myapp.authorize` is the palette entry for the invoke type
+`myapp:authorize`; `myapp:capture` is invoked by the fragment named
+`myapp.capture`. The namespace segment and the local name are identical
+character for character, so the mapping is total and mechanical - there is
+no lookup table, and there is nothing for a host to configure.
+
+Two consequences worth stating, because they are what the convention buys:
+
+- **A dot is the only separator a fragment name uses**, and a colon never
+  appears in one. Filenames are why: a sidecar is named for its fragment, and
+  a dot survives every filesystem and every archive format a palette travels
+  through. A fragment name carrying more than one dot has no invoke
+  counterpart under this convention.
+- **A fragment need not be invoke-backed at all.** A fragment that expands to
+  ordinary SCXML rather than to an `<invoke>` has a name and no invoke type,
+  and that is not a gap - the mapping is one to one over the invoke-backed
+  fragments, not over every palette entry. Nothing here requires a host to
+  mint an invoke type for a fragment that does not need one.
+
+Neither namespace is derived from the other at runtime. This package never
+turns a fragment name into an invoke type or back; the convention is a rule
+for humans naming things, so that a reader seeing `myapp.authorize` in a
+palette and `myapp:authorize` in a trace knows without asking that they are
+the two faces of one step.
+
 ## Wiring a palette entry
 
 A host's fragment type - a block type, a step type, whatever the host calls
 it - answers the callback:
+
+The corpus below is the card-processing one, deliberately **not** the
+signup-wizard corpus that
+`test/support/fixtures/expressions.fixtures.json` carries and ADR-0006
+illustrates with. A fragment's bundle is self-contained by construction (see
+the last bullet of this page), so a fragment gets the corpus its own domain
+calls for; the two are canonical example domains, not a primary and a
+variant. Both stay inside the family's two domains - card processing, and a
+signup wizard with A/B testing - and nothing here reads a chart-level corpus
+to build a fragment-level one.
 
 ```elixir
 defmodule MyApp.Blocks.Authorize do
@@ -81,7 +140,7 @@ defmodule MyApp.Blocks.Authorize do
         }
       },
       expressions: %{
-        "needs_review" => %{
+        "exceeds-budget" => %{
           "source" => "transaction.amount > account.budget_remaining",
           "expect" => %{"within-budget" => false, "over-budget" => true}
         }
@@ -103,15 +162,15 @@ Or discover every fragment's bundle across the palette at once:
 ```elixir
 palette = %{
   "myapp.authorize" => MyApp.Blocks.Authorize,
+  "myapp.capture" => MyApp.Blocks.Capture,
   "myapp.assign_variant" => MyApp.Blocks.AssignVariant,
-  "myapp.notify" => MyApp.Blocks.Notify,
-  "core.sequence" => MyApp.Blocks.Sequence
+  "myapp.signup" => MyApp.Blocks.Signup
 }
 
 discovery = StatifierUI.Fixtures.Bundle.discover(palette)
 
 discovery.bundles  # loaded, sorted by name
-discovery.without  # ["core.sequence"] - ships no examples, which is fine
+discovery.without  # ["myapp.signup"] - ships no examples, which is fine
 discovery.errors   # [{name, reason}] - meant to load, did not
 ```
 
@@ -130,7 +189,7 @@ it:
 ```
 palette/
   authorize.fixtures.json
-  notify.fixtures.json
+  capture.fixtures.json
   README.md
 ```
 
@@ -138,12 +197,13 @@ palette/
 {:ok, discovery} = StatifierUI.Fixtures.Bundle.discover_dir("palette")
 
 Enum.map(discovery.bundles, & &1.name)
-#=> ["authorize", "notify"]
+#=> ["authorize", "capture"]
 ```
 
 Each bundle is named after its file with the `.fixtures.json` suffix stripped
 (`StatifierUI.Fixtures.Bundle.name_from_path/1`), so a fragment named
-`core.wait` is a file named `core.wait.fixtures.json`. Files that are not
+`myapp.assign_variant` is a file named
+`myapp.assign_variant.fixtures.json`. Files that are not
 sidecars are ignored rather than reported. The directory is not walked
 recursively: a palette directory is a flat list of fragments, and a nested
 one is a second palette rather than a deeper part of this one.
