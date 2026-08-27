@@ -10,6 +10,71 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into a version section at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [0.2.0] 2026-08-27
+
+Fixtures become executable. ADR-0006 adds named datasets and free-standing
+expressions to a fixture bundle, `StatifierUI.TruthTable` evaluates the two
+against each other into a result matrix, and a bundle can now travel with a
+single reusable chart fragment rather than with a whole chart - so a palette
+entry carries its own worked examples and a host can run them in its own
+suite.
+
+### Added
+
+- `StatifierUI.Fixtures` gains `datasets` and `expressions` fields (ADR-0006):
+  named example datamodels for evaluating expressions against, and named
+  free-standing predicator expressions carrying an `expect` map keyed by
+  dataset name.
+- `StatifierUI.Fixtures.Source` gains optional `datasets/0` and
+  `expressions/0` callbacks so a host can supply the two new maps from
+  Elixir alongside `scenarios/0` and `example_events/0`.
+- `StatifierUI.Fixtures.Lint` reports an expression matching no compiled
+  guard and an `expect` key naming no dataset, both as warnings.
+- `StatifierUI.Fixtures.Expectations` runs every `expect` entry against its
+  named dataset and reports whether the stated value held, for wiring into a
+  host's own test suite.
+- Depends directly on `predicator` (`~> 9.0`) rather than only transitively
+  through `statifier`.
+- `StatifierUI.TruthTable` evaluates a bundle's expressions across its
+  datasets and returns the ADR-0006 result matrix, one cell per
+  `(expression, dataset)` pair. A cell's verdict is `:satisfied`,
+  `:unsatisfied`, `:undefined`, `:value`, `:error`, or `:missing_dataset` -
+  deliberately not `true` / `false`, so predicator's three-valued
+  `undefined` cannot be collapsed into false by Elixir truthiness.
+- `StatifierUI.TruthTable.Markdown` renders that matrix as Markdown, with
+  datasets down the rows and expressions across the columns by default, or
+  transposed with `orientation: :expressions_as_rows`. Every cell spells its
+  value out as a word and adds emphasis on top, so the three truth values
+  stay distinct in plain text.
+- `StatifierUI.Kino.truth_table/2` wraps the rendered matrix in a
+  `Kino.Markdown` widget for a Livebook cell. It needs no session and no
+  Phoenix; without the optional `:kino` dependency the stub points at the
+  pure renderer instead.
+- `StatifierUI.Fixtures.Bundle` lets an ADR-0003/ADR-0006 fixture bundle
+  travel with one reusable chart fragment instead of with a whole chart, so
+  a palette entry can carry its own executable examples. A fragment supplies
+  its bundle as a `StatifierUI.Fixtures` struct, an atom-keyed Elixir map, a
+  string-keyed sidecar map, or a path to a `.fixtures.json` file; all four
+  route through the existing validation and converge on one struct.
+- `StatifierUI.Fixtures.Bundle.discover/2` loads every entry's bundle across
+  a palette of modules, and `discover_dir/2` does the same for a directory
+  of `<fragment>.fixtures.json` files. Neither is all-or-nothing: a fragment
+  that ships no examples is reported as an absence, and one malformed bundle
+  is reported against its own name while the rest still load.
+- `StatifierUI.Fixtures.Bundle.Markdown` renders a fragment's "test this
+  step" panel - its truth table and its expectation results together - and
+  `render_discovery/2` renders a whole palette's worth. The expectations
+  summary reports four counts rather than a pass or a fail, because
+  `Expectations.check/2` and `Fixtures.Lint` deliberately disagree about
+  whether an `expect` key naming no dataset is a failure or a warning.
+- `StatifierUI.Kino.test_panel/2` and `StatifierUI.Kino.palette_panel/2`
+  wrap those renderings as `Kino.Markdown` widgets. Like `truth_table/2`
+  they need no session and no chart; without the optional `:kino`
+  dependency the stubs point at the pure renderers instead.
+- `docs/fixture-bundles.md` documents the convention and walks an embedder
+  through wiring a palette entry's bundle, discovering a whole palette, and
+  running every fragment's expectations in a host suite.
+
 ## [0.1.1] 2026-08-24
 
 Documentation-only release: brings the hexdocs to the shared fleet standard.
