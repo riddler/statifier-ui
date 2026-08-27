@@ -2,8 +2,8 @@ defmodule StatifierUI.Test.Support.Fixtures.ExpressionsSource do
   @moduledoc """
   A `StatifierUI.Fixtures.Source` used by the sidecar-vs-behaviour
   convergence test. Describes the same bundle as
-  `test/support/fixtures/expressions.fixtures.json`: two datasets and one
-  expression, written in Elixir terms instead of ADR-0005's JSON tagged
+  `test/support/fixtures/expressions.fixtures.json`: two datasets and two
+  expressions, written in Elixir terms instead of ADR-0005's JSON tagged
   encoding - `:undefined` and a real `Date` inside the `"expect"` map, per
   `test/support/fixtures/tagged_source.ex`'s convention for this pair.
   """
