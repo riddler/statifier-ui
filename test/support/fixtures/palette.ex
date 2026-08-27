@@ -11,7 +11,7 @@ defmodule StatifierUI.Test.Support.Fixtures.Palette do
   that a bundle loader needs nothing but a zero-arity function.
   """
 
-  defmodule Score do
+  defmodule Authorize do
     @moduledoc "A fragment supplying its bundle in the Elixir spelling."
 
     @doc "Executable examples for this fragment."
@@ -19,13 +19,19 @@ defmodule StatifierUI.Test.Support.Fixtures.Palette do
     def fixtures do
       %{
         datasets: %{
-          "hot-lead" => %{"record" => %{"pages_viewed" => 14}},
-          "cold-lead" => %{"record" => %{"pages_viewed" => 1}}
+          "within-budget" => %{
+            "transaction" => %{"amount" => 14},
+            "account" => %{"budget_remaining" => 500}
+          },
+          "over-budget" => %{
+            "transaction" => %{"amount" => 900},
+            "account" => %{"budget_remaining" => 500}
+          }
         },
         expressions: %{
           "needs_review" => %{
-            "source" => "record.pages_viewed < 5",
-            "expect" => %{"hot-lead" => false, "cold-lead" => true}
+            "source" => "transaction.amount > account.budget_remaining",
+            "expect" => %{"within-budget" => false, "over-budget" => true}
           }
         }
       }

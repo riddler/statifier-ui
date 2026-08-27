@@ -21,9 +21,10 @@ An embedder composing charts from a palette of reusable fragments has no such
 file to sit beside. The fragment is a module in the host's code, or an entry
 in a palette the host assembles at runtime, and the chart it will eventually
 be dropped into does not exist yet. Its examples still want to travel with
-it: an author picking "Score a record" out of a palette wants to see what
-that step's guard evaluates to under a hot lead and a cold one, before
-committing to it and without authoring a chart first.
+it: an author picking "Authorize a card" out of a palette wants to see what
+that step's guard evaluates to under a transaction inside the account's
+budget and one over it, before committing to it and without authoring a
+chart first.
 
 `StatifierUI.Fixtures.Bundle` is that: a `StatifierUI.Fixtures` struct plus
 the fragment's name and a record of where it came from.
@@ -38,7 +39,7 @@ A fragment supplies its bundle by answering a zero-arity callback -
 | `%StatifierUI.Fixtures{}` | the struct | already validated at construction |
 | `%{scenarios: ..., events: ..., datasets: ..., expressions: ...}` | **atom** top-level keys | `StatifierUI.Fixtures.new/1` |
 | `%{"version" => 1, "datasets" => ...}` | **string** top-level keys | `StatifierUI.Fixtures.Sidecar.from_json/2` |
-| `"palette/score.fixtures.json"` | a binary path | `StatifierUI.Fixtures.Sidecar.load/1` |
+| `"palette/authorize.fixtures.json"` | a binary path | `StatifierUI.Fixtures.Sidecar.load/1` |
 
 The atom-versus-string top-level key is the whole discriminator. Atom keys
 are the Elixir spelling a host writes by hand in a module; string keys are
@@ -65,18 +66,24 @@ A host's fragment type - a block type, a step type, whatever the host calls
 it - answers the callback:
 
 ```elixir
-defmodule MyApp.Blocks.Score do
+defmodule MyApp.Blocks.Authorize do
   @doc "Executable examples for this palette entry."
   def fixtures do
     %{
       datasets: %{
-        "hot-lead" => %{"record" => %{"pages_viewed" => 14, "domain" => "acme.example"}},
-        "cold-lead" => %{"record" => %{"pages_viewed" => 1, "domain" => "mail.example"}}
+        "within-budget" => %{
+          "transaction" => %{"amount" => 14, "currency" => "USD"},
+          "account" => %{"budget_remaining" => 500}
+        },
+        "over-budget" => %{
+          "transaction" => %{"amount" => 900, "currency" => "USD"},
+          "account" => %{"budget_remaining" => 500}
+        }
       },
       expressions: %{
         "needs_review" => %{
-          "source" => "record.pages_viewed < 5",
-          "expect" => %{"hot-lead" => false, "cold-lead" => true}
+          "source" => "transaction.amount > account.budget_remaining",
+          "expect" => %{"within-budget" => false, "over-budget" => true}
         }
       }
     }
@@ -88,14 +95,15 @@ Load one fragment's bundle directly:
 
 ```elixir
 {:ok, bundle} =
-  StatifierUI.Fixtures.Bundle.load("myapp.score", MyApp.Blocks.Score.fixtures())
+  StatifierUI.Fixtures.Bundle.load("myapp.authorize", MyApp.Blocks.Authorize.fixtures())
 ```
 
 Or discover every fragment's bundle across the palette at once:
 
 ```elixir
 palette = %{
-  "myapp.score" => MyApp.Blocks.Score,
+  "myapp.authorize" => MyApp.Blocks.Authorize,
+  "myapp.assign_variant" => MyApp.Blocks.AssignVariant,
   "myapp.notify" => MyApp.Blocks.Notify,
   "core.sequence" => MyApp.Blocks.Sequence
 }
@@ -121,7 +129,7 @@ it:
 
 ```
 palette/
-  score.fixtures.json
+  authorize.fixtures.json
   notify.fixtures.json
   README.md
 ```
@@ -130,7 +138,7 @@ palette/
 {:ok, discovery} = StatifierUI.Fixtures.Bundle.discover_dir("palette")
 
 Enum.map(discovery.bundles, & &1.name)
-#=> ["notify", "score"]
+#=> ["authorize", "notify"]
 ```
 
 Each bundle is named after its file with the `.fixtures.json` suffix stripped
@@ -150,7 +158,8 @@ consumer - with nothing but plain JSON.
 panel, and `StatifierUI.Kino.test_panel/2` wraps that for a Livebook cell:
 
 ```elixir
-{:ok, bundle} = StatifierUI.Fixtures.Bundle.load("myapp.score", MyApp.Blocks.Score.fixtures())
+{:ok, bundle} =
+  StatifierUI.Fixtures.Bundle.load("myapp.authorize", MyApp.Blocks.Authorize.fixtures())
 
 StatifierUI.Kino.test_panel(bundle)
 ```

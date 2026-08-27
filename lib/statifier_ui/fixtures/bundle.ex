@@ -60,7 +60,7 @@ defmodule StatifierUI.Fixtures.Bundle do
       and loads each module's bundle callback (`fixtures/0` by default,
       `:callback` to name another). This is the host-application path.
     * `discover_dir/2` walks a directory of `*.fixtures.json` files and names
-      each bundle after its file (`score.fixtures.json` becomes `"score"`).
+      each bundle after its file (`authorize.fixtures.json` becomes `"authorize"`).
       This is the corpus and CLI path, and it is what lets a palette of
       fragments travel as files with no host code around them.
 
@@ -134,14 +134,14 @@ defmodule StatifierUI.Fixtures.Bundle do
   ## Examples
 
       iex> {:ok, bundle} =
-      ...>   StatifierUI.Fixtures.Bundle.load("myapp.score", %{
-      ...>     datasets: %{"hot" => %{"score" => 90}},
-      ...>     expressions: %{"passes" => %{"source" => "score > 50"}}
+      ...>   StatifierUI.Fixtures.Bundle.load("myapp.authorize", %{
+      ...>     datasets: %{"approved" => %{"amount" => 90}},
+      ...>     expressions: %{"large" => %{"source" => "amount > 50"}}
       ...>   })
       iex> bundle.name
-      "myapp.score"
+      "myapp.authorize"
       iex> StatifierUI.Fixtures.dataset_names(bundle.fixtures)
-      ["hot"]
+      ["approved"]
 
   """
   @spec load(name(), term(), keyword()) :: {:ok, t()} | {:error, term()}
@@ -226,7 +226,7 @@ defmodule StatifierUI.Fixtures.Bundle do
 
   @doc """
   Loads every `*.fixtures.json` file directly inside `dir`, naming each
-  bundle after its file: `score.fixtures.json` becomes `"score"`.
+  bundle after its file: `authorize.fixtures.json` becomes `"authorize"`.
 
   The directory is not walked recursively - a palette directory is a flat
   list of fragments, and a nested one is a second palette, not a deeper part
@@ -248,8 +248,8 @@ defmodule StatifierUI.Fixtures.Bundle do
   end
 
   @doc """
-  Derives a bundle name from a sidecar filename: `"score.fixtures.json"`
-  becomes `"score"`.
+  Derives a bundle name from a sidecar filename:
+  `"authorize.fixtures.json"` becomes `"authorize"`.
 
   The inverse of `StatifierUI.Fixtures.Sidecar.sidecar_path/1` for the
   fragment case, where the name is the identity and the path is derived from
@@ -257,8 +257,8 @@ defmodule StatifierUI.Fixtures.Bundle do
 
   ## Examples
 
-      iex> StatifierUI.Fixtures.Bundle.name_from_path("palette/score.fixtures.json")
-      "score"
+      iex> StatifierUI.Fixtures.Bundle.name_from_path("palette/authorize.fixtures.json")
+      "authorize"
 
   """
   @spec name_from_path(Path.t()) :: name()

@@ -11,54 +11,54 @@ defmodule StatifierUI.Fixtures.BundleTest do
 
   describe "load/3 - the four spellings" do
     test "accepts an already-validated Fixtures struct and records it as inline" do
-      {:ok, fixtures} = Fixtures.new(datasets: %{"hot" => %{"score" => 90}})
+      {:ok, fixtures} = Fixtures.new(datasets: %{"approved" => %{"amount" => 90}})
 
-      assert {:ok, %Bundle{} = bundle} = Bundle.load("myapp.score", fixtures)
-      assert bundle.name == "myapp.score"
+      assert {:ok, %Bundle{} = bundle} = Bundle.load("myapp.authorize", fixtures)
+      assert bundle.name == "myapp.authorize"
       assert bundle.origin == :inline
       assert bundle.fixtures == fixtures
     end
 
     test "accepts the Elixir spelling: atom top-level keys" do
       assert {:ok, %Bundle{} = bundle} =
-               Bundle.load("myapp.score", %{
-                 datasets: %{"hot" => %{"record" => %{"pages_viewed" => 14}}},
-                 expressions: %{"busy" => %{"source" => "record.pages_viewed > 5"}}
+               Bundle.load("myapp.authorize", %{
+                 datasets: %{"approved" => %{"transaction" => %{"amount" => 14}}},
+                 expressions: %{"large" => %{"source" => "transaction.amount > 5"}}
                })
 
-      assert Fixtures.dataset_names(bundle.fixtures) == ["hot"]
-      assert Fixtures.expression_names(bundle.fixtures) == ["busy"]
+      assert Fixtures.dataset_names(bundle.fixtures) == ["approved"]
+      assert Fixtures.expression_names(bundle.fixtures) == ["large"]
     end
 
     test "accepts the JSON spelling: string top-level keys, decoded like a sidecar" do
       assert {:ok, %Bundle{} = bundle} =
                Bundle.load("myapp.signup", %{
                  "version" => 1,
-                 "datasets" => %{"adult" => %{"user" => %{"age" => 30}}},
+                 "datasets" => %{"variant-b" => %{"user" => %{"variant" => "b"}}},
                  "expressions" => %{
                    "signup" => %{
                      "source" => "user.signup_date",
-                     "expect" => %{"adult" => %{"$date" => "2026-01-15"}}
+                     "expect" => %{"variant-b" => %{"$date" => "2026-01-15"}}
                    }
                  }
                })
 
-      assert {:ok, ~D[2026-01-15]} = Fixtures.expect(bundle.fixtures, "signup", "adult")
+      assert {:ok, ~D[2026-01-15]} = Fixtures.expect(bundle.fixtures, "signup", "variant-b")
     end
 
     test "supplies version 1 for a JSON-spelled map that omits it" do
       assert {:ok, %Bundle{} = bundle} =
-               Bundle.load("myapp.score", %{"datasets" => %{"hot" => %{"score" => 90}}})
+               Bundle.load("myapp.authorize", %{"datasets" => %{"approved" => %{"amount" => 90}}})
 
-      assert Fixtures.dataset_names(bundle.fixtures) == ["hot"]
+      assert Fixtures.dataset_names(bundle.fixtures) == ["approved"]
     end
 
     test "accepts a sidecar path and records the file as the origin" do
-      path = Path.join(@bundles_dir, "score.fixtures.json")
+      path = Path.join(@bundles_dir, "authorize.fixtures.json")
 
-      assert {:ok, %Bundle{} = bundle} = Bundle.load("myapp.score", path)
+      assert {:ok, %Bundle{} = bundle} = Bundle.load("myapp.authorize", path)
       assert bundle.origin == {:sidecar, path}
-      assert Fixtures.dataset_names(bundle.fixtures) == ["cold-lead", "hot-lead"]
+      assert Fixtures.dataset_names(bundle.fixtures) == ["over-budget", "within-budget"]
     end
 
     test "an empty map is a bundle with nothing in it, not an ambiguity" do
@@ -68,36 +68,36 @@ defmodule StatifierUI.Fixtures.BundleTest do
 
     test "records an explicit :origin over the derived one" do
       assert {:ok, %Bundle{origin: {:module, SomeModule}}} =
-               Bundle.load("myapp.score", %{datasets: %{}}, origin: {:module, SomeModule})
+               Bundle.load("myapp.authorize", %{datasets: %{}}, origin: {:module, SomeModule})
     end
   end
 
   describe "load/3 - rejections" do
     test "rejects a map mixing atom and string top-level keys rather than guessing" do
-      assert {:error, {:mixed_bundle_keys, "myapp.score"}} =
-               Bundle.load("myapp.score", %{"expressions" => %{}, datasets: %{}})
+      assert {:error, {:mixed_bundle_keys, "myapp.authorize"}} =
+               Bundle.load("myapp.authorize", %{"expressions" => %{}, datasets: %{}})
     end
 
     test "rejects an unknown atom key, because a typo in Elixir is a bug not a future version" do
-      assert {:error, {:unknown_bundle_key, "myapp.score", :datsets}} =
-               Bundle.load("myapp.score", %{datsets: %{"typo" => %{}}})
+      assert {:error, {:unknown_bundle_key, "myapp.authorize", :datsets}} =
+               Bundle.load("myapp.authorize", %{datsets: %{"typo" => %{}}})
     end
 
     test "keeps the sidecar's ignore-unknown-keys discipline for the JSON spelling" do
       assert {:ok, %Bundle{} = bundle} =
-               Bundle.load("myapp.score", %{
+               Bundle.load("myapp.authorize", %{
                  "version" => 1,
-                 "datasets" => %{"hot" => %{}},
+                 "datasets" => %{"approved" => %{}},
                  "produced_by" => "a newer writer"
                })
 
       assert Enum.any?(bundle.diagnostics, &(&1.kind == :unknown_key))
-      assert Fixtures.dataset_names(bundle.fixtures) == ["hot"]
+      assert Fixtures.dataset_names(bundle.fixtures) == ["approved"]
     end
 
     test "wraps a validation failure with the fragment name" do
-      assert {:error, {:invalid_bundle, "myapp.score", _reason}} =
-               Bundle.load("myapp.score", %{datasets: %{"hot" => %{1 => "bad key"}}})
+      assert {:error, {:invalid_bundle, "myapp.authorize", _reason}} =
+               Bundle.load("myapp.authorize", %{datasets: %{"approved" => %{1 => "bad key"}}})
     end
 
     test "reports a missing sidecar file rather than an empty bundle" do
@@ -106,19 +106,19 @@ defmodule StatifierUI.Fixtures.BundleTest do
     end
 
     test "rejects a term in none of the four spellings" do
-      assert {:error, {:unrecognized_bundle, "myapp.score", 42}} =
-               Bundle.load("myapp.score", 42)
+      assert {:error, {:unrecognized_bundle, "myapp.authorize", 42}} =
+               Bundle.load("myapp.authorize", 42)
     end
   end
 
   describe "load!/3" do
     test "returns the bundle on success" do
-      assert %Bundle{name: "myapp.score"} = Bundle.load!("myapp.score", %{datasets: %{}})
+      assert %Bundle{name: "myapp.authorize"} = Bundle.load!("myapp.authorize", %{datasets: %{}})
     end
 
     test "raises with the fragment name and the reason" do
-      assert_raise ArgumentError, ~r/myapp\.score.*unknown_bundle_key/s, fn ->
-        Bundle.load!("myapp.score", %{datsets: %{}})
+      assert_raise ArgumentError, ~r/myapp\.authorize.*unknown_bundle_key/s, fn ->
+        Bundle.load!("myapp.authorize", %{datsets: %{}})
       end
     end
   end
@@ -127,7 +127,7 @@ defmodule StatifierUI.Fixtures.BundleTest do
     setup do
       %{
         palette: %{
-          "myapp.score" => Palette.Score,
+          "myapp.authorize" => Palette.Authorize,
           "myapp.notify" => Palette.Notify,
           "myapp.plain" => Palette.Plain,
           "myapp.malformed" => Palette.Malformed,
@@ -139,13 +139,13 @@ defmodule StatifierUI.Fixtures.BundleTest do
     test "loads both spellings, sorted by name", %{palette: palette} do
       discovery = Bundle.discover(palette)
 
-      assert Enum.map(discovery.bundles, & &1.name) == ["myapp.notify", "myapp.score"]
+      assert Enum.map(discovery.bundles, & &1.name) == ["myapp.authorize", "myapp.notify"]
     end
 
     test "records the module each bundle came from", %{palette: palette} do
       discovery = Bundle.discover(palette)
 
-      assert %{"myapp.score" => %Bundle{origin: {:module, Palette.Score}}} =
+      assert %{"myapp.authorize" => %Bundle{origin: {:module, Palette.Authorize}}} =
                Bundle.by_name(discovery)
     end
 
@@ -161,7 +161,7 @@ defmodule StatifierUI.Fixtures.BundleTest do
 
       assert {"myapp.malformed", {:unknown_bundle_key, "myapp.malformed", :datsets}} in discovery.errors
 
-      assert Enum.map(discovery.bundles, & &1.name) == ["myapp.notify", "myapp.score"]
+      assert Enum.map(discovery.bundles, & &1.name) == ["myapp.authorize", "myapp.notify"]
     end
 
     test "a raising callback is caught and reported against its own name", %{palette: palette} do
@@ -172,7 +172,7 @@ defmodule StatifierUI.Fixtures.BundleTest do
     end
 
     test "accepts a list of pairs as readily as a map" do
-      discovery = Bundle.discover([{"b", Palette.Notify}, {"a", Palette.Score}])
+      discovery = Bundle.discover([{"b", Palette.Notify}, {"a", Palette.Authorize}])
 
       assert Enum.map(discovery.bundles, & &1.name) == ["a", "b"]
     end
@@ -184,9 +184,9 @@ defmodule StatifierUI.Fixtures.BundleTest do
     end
 
     test ":callback names a function other than fixtures/0" do
-      discovery = Bundle.discover(%{"myapp.score" => Palette.Score}, callback: :examples)
+      discovery = Bundle.discover(%{"myapp.authorize" => Palette.Authorize}, callback: :examples)
 
-      assert discovery.without == ["myapp.score"]
+      assert discovery.without == ["myapp.authorize"]
     end
   end
 
@@ -194,15 +194,15 @@ defmodule StatifierUI.Fixtures.BundleTest do
     test "names each bundle after its file and sorts them" do
       assert {:ok, discovery} = Bundle.discover_dir(@bundles_dir)
 
-      assert Enum.map(discovery.bundles, & &1.name) == ["notify", "score"]
+      assert Enum.map(discovery.bundles, & &1.name) == ["authorize", "notify"]
     end
 
     test "records the file as the origin" do
       assert {:ok, discovery} = Bundle.discover_dir(@bundles_dir)
       bundles = Bundle.by_name(discovery)
 
-      assert bundles["score"].origin ==
-               {:sidecar, Path.join(@bundles_dir, "score.fixtures.json")}
+      assert bundles["authorize"].origin ==
+               {:sidecar, Path.join(@bundles_dir, "authorize.fixtures.json")}
     end
 
     test "ignores files that are not sidecars" do
@@ -216,7 +216,7 @@ defmodule StatifierUI.Fixtures.BundleTest do
       assert {:ok, discovery} = Bundle.discover_dir(@bundles_dir)
 
       assert Enum.any?(discovery.errors, fn {name, _reason} -> name == "broken" end)
-      assert Enum.map(discovery.bundles, & &1.name) == ["notify", "score"]
+      assert Enum.map(discovery.bundles, & &1.name) == ["authorize", "notify"]
     end
 
     test "carries the sidecar's own diagnostics onto the bundle" do
@@ -238,7 +238,7 @@ defmodule StatifierUI.Fixtures.BundleTest do
     end
 
     test "empty? is false once the bundle carries anything to evaluate" do
-      assert {:ok, bundle} = Bundle.load("myapp.score", %{datasets: %{"hot" => %{}}})
+      assert {:ok, bundle} = Bundle.load("myapp.authorize", %{datasets: %{"approved" => %{}}})
 
       refute Bundle.empty?(bundle)
     end
