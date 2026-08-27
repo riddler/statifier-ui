@@ -144,7 +144,7 @@ One fixture bundle is meant to power four features from a single artifact:
 
 - the datamodel explorer tree, in authoring mode (see below),
 - editor completions and hover, made context-sensitive by which fixture is
-  in scope (for example, inside `<transition event="payment.success">`,
+  in scope (for example, inside `<transition event="capture.settled">`,
   `_event.data.` completions come from that event's fixture),
 - a scratchpad evaluator that can safely evaluate on every keystroke, since
   predicator evaluation is pure and sandboxed,
