@@ -1047,6 +1047,17 @@ default chosen above and reversible either way.
    kind), preserve with an `:unknown_key` diagnostic at a deeper path, or
    reject. Needs a contract ruling; the plan takes the least destructive
    option meanwhile.
+
+   **Machine-checked (unattended, 2026-08-27):** confirmed the chosen reading
+   is what the code does, end to end through the sidecar path rather than
+   only through `Fixtures.new/1`. A hand-written sidecar carrying three
+   future keys inside one expression entry (`"description"`, a `"tags"`
+   list, and a two-level-nested `"nested"` object) loads clean through
+   `Sidecar.load/1`: all three come back verbatim, the nested object
+   included, and `diagnostics` is empty - preserved, not flagged, not
+   rejected. The contract ruling itself is untouched: this records what
+   ships, it does not settle which of the three readings ADR-0006 should
+   fix, which is the operator's ADR call.
 2. **A dataset cannot carry a duration value.** Datasets are validated as
    datamodels (string keys at every depth), and a predicator duration is a bare
    atom-keyed map, so `{"$duration": ...}` inside a dataset is rejected - the
@@ -1058,12 +1069,34 @@ default chosen above and reversible either way.
    rules for convergence, is a contract question ADR-0006 does not address.
    The plan keeps the datamodel rule, which is what the bead's convergence
    requirement asks for.
+
+   **Machine-checked (unattended, 2026-08-27):** confirmed the restriction is
+   real and that it reports itself distinctly.
+   `Fixtures.new(datasets: %{"minor" => %{"window" => %{days: 3}}})` returns
+   `{:error, {:duration_in_dataset, ["minor", "window"]}}` - rejected, with
+   its own tag rather than the generic `:invalid_key`, so a host hitting
+   this reads why rather than guessing. The stated default is what the code
+   does. Whether datasets should relax to `Predicator.Types.context/0` rules
+   instead is the contract question, and it stays open: it is an ADR-0006
+   amendment, not something a check can settle.
 3. **`:missing_dataset` severity differs between lint and the runner.** Lint
    reports a dangling `expect` key as a warning, as ADR-0006 fixes. The runner
    counts it as a failure, on the reasoning that an expectation which was never
    evaluated was not checked. That is a defensible reading of two different
    questions, but it is an inference rather than a stated rule, and a host
    might reasonably want a strict-lint or lenient-runner switch.
+
+   **Machine-checked (unattended, 2026-08-27):** confirmed BOTH halves of the
+   divergence live, in one run. Lint: `Lint.dangling_expect_keys/1` returns a
+   `:dangling_expect_dataset` diagnostic and `StatifierUI.Fixtures.Lint` has
+   no `{:error, _}` return path in its public API at all, so it is
+   structurally incapable of raising the severity. Runner: the same dangling
+   key inside `Expectations.check!/2` is counted among the failures and
+   printed as `signup-date / never-defined: expect names no such dataset` in
+   the raised message. So the severity does differ, deliberately and as
+   described. No switch exists. Whether one should is the open question, and
+   it stays open - adding a strict/lenient option is a contract decision plus
+   its own bead, not a fix inside a verification pass.
 4. **Whether `guard_matches/2` should take a machine or a list of guard
    sources.** Taking a `%Statifier.Machine{}` is convenient and needs no
    engine change, but it couples lint to the compiled-machine shape, which is
@@ -1072,6 +1105,18 @@ default chosen above and reversible either way.
    cost of making callers extract. The plan takes the machine, with the
    extraction isolated in one private function so the second arity is a small
    later addition.
+
+   **Machine-checked (unattended, 2026-08-27):** confirmed the stated default
+   AND the escape hatch it promised. `guard_matches/2`'s spec is
+   `guard_matches(Fixtures.t(), Machine.t())`, so it does take the machine;
+   and the coupling really is isolated in exactly one private function,
+   `guard_sources/1`, which is the only place in the module that touches
+   `%Statifier.Machine{}`'s shape (it reads `transitions`, `t_index`, and the
+   `{:compiled, _, source}` / `{:static, _}` / `nil` cases of `cond`). Every
+   public function above it works from the `[{t_index, source}]` list that
+   function returns, so a guard-source-list arity would be the small addition
+   the plan claims rather than a rewrite. Which arity the contract should
+   fix stays open; nothing here decides it.
 
 ## Deferred Manual Verification
 
@@ -1093,6 +1138,25 @@ looped (`--loop`) execution, this phase's Automated Verification gates
 advancement automatically (via `/wurk:commit --auto`), and Manual Verification
 items are deferred and surfaced once at the end instead of blocking here.
 
+**Machine-checked (unattended, 2026-08-27):** Ran all four malformed-dataset
+shapes through `Fixtures.new/1` and printed the returned tuples as a terminal
+shows them. Every one names the dataset: `{:invalid_dataset_name, :minor}`
+(the offending name itself), `{:invalid_dataset, "minor"}`,
+`{:invalid_key, :age, ["minor", "user"]}` (the path's head is the dataset
+name, two levels above the offending key), and
+`{:duration_in_dataset, ["minor", "window"]}`. The moduledoc's own promise
+("`path` starts with the scenario or dataset name") is what the code does.
+One observation, not a defect: an `:invalid_key` tuple is byte-identical in
+shape between a dataset and a scenario - the same input under `:scenarios`
+returns `{:invalid_key, :age, ["gold", "user"]}` - so only the path's head
+says which map it came from. The duration variant does disambiguate
+(`:duration_in_dataset` vs `:duration_in_scenario`). The dataset-versus-
+scenario moduledoc paragraph exists, defines both terms without requiring
+ADR-0006 to have been read (a scenario is "a complete example of the
+host-supplied datamodel"; a dataset "may be as small as the expression
+needs - a two-key map"), and cites ADR-0006 only for provenance. Whether it
+"reads as teachable" is a human judgment and stays deferred.
+
 ---
 
 ### Phase 2
@@ -1109,6 +1173,25 @@ looped (`--loop`) execution, this phase's Automated Verification gates
 advancement automatically (via `/wurk:commit --auto`), and Manual Verification
 items are deferred and surfaced once at the end instead of blocking here.
 
+**Machine-checked (unattended, 2026-08-27):** The `expect` semantics hold in
+the code, not only in the prose. Built a bundle whose one expression states
+an expectation for `"minor"` and none for `"adult"`:
+`Fixtures.expect/3` returns `{:ok, false}` for the stated dataset and
+`:error` for both the absent key and an unknown expression name;
+`Expectations.run/2` yields exactly ONE result (the stated one) rather than a
+second result carrying an absent/undefined expectation; and
+`Expectations.check/2` returns `:ok`. An absent key therefore produces no
+expectation at all, which is "no expectation stated" and not "expected to be
+absent". The moduledoc states the same and states the negation explicitly
+("not that the expression is expected to be undefined against it").
+Unrecognized entry keys: wrote a hand-written sidecar carrying three future
+keys inside one expression entry (`"description"`, a `"tags"` list, and a
+two-level-nested `"nested"` object) and loaded it through
+`Sidecar.load/1`. All three survive verbatim - the entry's sorted key list is
+`["description", "expect", "nested", "source", "tags"]`, the nested object
+comes back as `%{"deep" => %{"still" => "verbatim"}}` - and `diagnostics` is
+empty, so nothing is flagged either.
+
 ---
 
 ### Phase 3
@@ -1124,6 +1207,29 @@ the human to confirm the manual testing before moving to the next phase. In
 looped (`--loop`) execution, this phase's Automated Verification gates
 advancement automatically (via `/wurk:commit --auto`), and Manual Verification
 items are deferred and surfaced once at the end instead of blocking here.
+
+**Machine-checked (unattended, 2026-08-27):** Found one real defect and fixed
+it. Built the near-miss case the item names - a chart whose guard is
+`user.age >= 18 and user.country == 'US'` and a fixture expression whose
+source is the same predicate requoted and recased
+(`user.age >= 18 AND user.country == "US"`) - and printed the findings as a
+terminal shows them. `:dangling_expect_dataset` read well already
+(`expression "is-adult-us" states an expectation for unknown dataset
+"typo-dataset"`, plus a three-element `path`). `:unmatched_expression` did
+NOT: it read `expression "is-adult-us" matches no guard by source text` and
+never showed the expression's own source, so the one thing a near miss turns
+on - which bytes differ - was invisible in the terminal, and a reader could
+not tell a drift of one space from a genuinely free-standing expression. The
+source is already in hand at the call site. Fixed by appending it to the
+message, with the moduledoc's near-miss paragraph extended to say why the
+message carries it. No test asserted the old string. Added one test with a
+sabotage note and RAN the mutation (dropped the appended `inspect(source)`
+half): `mix test test/statifier_ui/fixtures/lint_test.exs` went red on
+exactly the intended assert and only that test (15 tests, 1 failure),
+reverted, re-ran green (15 tests, 0 failures). Still deferred, and genuinely
+human: whether the `guard_matches/2` output shape is what `sui-t0a` would
+actually want is a question about a consumer that does not exist yet, and no
+check here can answer it.
 
 ---
 
@@ -1142,6 +1248,28 @@ the human to confirm the manual testing before moving to the next phase. In
 looped (`--loop`) execution, this phase's Automated Verification gates
 advancement automatically (via `/wurk:commit --auto`), and Manual Verification
 items are deferred and surfaced once at the end instead of blocking here.
+
+**Machine-checked (unattended, 2026-08-27):** Triggered a real `check!/2`
+failure carrying one of each failure kind (a mismatch, a `:missing_dataset`,
+and a source that does not parse) and printed the raised exception's message
+verbatim - which is exactly what a host's ExUnit failure prints, since
+`ExpectationError` is a plain exception whose message does the reporting.
+The whole message is 4 lines and 398 bytes: a count line, then one line per
+failure naming its expression, its dataset, the expected value, and the
+actual value (`is-adult-us / minor: expected true, got false`;
+`signup-date / never-defined: expect names no such dataset`). That is a
+per-failure line, not a wall of inspected terms, and the struct still carries
+all three `results` for a caller that wants them. Two observations rather
+than defects: the `:error` line inspects the whole
+`%Predicator.Errors.ParseError{}` including `position` and `span`, which is
+about half the message's bytes but is also the only line carrying an
+actionable parse diagnostic; and no line prints the expression's SOURCE, so
+acting on `expected true, got false` without opening the fixture file means
+reasoning from the expression's name alone. Adding the source would cut
+against "not a wall of inspected terms" for a multi-failure run, so that
+trade-off is left for the human rather than decided here - and with it the
+whole helper-over-mix-task item, which the item's own text puts in front of a
+human by construction.
 
 ---
 
@@ -1166,5 +1294,42 @@ the human to confirm the manual testing before moving to the next phase. In
 looped (`--loop`) execution, this phase's Automated Verification gates
 advancement automatically (via `/wurk:commit --auto`), and Manual Verification
 items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+**Machine-checked (unattended, 2026-08-27)** - Phase 5, all four items:
+
+The architecture section teaches rather than restates: its datasets and
+expressions paragraph supplies reasoning ADR-0006's decision list does not,
+naming WHY datasets are shared rather than inlined per expression ("a truth
+table is only a matrix when its columns are the same named situations for
+every row; inlining would duplicate the same situation into every expression
+that needs it, and the copies would drift apart") and WHY matching is by
+source text ("a compiled transition's index is a document-order position
+that shifts under an unrelated edit earlier in the chart"). Whether it reads
+as teaching to a particular reader is a human judgment and stays deferred.
+
+The `docs/wire-format.md` edit is descriptive throughout, read against the
+diff: it says the carried object "may contain" the two additive keys, and
+that "this producer neither constructs nor validates either of the two
+additive keys, the same as it does not for the other two". No normative modal
+(must/shall/required) appears in either hunk, and neither hunk states what a
+producer or a consumer OUGHT to do with the keys, so ADR-0006's second open
+question is not pre-empted.
+
+Cross-references to ADR-0006 are by number everywhere: grepped every
+reference outside `docs/adr/0006-*` itself across `lib/`, `docs/`, `test/`
+and `README.md`. Every one spells it `ADR-0006` and none cites it by title
+alone. Repo-local citations are bare; the cross-repo ones (in `docs/adr/0005`,
+`0007`, `0008`) are qualified as "statifier ADR-0006", which is ADR-0001's
+convention for another repo's numbering. The two References-list entries pair
+the number with the path, which is what a References list is for.
+
+**Terminology firewall:** ran the umbrella's pre-push scan
+(`docs/terminology-firewall.md`) over the whole worktree with the documented
+exclusions. ZERO hits. The pipeline was proven live in a SEPARATE command by
+a positive control on a term known to be present (83 files matched), so the
+zero is an absence of hits rather than a broken invocation. Scan and push are
+separate commands, per that document's standing rule.
 
 ---

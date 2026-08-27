@@ -20,7 +20,11 @@ defmodule StatifierUI.Fixtures.Lint do
   guard. The warning exists for the near-miss case: an expression authored
   against a guard that has since drifted (reformatted, requoted, or
   otherwise edited), where matching is exact and a near match does not
-  count.
+  count. That case is exactly the one a bare "no match" message hides, so
+  the finding's message carries the expression's own source text: a drift
+  of one space or one quote style is invisible until the two strings can be
+  read against each other, and the reader has the chart's guards in front
+  of them already.
 
   Reads a compiled `%Statifier.Machine{}` only for its transitions' guard
   source text (`Statifier.Machine.Transition.cond`, the `{:compiled, _,
@@ -85,9 +89,12 @@ defmodule StatifierUI.Fixtures.Lint do
     |> Fixtures.expression_names()
     |> Enum.filter(fn name -> matches[name] == [] end)
     |> Enum.map(fn name ->
+      {:ok, expression} = Fixtures.expression(fixtures, name)
+
       diagnostic(
         :unmatched_expression,
-        "expression #{inspect(name)} matches no guard by source text",
+        "expression #{inspect(name)} matches no guard by source text: " <>
+          "#{inspect(Map.get(expression, "source"))}",
         [name]
       )
     end)

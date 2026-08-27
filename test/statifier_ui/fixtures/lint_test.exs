@@ -118,6 +118,22 @@ defmodule StatifierUI.Fixtures.LintTest do
       assert diagnostic.path == ["is-adult"]
     end
 
+    # Sabotage: dropped the `: #{inspect(source)}` half of the message in
+    # `unmatched_expressions/2` - this test went red on the second assert,
+    # the two below it stayed green.
+    test "the message carries the source text, so a near miss is readable" do
+      machine = compile!(@guarded)
+
+      # Byte-unequal to @guarded's "user.age >= 21" by whitespace alone -
+      # the drift a bare "no match" message leaves invisible.
+      fixtures =
+        fixtures!(expressions: %{"is-adult" => %{"source" => "user.age  >=  21"}})
+
+      assert [diagnostic] = Lint.unmatched_expressions(fixtures, machine)
+      assert diagnostic.message =~ inspect("user.age  >=  21")
+      assert diagnostic.message =~ "is-adult"
+    end
+
     test "emits nothing for a matched expression" do
       machine = compile!(@guarded)
 
