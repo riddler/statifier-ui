@@ -8,26 +8,28 @@ defmodule StatifierUI.Fixtures.Bundle.MarkdownTest do
   @bundles_dir "test/support/fixtures/bundles"
 
   setup do
-    {:ok, bundle} = Bundle.load("myapp.score", Palette.Score.fixtures())
+    {:ok, bundle} = Bundle.load("myapp.authorize", Palette.Authorize.fixtures())
     %{bundle: bundle}
   end
 
   describe "render/2 structure" do
     test "heads the panel with the fragment name", %{bundle: bundle} do
-      assert Markdown.render(bundle) =~ "# myapp.score"
+      assert Markdown.render(bundle) =~ "# myapp.authorize"
     end
 
     test ":heading overrides the name and nil drops the heading", %{bundle: bundle} do
-      assert Markdown.render(bundle, heading: "Score a record") =~ "# Score a record"
+      assert Markdown.render(bundle, heading: "Authorize a card") =~ "# Authorize a card"
       refute Markdown.render(bundle, heading: nil) =~ "\n# "
     end
 
     test "names where the bundle came from", %{bundle: bundle} do
       {:ok, from_module} =
-        Bundle.load("myapp.score", Palette.Score.fixtures(), origin: {:module, Palette.Score})
+        Bundle.load("myapp.authorize", Palette.Authorize.fixtures(),
+          origin: {:module, Palette.Authorize}
+        )
 
       assert Markdown.render(from_module) =~
-               "From `StatifierUI.Test.Support.Fixtures.Palette.Score`."
+               "From `StatifierUI.Test.Support.Fixtures.Palette.Authorize`."
 
       assert Markdown.render(bundle) =~ "From an inline bundle."
       refute Markdown.render(bundle, origin: false) =~ "From "
@@ -38,7 +40,7 @@ defmodule StatifierUI.Fixtures.Bundle.MarkdownTest do
 
       refute rendered =~ "# Truth table"
       assert rendered =~ "needs_review"
-      assert rendered =~ "hot-lead"
+      assert rendered =~ "within-budget"
     end
 
     test "says so plainly when a fragment ships nothing to evaluate" do
@@ -59,9 +61,9 @@ defmodule StatifierUI.Fixtures.Bundle.MarkdownTest do
 
     test "marks a mismatch in words, with emphasis added on top rather than instead" do
       {:ok, bundle} =
-        Bundle.load("myapp.score", %{
-          datasets: %{"hot" => %{"score" => 90}},
-          expressions: %{"low" => %{"source" => "score < 50", "expect" => %{"hot" => true}}}
+        Bundle.load("myapp.authorize", %{
+          datasets: %{"approved" => %{"amount" => 90}},
+          expressions: %{"low" => %{"source" => "amount < 50", "expect" => %{"approved" => true}}}
         })
 
       rendered = Markdown.render(bundle)
@@ -72,11 +74,11 @@ defmodule StatifierUI.Fixtures.Bundle.MarkdownTest do
 
     test "summarizes as four counts and never as a single verdict" do
       {:ok, bundle} =
-        Bundle.load("myapp.score", %{
-          datasets: %{"hot" => %{"score" => 90}},
+        Bundle.load("myapp.authorize", %{
+          datasets: %{"approved" => %{"amount" => 90}},
           expressions: %{
-            "high" => %{"source" => "score > 50", "expect" => %{"hot" => true}},
-            "dangling" => %{"source" => "score > 50", "expect" => %{"absent" => true}}
+            "high" => %{"source" => "amount > 50", "expect" => %{"approved" => true}},
+            "dangling" => %{"source" => "amount > 50", "expect" => %{"absent" => true}}
           }
         })
 
@@ -91,9 +93,9 @@ defmodule StatifierUI.Fixtures.Bundle.MarkdownTest do
 
     test "an expectation naming no dataset says so instead of showing an actual" do
       {:ok, bundle} =
-        Bundle.load("myapp.score", %{
+        Bundle.load("myapp.authorize", %{
           datasets: %{},
-          expressions: %{"x" => %{"source" => "score > 50", "expect" => %{"absent" => true}}}
+          expressions: %{"x" => %{"source" => "amount > 50", "expect" => %{"absent" => true}}}
         })
 
       assert Markdown.render(bundle) =~ "_no such dataset_"
@@ -101,9 +103,9 @@ defmodule StatifierUI.Fixtures.Bundle.MarkdownTest do
 
     test "reports a bundle that states no expectations at all" do
       {:ok, bundle} =
-        Bundle.load("myapp.score", %{
-          datasets: %{"hot" => %{"score" => 90}},
-          expressions: %{"high" => %{"source" => "score > 50"}}
+        Bundle.load("myapp.authorize", %{
+          datasets: %{"approved" => %{"amount" => 90}},
+          expressions: %{"high" => %{"source" => "amount > 50"}}
         })
 
       assert Markdown.render(bundle) =~ "Expectations: none stated."
@@ -122,7 +124,7 @@ defmodule StatifierUI.Fixtures.Bundle.MarkdownTest do
       expressions_as_rows = Markdown.render(bundle, orientation: :expressions_as_rows)
 
       assert datasets_as_rows =~ "| dataset |"
-      assert expressions_as_rows =~ "| expression | cold-lead | hot-lead |"
+      assert expressions_as_rows =~ "| expression | over-budget | within-budget |"
       refute datasets_as_rows == expressions_as_rows
     end
 
@@ -135,10 +137,10 @@ defmodule StatifierUI.Fixtures.Bundle.MarkdownTest do
       functions = %{"double" => {1, fn [n], _ctx -> {:ok, n * 2} end}}
 
       {:ok, bundle} =
-        Bundle.load("myapp.score", %{
-          datasets: %{"hot" => %{"score" => 21}},
+        Bundle.load("myapp.authorize", %{
+          datasets: %{"approved" => %{"amount" => 21}},
           expressions: %{
-            "doubled" => %{"source" => "double(score)", "expect" => %{"hot" => 42}}
+            "doubled" => %{"source" => "double(amount)", "expect" => %{"approved" => 42}}
           }
         })
 
@@ -171,10 +173,10 @@ defmodule StatifierUI.Fixtures.Bundle.MarkdownTest do
 
       rendered = Markdown.render_discovery(discovery)
 
+      assert rendered =~ "# authorize"
       assert rendered =~ "# notify"
-      assert rendered =~ "# score"
 
-      assert :binary.match(rendered, "# notify") < :binary.match(rendered, "# score")
+      assert :binary.match(rendered, "# authorize") < :binary.match(rendered, "# notify")
     end
 
     test "names every bundle that failed to load" do
@@ -188,11 +190,11 @@ defmodule StatifierUI.Fixtures.Bundle.MarkdownTest do
 
     test "stays silent about fragments that ship no examples" do
       discovery =
-        Bundle.discover(%{"myapp.plain" => Palette.Plain, "myapp.score" => Palette.Score})
+        Bundle.discover(%{"myapp.plain" => Palette.Plain, "myapp.authorize" => Palette.Authorize})
 
       rendered = Markdown.render_discovery(discovery)
 
-      assert rendered =~ "# myapp.score"
+      assert rendered =~ "# myapp.authorize"
       refute rendered =~ "myapp.plain"
     end
 

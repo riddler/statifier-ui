@@ -111,12 +111,17 @@ defmodule StatifierUI.KinoTest do
   describe "test_panel/2 and palette_panel/2" do
     setup do
       {:ok, bundle} =
-        Bundle.load("myapp.score", %{
-          datasets: %{"hot-lead" => %{"record" => %{"pages_viewed" => 14}}},
+        Bundle.load("myapp.authorize", %{
+          datasets: %{
+            "within-budget" => %{
+              "transaction" => %{"amount" => 14},
+              "account" => %{"budget_remaining" => 500}
+            }
+          },
           expressions: %{
             "needs_review" => %{
-              "source" => "record.pages_viewed < 5",
-              "expect" => %{"hot-lead" => false}
+              "source" => "transaction.amount > account.budget_remaining",
+              "expect" => %{"within-budget" => false}
             }
           }
         })
@@ -127,7 +132,7 @@ defmodule StatifierUI.KinoTest do
     test "test_panel/2 renders one fragment's panel as Markdown", %{bundle: bundle} do
       assert %Kino.Markdown{text: text} = StatifierUI.Kino.test_panel(bundle)
 
-      assert text =~ "# myapp.score"
+      assert text =~ "# myapp.authorize"
       assert text =~ "## Expectations"
       assert text =~ "1 matched, 0 mismatched, 0 errored,"
     end
@@ -136,7 +141,7 @@ defmodule StatifierUI.KinoTest do
       assert %Kino.Markdown{text: text} =
                StatifierUI.Kino.test_panel(bundle, heading: nil, expectations: false)
 
-      refute text =~ "# myapp.score"
+      refute text =~ "# myapp.authorize"
       refute text =~ "## Expectations"
     end
 
@@ -145,7 +150,7 @@ defmodule StatifierUI.KinoTest do
 
       assert %Kino.Markdown{text: text} = StatifierUI.Kino.palette_panel(discovery)
 
-      assert text =~ "# myapp.score"
+      assert text =~ "# myapp.authorize"
       refute text =~ "myapp.plain"
     end
   end

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "datasets": {
+    "within-budget": { "transaction": { "amount": 14 }, "account": { "budget_remaining": 500 } },
+    "over-budget": { "transaction": { "amount": 900 }, "account": { "budget_remaining": 500 } }
+  },
+  "expressions": {
+    "needs_review": {
+      "source": "transaction.amount > account.budget_remaining",
+      "expect": { "within-budget": false, "over-budget": true }
+    }
+  }
+}
