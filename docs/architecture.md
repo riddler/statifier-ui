@@ -154,8 +154,9 @@ One fixture bundle is meant to power four features from a single artifact:
 The bundle carries two more maps, both additive and both optional (ADR-0006):
 **datasets** are named, reusable example datamodels for evaluating
 expressions against - smaller in intent than a scenario, and named so a
-truth table's columns read as situations a human recognizes (`"minor"`,
-`"adult-us"`) rather than inline duplicates. **Expressions** are named,
+truth table's columns read as situations a human recognizes
+(`"variant-a-early"`, `"variant-b-complete"`) rather than inline duplicates.
+**Expressions** are named,
 free-standing predicator source strings paired with an `expect` map keyed by
 dataset name, each entry a claim ("this expression evaluates to `true` under
 this dataset") a test suite can check rather than merely assert in prose.

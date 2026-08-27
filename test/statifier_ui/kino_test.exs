@@ -69,12 +69,14 @@ defmodule StatifierUI.KinoTest do
       {:ok, fixtures} =
         Fixtures.new(
           datasets: %{
-            "adult-us" => %{"user" => %{"age" => 30, "country" => "US"}},
-            "minor" => %{"user" => %{"age" => 15, "country" => "US"}},
-            "sparse" => %{"user" => %{"country" => "US"}}
+            "variant-b-complete" => %{"signup" => %{"steps_completed" => 4, "variant" => "B"}},
+            "variant-a-early" => %{"signup" => %{"steps_completed" => 1, "variant" => "A"}},
+            "sparse" => %{"signup" => %{"variant" => "B"}}
           },
           expressions: %{
-            "is-adult-us" => %{"source" => "user.age >= 18 and user.country == 'US'"}
+            "is-complete-variant-b" => %{
+              "source" => "signup.steps_completed >= 3 and signup.variant == 'B'"
+            }
           }
         )
 
@@ -85,16 +87,16 @@ defmodule StatifierUI.KinoTest do
       assert %Kino.Markdown{text: text} = StatifierUI.Kino.truth_table(fixtures)
 
       assert text =~ "# Truth table"
-      assert text =~ "| dataset | is-adult-us |"
-      assert text =~ "| adult-us | **true** |"
-      assert text =~ "| minor | false |"
+      assert text =~ "| dataset | is-complete-variant-b |"
+      assert text =~ "| variant-b-complete | **true** |"
+      assert text =~ "| variant-a-early | false |"
       assert text =~ "| sparse | _undefined_ |"
     end
 
     test "splits its options between the builder and the renderer", %{fixtures: fixtures} do
       assert %Kino.Markdown{text: text} =
                StatifierUI.Kino.truth_table(fixtures,
-                 datasets: ["minor"],
+                 datasets: ["variant-a-early"],
                  title: nil,
                  legend: false,
                  sources: false
@@ -102,9 +104,9 @@ defmodule StatifierUI.KinoTest do
 
       refute text =~ "# Truth table"
       refute text =~ "Expressions:"
-      refute text =~ "| adult-us |"
+      refute text =~ "| variant-b-complete |"
       refute text =~ "| sparse |"
-      assert text =~ "| minor | false |"
+      assert text =~ "| variant-a-early | false |"
     end
   end
 

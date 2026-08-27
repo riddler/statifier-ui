@@ -17,7 +17,7 @@ defmodule StatifierUI.Fixtures.LintTest do
   @guarded """
       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="predicator">
         <state id="a">
-          <transition cond="user.age &gt;= 21" target="b"/>
+          <transition cond="signup.steps_completed &gt;= 4" target="b"/>
         </state>
         <state id="b"/>
       </scxml>
@@ -32,7 +32,7 @@ defmodule StatifierUI.Fixtures.LintTest do
           <transition event="go" target="a"/>
         </state>
         <state id="a">
-          <transition cond="user.age &gt;= 21" target="b"/>
+          <transition cond="signup.steps_completed &gt;= 4" target="b"/>
         </state>
         <state id="b"/>
       </scxml>
@@ -54,9 +54,9 @@ defmodule StatifierUI.Fixtures.LintTest do
       machine = compile!(@guarded)
 
       fixtures =
-        fixtures!(expressions: %{"is-adult" => %{"source" => "user.age >= 21"}})
+        fixtures!(expressions: %{"is-complete" => %{"source" => "signup.steps_completed >= 4"}})
 
-      assert %{"is-adult" => [t_index]} = Lint.guard_matches(fixtures, machine)
+      assert %{"is-complete" => [t_index]} = Lint.guard_matches(fixtures, machine)
       assert is_integer(t_index)
     end
 
@@ -64,9 +64,9 @@ defmodule StatifierUI.Fixtures.LintTest do
       machine = compile!(@guarded)
 
       fixtures =
-        fixtures!(expressions: %{"is-adult" => %{"source" => "user.age  >=  21"}})
+        fixtures!(expressions: %{"is-complete" => %{"source" => "signup.steps_completed  >=  4"}})
 
-      assert Lint.guard_matches(fixtures, machine) == %{"is-adult" => []}
+      assert Lint.guard_matches(fixtures, machine) == %{"is-complete" => []}
     end
 
     test "keeps matching the same guard after an edit shifts t_index values" do
@@ -74,10 +74,10 @@ defmodule StatifierUI.Fixtures.LintTest do
       after_machine = compile!(@guarded_shifted)
 
       fixtures =
-        fixtures!(expressions: %{"is-adult" => %{"source" => "user.age >= 21"}})
+        fixtures!(expressions: %{"is-complete" => %{"source" => "signup.steps_completed >= 4"}})
 
-      assert %{"is-adult" => [before_t_index]} = Lint.guard_matches(fixtures, before_machine)
-      assert %{"is-adult" => [after_t_index]} = Lint.guard_matches(fixtures, after_machine)
+      assert %{"is-complete" => [before_t_index]} = Lint.guard_matches(fixtures, before_machine)
+      assert %{"is-complete" => [after_t_index]} = Lint.guard_matches(fixtures, after_machine)
 
       # The match is on the guard's source text, not on any particular
       # index - the state inserted above shifted the transition's t_index,
@@ -111,18 +111,18 @@ defmodule StatifierUI.Fixtures.LintTest do
       machine = compile!(@guarded)
 
       fixtures =
-        fixtures!(expressions: %{"is-adult" => %{"source" => "user.age  >=  21"}})
+        fixtures!(expressions: %{"is-complete" => %{"source" => "signup.steps_completed  >=  4"}})
 
       assert [diagnostic] = Lint.unmatched_expressions(fixtures, machine)
       assert diagnostic.kind == :unmatched_expression
-      assert diagnostic.path == ["is-adult"]
+      assert diagnostic.path == ["is-complete"]
     end
 
     test "emits nothing for a matched expression" do
       machine = compile!(@guarded)
 
       fixtures =
-        fixtures!(expressions: %{"is-adult" => %{"source" => "user.age >= 21"}})
+        fixtures!(expressions: %{"is-complete" => %{"source" => "signup.steps_completed >= 4"}})
 
       assert Lint.unmatched_expressions(fixtures, machine) == []
     end
@@ -139,28 +139,28 @@ defmodule StatifierUI.Fixtures.LintTest do
     test "emits exactly one finding for an expect key naming no dataset" do
       fixtures =
         fixtures!(
-          datasets: %{"adult-us" => %{"user" => %{"age" => 30}}},
+          datasets: %{"variant-b-complete" => %{"signup" => %{"steps_completed" => 4}}},
           expressions: %{
-            "is-adult" => %{
-              "source" => "user.age >= 21",
-              "expect" => %{"adult-us" => true, "missing-dataset" => true}
+            "is-complete" => %{
+              "source" => "signup.steps_completed >= 4",
+              "expect" => %{"variant-b-complete" => true, "missing-dataset" => true}
             }
           }
         )
 
       assert [diagnostic] = Lint.dangling_expect_keys(fixtures)
       assert diagnostic.kind == :dangling_expect_dataset
-      assert diagnostic.path == ["is-adult", "expect", "missing-dataset"]
+      assert diagnostic.path == ["is-complete", "expect", "missing-dataset"]
     end
 
     test "emits nothing when every expect key names a real dataset" do
       fixtures =
         fixtures!(
-          datasets: %{"adult-us" => %{"user" => %{"age" => 30}}},
+          datasets: %{"variant-b-complete" => %{"signup" => %{"steps_completed" => 4}}},
           expressions: %{
-            "is-adult" => %{
-              "source" => "user.age >= 21",
-              "expect" => %{"adult-us" => true}
+            "is-complete" => %{
+              "source" => "signup.steps_completed >= 4",
+              "expect" => %{"variant-b-complete" => true}
             }
           }
         )
@@ -171,7 +171,9 @@ defmodule StatifierUI.Fixtures.LintTest do
     test "needs no machine - callable on a bundle alone" do
       fixtures =
         fixtures!(
-          expressions: %{"is-adult" => %{"source" => "user.age >= 21", "expect" => %{"x" => 1}}}
+          expressions: %{
+            "is-complete" => %{"source" => "signup.steps_completed >= 4", "expect" => %{"x" => 1}}
+          }
         )
 
       assert [%{kind: :dangling_expect_dataset}] = Lint.dangling_expect_keys(fixtures)
@@ -184,11 +186,11 @@ defmodule StatifierUI.Fixtures.LintTest do
 
       fixtures =
         fixtures!(
-          datasets: %{"adult-us" => %{"user" => %{"age" => 30}}},
+          datasets: %{"variant-b-complete" => %{"signup" => %{"steps_completed" => 4}}},
           expressions: %{
             "unmatched" => %{"source" => "does not match anything"},
-            "is-adult" => %{
-              "source" => "user.age >= 21",
+            "is-complete" => %{
+              "source" => "signup.steps_completed >= 4",
               "expect" => %{"missing-dataset" => true}
             }
           }
@@ -207,8 +209,8 @@ defmodule StatifierUI.Fixtures.LintTest do
         fixtures!(
           expressions: %{
             "unmatched" => %{"source" => "does not match anything"},
-            "is-adult" => %{
-              "source" => "user.age >= 21",
+            "is-complete" => %{
+              "source" => "signup.steps_completed >= 4",
               "expect" => %{"missing-dataset" => true}
             }
           }

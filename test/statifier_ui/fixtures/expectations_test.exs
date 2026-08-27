@@ -29,8 +29,8 @@ defmodule StatifierUI.Fixtures.ExpectationsTest do
       results = Expectations.run(fixtures)
 
       assert Enum.map(results, &{&1.expression, &1.dataset, &1.status}) == [
-               {"is-adult-us", "adult-us", :match},
-               {"is-adult-us", "minor", :match}
+               {"is-complete-variant-b", "variant-a-early", :match},
+               {"is-complete-variant-b", "variant-b-complete", :match}
              ]
     end
   end
@@ -39,19 +39,21 @@ defmodule StatifierUI.Fixtures.ExpectationsTest do
     test "check/2 reports a mismatch naming both values" do
       fixtures =
         fixtures!(
-          datasets: %{"adult-us" => %{"user" => %{"age" => 30, "country" => "US"}}},
+          datasets: %{
+            "variant-b-complete" => %{"signup" => %{"steps_completed" => 4, "variant" => "B"}}
+          },
           expressions: %{
-            "is-adult-us" => %{
-              "source" => "user.age >= 18 and user.country == 'US'",
-              "expect" => %{"adult-us" => false}
+            "is-complete-variant-b" => %{
+              "source" => "signup.steps_completed >= 3 and signup.variant == 'B'",
+              "expect" => %{"variant-b-complete" => false}
             }
           }
         )
 
       assert {:error, [result]} = Expectations.check(fixtures)
       assert result.status == :mismatch
-      assert result.expression == "is-adult-us"
-      assert result.dataset == "adult-us"
+      assert result.expression == "is-complete-variant-b"
+      assert result.dataset == "variant-b-complete"
       assert result.expected == false
       assert result.actual == true
     end
@@ -59,11 +61,13 @@ defmodule StatifierUI.Fixtures.ExpectationsTest do
     test "check!/2 raises ExpectationError with a message naming the drift" do
       fixtures =
         fixtures!(
-          datasets: %{"adult-us" => %{"user" => %{"age" => 30, "country" => "US"}}},
+          datasets: %{
+            "variant-b-complete" => %{"signup" => %{"steps_completed" => 4, "variant" => "B"}}
+          },
           expressions: %{
-            "is-adult-us" => %{
-              "source" => "user.age >= 18 and user.country == 'US'",
-              "expect" => %{"adult-us" => false}
+            "is-complete-variant-b" => %{
+              "source" => "signup.steps_completed >= 3 and signup.variant == 'B'",
+              "expect" => %{"variant-b-complete" => false}
             }
           }
         )
@@ -73,8 +77,8 @@ defmodule StatifierUI.Fixtures.ExpectationsTest do
           Expectations.check!(fixtures)
         end
 
-      assert error.message =~ "is-adult-us"
-      assert error.message =~ "adult-us"
+      assert error.message =~ "is-complete-variant-b"
+      assert error.message =~ "variant-b-complete"
       assert error.message =~ "false"
       assert error.message =~ "true"
     end

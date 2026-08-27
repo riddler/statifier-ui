@@ -37,7 +37,7 @@ defmodule StatifierUI.Fixtures.BundleTest do
                  "datasets" => %{"variant-b" => %{"user" => %{"variant" => "b"}}},
                  "expressions" => %{
                    "signup" => %{
-                     "source" => "user.signup_date",
+                     "source" => "signup.started_at",
                      "expect" => %{"variant-b" => %{"$date" => "2026-01-15"}}
                    }
                  }

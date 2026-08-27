@@ -97,9 +97,11 @@ defmodule StatifierUI.FixturesTest do
   describe "new/1 - datasets" do
     test "builds a valid bundle" do
       assert {:ok, %Fixtures{datasets: datasets}} =
-               Fixtures.new(datasets: %{"minor" => %{"user" => %{"age" => 15}}})
+               Fixtures.new(
+                 datasets: %{"variant-a-early" => %{"signup" => %{"steps_completed" => 1}}}
+               )
 
-      assert datasets == %{"minor" => %{"user" => %{"age" => 15}}}
+      assert datasets == %{"variant-a-early" => %{"signup" => %{"steps_completed" => 1}}}
     end
 
     test "rejects a non-map datasets value" do
@@ -108,27 +110,27 @@ defmodule StatifierUI.FixturesTest do
     end
 
     test "rejects a non-binary dataset name" do
-      assert {:error, {:invalid_dataset_name, :minor}} =
-               Fixtures.new(datasets: %{minor: %{}})
+      assert {:error, {:invalid_dataset_name, :variant_a_early}} =
+               Fixtures.new(datasets: %{variant_a_early: %{}})
     end
 
     test "rejects a non-map dataset entry, naming the dataset" do
-      assert {:error, {:invalid_dataset, "minor"}} =
-               Fixtures.new(datasets: %{"minor" => "not-a-map"})
+      assert {:error, {:invalid_dataset, "variant-a-early"}} =
+               Fixtures.new(datasets: %{"variant-a-early" => "not-a-map"})
     end
 
     test "rejects an atom key at depth, naming the dataset in its path" do
       dataset = %{"user" => %{ok: 1}}
 
-      assert {:error, {:invalid_key, :ok, ["minor", "user"]}} =
-               Fixtures.new(datasets: %{"minor" => dataset})
+      assert {:error, {:invalid_key, :ok, ["variant-a-early", "user"]}} =
+               Fixtures.new(datasets: %{"variant-a-early" => dataset})
     end
 
     test "a duration in dataset data says :duration_in_dataset, naming the path" do
       dataset = %{"trial_left" => %{days: 14}}
 
-      assert {:error, {:duration_in_dataset, ["minor", "trial_left"]}} =
-               Fixtures.new(datasets: %{"minor" => dataset})
+      assert {:error, {:duration_in_dataset, ["variant-a-early", "trial_left"]}} =
+               Fixtures.new(datasets: %{"variant-a-early" => dataset})
     end
   end
 
@@ -137,17 +139,17 @@ defmodule StatifierUI.FixturesTest do
       assert {:ok, %Fixtures{expressions: expressions}} =
                Fixtures.new(
                  expressions: %{
-                   "is-adult-us" => %{
-                     "source" => "user.age >= 18",
-                     "expect" => %{"minor" => false, "adult-us" => true}
+                   "is-complete-variant-b" => %{
+                     "source" => "signup.steps_completed >= 3",
+                     "expect" => %{"variant-a-early" => false, "variant-b-complete" => true}
                    }
                  }
                )
 
       assert expressions == %{
-               "is-adult-us" => %{
-                 "source" => "user.age >= 18",
-                 "expect" => %{"minor" => false, "adult-us" => true}
+               "is-complete-variant-b" => %{
+                 "source" => "signup.steps_completed >= 3",
+                 "expect" => %{"variant-a-early" => false, "variant-b-complete" => true}
                }
              }
     end
@@ -189,7 +191,7 @@ defmodule StatifierUI.FixturesTest do
     test "rejects an entry whose expect has a non-binary key" do
       assert {:error, {:invalid_expect, "e"}} =
                Fixtures.new(
-                 expressions: %{"e" => %{"source" => "x", "expect" => %{minor: false}}}
+                 expressions: %{"e" => %{"source" => "x", "expect" => %{variant_a_early: false}}}
                )
     end
 
@@ -197,7 +199,7 @@ defmodule StatifierUI.FixturesTest do
       assert {:ok, %Fixtures{}} =
                Fixtures.new(
                  expressions: %{
-                   "e" => %{"source" => "x", "expect" => %{"minor" => %{days: 14}}}
+                   "e" => %{"source" => "x", "expect" => %{"variant-a-early" => %{days: 14}}}
                  }
                )
     end
@@ -234,9 +236,9 @@ defmodule StatifierUI.FixturesTest do
       {:ok, fixtures} =
         Fixtures.new(
           expressions: %{
-            "is-adult-us" => %{
-              "source" => "user.age >= 18",
-              "expect" => %{"minor" => false, "adult-us" => true}
+            "is-complete-variant-b" => %{
+              "source" => "signup.steps_completed >= 3",
+              "expect" => %{"variant-a-early" => false, "variant-b-complete" => true}
             },
             "no-expectations" => %{"source" => "x"}
           }
@@ -246,15 +248,16 @@ defmodule StatifierUI.FixturesTest do
     end
 
     test "returns the stated expectation", %{fixtures: fixtures} do
-      assert Fixtures.expect(fixtures, "is-adult-us", "adult-us") == {:ok, true}
+      assert Fixtures.expect(fixtures, "is-complete-variant-b", "variant-b-complete") ==
+               {:ok, true}
     end
 
     test "returns :error when no expectation is stated for a real dataset", %{fixtures: fixtures} do
-      assert Fixtures.expect(fixtures, "no-expectations", "adult-us") == :error
+      assert Fixtures.expect(fixtures, "no-expectations", "variant-b-complete") == :error
     end
 
     test "returns :error for an unknown expression", %{fixtures: fixtures} do
-      assert Fixtures.expect(fixtures, "no-such-expression", "adult-us") == :error
+      assert Fixtures.expect(fixtures, "no-such-expression", "variant-b-complete") == :error
     end
   end
 
@@ -316,9 +319,11 @@ defmodule StatifierUI.FixturesTest do
     end
 
     test "dataset/2 fetches a dataset by name" do
-      {:ok, fixtures} = Fixtures.new(datasets: %{"minor" => %{"user" => %{"age" => 15}}})
+      {:ok, fixtures} =
+        Fixtures.new(datasets: %{"variant-a-early" => %{"signup" => %{"steps_completed" => 1}}})
 
-      assert Fixtures.dataset(fixtures, "minor") == {:ok, %{"user" => %{"age" => 15}}}
+      assert Fixtures.dataset(fixtures, "variant-a-early") ==
+               {:ok, %{"signup" => %{"steps_completed" => 1}}}
     end
   end
 end
