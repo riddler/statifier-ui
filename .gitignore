@@ -31,3 +31,6 @@ statifier_ui-*.tar
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Local beads telemetry churn; the tracker syncs via refs/dolt/data.
+.beads/interactions.jsonl
