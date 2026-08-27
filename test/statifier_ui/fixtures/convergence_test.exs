@@ -60,8 +60,9 @@ defmodule StatifierUI.Fixtures.ConvergenceTest do
       assert source.datasets != %{}
       assert source.expressions != %{}
 
-      assert {:ok, %{"expect" => %{"minor" => :undefined, "adult-us" => %Date{}}}} =
-               Fixtures.expression(source, "signup-date")
+      assert {:ok,
+              %{"expect" => %{"variant-a-early" => :undefined, "variant-b-complete" => %Date{}}}} =
+               Fixtures.expression(source, "started-date")
 
       assert source.diagnostics == []
       assert sidecar.diagnostics == []

@@ -7,7 +7,7 @@
 | [0003](0003-fixtures-as-the-example-data-contract.md) | Fixtures as the example-data contract | accepted |
 | [0004](0004-one-package-with-optional-integrations.md) | One package with optional integrations | accepted |
 | [0005](0005-language-neutral-trace-wire-format.md) | Language-neutral trace wire format | accepted, amended in part by 0011 |
-| [0006](0006-datasets-and-expression-fixtures.md) | Datasets and expression fixtures | accepted |
+| [0006](0006-datasets-and-expression-fixtures.md) | Datasets and expression fixtures | accepted, corpus amended 2026-08-27 |
 | [0007](0007-text-first-authoring.md) | Text-first authoring | accepted |
 | [0008](0008-client-side-elkjs-layout.md) | Client-side elkjs layout rendering plain SVG | accepted |
 | [0009](0009-javascript-ships-as-source.md) | JavaScript ships as source | accepted |

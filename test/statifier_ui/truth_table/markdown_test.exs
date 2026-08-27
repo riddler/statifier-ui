@@ -9,13 +9,15 @@ defmodule StatifierUI.TruthTable.MarkdownTest do
     {:ok, fixtures} =
       Fixtures.new(
         datasets: %{
-          "adult-us" => %{"user" => %{"age" => 30, "country" => "US"}},
-          "adult-sparse" => %{"user" => %{"country" => "US"}},
-          "minor" => %{"user" => %{"age" => 15, "country" => "US"}}
+          "variant-b-complete" => %{"signup" => %{"steps_completed" => 4, "variant" => "B"}},
+          "variant-b-sparse" => %{"signup" => %{"variant" => "B"}},
+          "variant-a-early" => %{"signup" => %{"steps_completed" => 1, "variant" => "A"}}
         },
         expressions: %{
-          "is-adult-us" => %{"source" => "user.age >= 18 and user.country == 'US'"},
-          "age" => %{"source" => "user.age"}
+          "is-complete-variant-b" => %{
+            "source" => "signup.steps_completed >= 3 and signup.variant == 'B'"
+          },
+          "steps" => %{"source" => "signup.steps_completed"}
         }
       )
 
@@ -36,18 +38,23 @@ defmodule StatifierUI.TruthTable.MarkdownTest do
       rows = table() |> Markdown.render() |> table_rows()
 
       assert [header, separator | body] = rows
-      assert header == ["dataset", "age", "is-adult-us"]
+      assert header == ["dataset", "is-complete-variant-b", "steps"]
       assert separator == ["---", "---", "---"]
-      assert Enum.map(body, &hd/1) == ["adult-sparse", "adult-us", "minor"]
+
+      assert Enum.map(body, &hd/1) == [
+               "variant-a-early",
+               "variant-b-complete",
+               "variant-b-sparse"
+             ]
     end
 
     test "renders the three truth values as three distinct cells" do
       [_header, _separator | body] = table() |> Markdown.render() |> table_rows()
 
       assert [
-               ["adult-sparse", "_undefined_", "_undefined_"],
-               ["adult-us", "`30`", "**true**"],
-               ["minor", "`15`", "false"]
+               ["variant-a-early", "false", "`1`"],
+               ["variant-b-complete", "**true**", "`4`"],
+               ["variant-b-sparse", "_undefined_", "_undefined_"]
              ] = body
     end
 
@@ -61,7 +68,7 @@ defmodule StatifierUI.TruthTable.MarkdownTest do
         |> Enum.uniq()
         |> Enum.sort()
 
-      assert words == ["15", "30", "false", "true", "undefined"]
+      assert words == ["1", "4", "false", "true", "undefined"]
     end
   end
 
@@ -73,9 +80,9 @@ defmodule StatifierUI.TruthTable.MarkdownTest do
         |> table_rows()
 
       assert [header, _separator | body] = rows
-      assert header == ["expression", "adult-sparse", "adult-us", "minor"]
-      assert Enum.map(body, &hd/1) == ["age", "is-adult-us"]
-      assert ["is-adult-us", "_undefined_", "**true**", "false"] in body
+      assert header == ["expression", "variant-a-early", "variant-b-complete", "variant-b-sparse"]
+      assert Enum.map(body, &hd/1) == ["is-complete-variant-b", "steps"]
+      assert ["is-complete-variant-b", "false", "**true**", "_undefined_"] in body
     end
   end
 
@@ -100,8 +107,11 @@ defmodule StatifierUI.TruthTable.MarkdownTest do
       markdown = Markdown.render(table())
 
       assert markdown =~ "Expressions:"
-      assert markdown =~ "- **is-adult-us**: `user.age >= 18 and user.country == 'US'`"
-      assert markdown =~ "- **age**: `user.age`"
+
+      assert markdown =~
+               "- **is-complete-variant-b**: `signup.steps_completed >= 3 and signup.variant == 'B'`"
+
+      assert markdown =~ "- **steps**: `signup.steps_completed`"
     end
 
     test "omits the source list when asked" do
@@ -120,7 +130,7 @@ defmodule StatifierUI.TruthTable.MarkdownTest do
       {:ok, fixtures} =
         Fixtures.new(
           datasets: %{"any" => %{"user" => %{}}},
-          expressions: %{"malformed" => %{"source" => "user.age +"}}
+          expressions: %{"malformed" => %{"source" => "signup.steps_completed +"}}
         )
 
       markdown = fixtures |> TruthTable.build() |> Markdown.render()
@@ -152,7 +162,9 @@ defmodule StatifierUI.TruthTable.MarkdownTest do
     end
 
     test "says there are no datasets when the expressions have nothing to run against" do
-      {:ok, fixtures} = Fixtures.new(expressions: %{"age" => %{"source" => "user.age"}})
+      {:ok, fixtures} =
+        Fixtures.new(expressions: %{"steps" => %{"source" => "signup.steps_completed"}})
+
       markdown = fixtures |> TruthTable.build() |> Markdown.render()
 
       assert markdown =~ "No datasets in this bundle."

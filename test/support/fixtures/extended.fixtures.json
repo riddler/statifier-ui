@@ -3,25 +3,25 @@
   "scenarios": {},
   "events": {},
   "datasets": {
-    "minor": {
-      "user": {
-        "age": 15,
-        "country": "US"
+    "variant-a-early": {
+      "signup": {
+        "steps_completed": 1,
+        "variant": "A"
       }
     },
-    "adult-us": {
-      "user": {
-        "age": 30,
-        "country": "US"
+    "variant-b-complete": {
+      "signup": {
+        "steps_completed": 4,
+        "variant": "B"
       }
     }
   },
   "expressions": {
-    "is-adult-us": {
-      "source": "user.age >= 18 and user.country == 'US'",
+    "is-complete-variant-b": {
+      "source": "signup.steps_completed >= 3 and signup.variant == 'B'",
       "expect": {
-        "minor": false,
-        "adult-us": true
+        "variant-a-early": false,
+        "variant-b-complete": true
       }
     }
   },

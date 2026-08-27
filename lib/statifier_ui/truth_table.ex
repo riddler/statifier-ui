@@ -20,7 +20,7 @@ defmodule StatifierUI.TruthTable do
   the type is shaped so the collapse cannot happen by accident.
 
   `:value` is a non-boolean result - predicator expressions are not required
-  to be predicates, and `"user.signup_date"` is a perfectly good row. `:error`
+  to be predicates, and `"signup.started_at"` is a perfectly good row. `:error`
   is an evaluation that returned `{:error, e}`; the error is carried as data
   (CLAUDE.md's errors-are-values rule) rather than raised or flattened into a
   false.

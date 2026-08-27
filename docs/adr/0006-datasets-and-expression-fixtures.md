@@ -1,6 +1,31 @@
 # ADR-0006: Datasets and expression fixtures
 
-Status: accepted (2026-08-16)
+Status: accepted (2026-08-16); corpus amended 2026-08-27 (sui-6ld) - the
+worked example moved off an ad-hoc age-eligibility domain and onto the
+family's canonical example domains; dataset names, expression names, and
+example values only, no part of the contract changed
+
+**Amendment note.** *(2026-08-27, sui-6ld, executing the fleet ruling of the
+same date.)* The record originally illustrated both new keys with an
+age-eligibility corpus - datasets `"minor"` and `"adult-us"`, the expression
+`user.age >= 18 and user.country == 'US'`. That domain is not one of the two
+the family uses for examples (card processing, and a signup wizard with A/B),
+and unlike the rest of this package's illustrations it appeared inside the
+Decision section rather than in prose around it. Illustrations elsewhere are
+fix-forward; decision text is not, so the substitution is recorded here
+rather than made silently.
+
+The corpus below is the signup-wizard equivalent, chosen to preserve the
+original's semantic coverage one for one: a compound predicate over a numeric
+comparison and a string equality (`is-complete-variant-b`), two datasets that
+make it false and true respectively (`variant-a-early`, `variant-b-complete`),
+and a non-boolean, sometimes-absent field exercising both the `$date` and the
+`$undefined` spellings (`started-date`). Every claim the record makes about
+datasets, expressions, matching, `expect` encoding, versioning, and the four
+powered features is unchanged - only the names and values the claims are
+demonstrated with. The same substitution was applied in the same commit to the
+fixture files and tests that carry this corpus, so the executable examples and
+the record continue to agree.
 
 ## Context
 
@@ -16,8 +41,8 @@ truth table. Simulation wants to annotate a chart's guards with what they
 evaluate to under several situations at once. The explorer wants more tier-3
 variants than the handful of full scenarios a host writes. And fixture
 documentation wants to be executable, so that an example claiming
-`user.age >= 18 and user.country == 'US'` is true for an adult in the US is
-checked by a test suite rather than trusted.
+`signup.steps_completed >= 3 and signup.variant == 'B'` is true for a
+completed variant-B signup is checked by a test suite rather than trusted.
 
 Two units are missing: a named, reusable situation smaller in intent than a
 full scenario, and a named expression that carries expected results. This
@@ -30,19 +55,19 @@ ADR-0003 stays accepted as it stands.
 **The fixture bundle gains two additive keys, both optional, both maps:**
 
 - **Datasets**: named, reusable datamodel records - each a name (for example
-  `"minor"`, `"adult-us"`) mapped to an example datamodel for that
-  situation. Datasets are shared across expressions rather than inlined per
-  expression: a truth table is only a matrix because its columns are the
-  same named situations for every row, the same situation exercises many
-  expressions without duplication, and a dataset name is a column header a
-  human can read.
+  `"variant-a-early"`, `"variant-b-complete"`) mapped to an example
+  datamodel for that situation. Datasets are shared across expressions
+  rather than inlined per expression: a truth table is only a matrix
+  because its columns are the same named situations for every row, the
+  same situation exercises many expressions without duplication, and a
+  dataset name is a column header a human can read.
 - **Expressions**: named entries each carrying a free-standing predicator
   `"source"` string and an `"expect"` map keyed by dataset name:
 
   ```json
   {
-    "source": "user.age >= 18 and user.country == 'US'",
-    "expect": {"minor": false, "adult-us": true}
+    "source": "signup.steps_completed >= 3 and signup.variant == 'B'",
+    "expect": {"variant-a-early": false, "variant-b-complete": true}
   }
   ```
 
@@ -170,9 +195,10 @@ is where their first consumers live.
   drift. Rejected.
 - **Reuse scenarios as the `expect` axis** (no separate datasets key):
   scenarios are chart-complete datamodels, and every pointed situation an
-  expression wants ("minor", "expired-card") would pollute the scenario
-  list every chart-level consumer renders. Rejected as the base shape; the
-  overlay question keeps convergence open without coupling the lists.
+  expression wants ("variant-a-early", "expired-card") would pollute the
+  scenario list every chart-level consumer renders. Rejected as the base
+  shape; the overlay question keeps convergence open without coupling the
+  lists.
 - **Match guards by `t_index`**: shifts under edit and silently pins the
   wrong guard, as argued in the decision. Rejected.
 - **Match guards by author-supplied transition ids**: SCXML gives
@@ -188,8 +214,9 @@ is where their first consumers live.
 **Open questions carried, not resolved here:**
 
 - **Dataset-overlays-a-base-scenario ergonomics.** Whether a dataset may
-  declare itself a delta over a named scenario (for example `"adult-us"`
-  as scenario `"gold-tier-user"` plus overrides), which would remove the
+  declare itself a delta over a named scenario (for example
+  `"variant-b-complete"` as scenario `"gold-tier-user"` plus overrides),
+  which would remove the
   hand-duplication the consequences above accept - and what it entails:
   merge depth, a spelling for key removal, and whether overlay resolution
   happens in the loader or per consumer. A call for the scratchpad /

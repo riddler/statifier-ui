@@ -13,26 +13,26 @@ defmodule StatifierUI.Test.Support.Fixtures.ExpressionsSource do
   @impl StatifierUI.Fixtures.Source
   def datasets do
     %{
-      "minor" => %{"user" => %{"age" => 15, "country" => "US"}},
-      "adult-us" => %{"user" => %{"age" => 30, "country" => "US"}}
+      "variant-a-early" => %{"signup" => %{"steps_completed" => 1, "variant" => "A"}},
+      "variant-b-complete" => %{"signup" => %{"steps_completed" => 4, "variant" => "B"}}
     }
   end
 
   @impl StatifierUI.Fixtures.Source
   def expressions do
     %{
-      "is-adult-us" => %{
-        "source" => "user.age >= 18 and user.country == 'US'",
+      "is-complete-variant-b" => %{
+        "source" => "signup.steps_completed >= 3 and signup.variant == 'B'",
         "expect" => %{
-          "minor" => false,
-          "adult-us" => true
+          "variant-a-early" => false,
+          "variant-b-complete" => true
         }
       },
-      "signup-date" => %{
-        "source" => "user.signup_date",
+      "started-date" => %{
+        "source" => "signup.started_at",
         "expect" => %{
-          "minor" => :undefined,
-          "adult-us" => ~D[2026-01-15]
+          "variant-a-early" => :undefined,
+          "variant-b-complete" => ~D[2026-01-15]
         }
       }
     }

@@ -7,23 +7,25 @@ defmodule StatifierUI.TruthTableTest do
 
   doctest StatifierUI.TruthTable
 
-  # Four datasets chosen so every verdict the type carries is reachable from
-  # one bundle: an adult with a signup date, an adult without one, a minor,
-  # and a record whose age is the wrong type.
+  # Three datasets and a malformed expression, chosen so every verdict the
+  # type carries is reachable from one bundle: a completed variant-B signup
+  # with a start date, a completed one without, and an early variant-A signup.
   defp bundle do
     {:ok, fixtures} =
       Fixtures.new(
         datasets: %{
-          "adult-us" => %{
-            "user" => %{"age" => 30, "country" => "US", "signup_date" => "2026-01-15"}
+          "variant-b-complete" => %{
+            "signup" => %{"steps_completed" => 4, "variant" => "B", "started_at" => "2026-01-15"}
           },
-          "adult-sparse" => %{"user" => %{"age" => 30, "country" => "US"}},
-          "minor" => %{"user" => %{"age" => 15, "country" => "US"}}
+          "variant-b-sparse" => %{"signup" => %{"steps_completed" => 4, "variant" => "B"}},
+          "variant-a-early" => %{"signup" => %{"steps_completed" => 1, "variant" => "A"}}
         },
         expressions: %{
-          "is-adult-us" => %{"source" => "user.age >= 18 and user.country == 'US'"},
-          "signup-date" => %{"source" => "user.signup_date"},
-          "malformed" => %{"source" => "user.age +"}
+          "is-complete-variant-b" => %{
+            "source" => "signup.steps_completed >= 3 and signup.variant == 'B'"
+          },
+          "started-date" => %{"source" => "signup.started_at"},
+          "malformed" => %{"source" => "signup.steps_completed +"}
         }
       )
 
@@ -39,26 +41,34 @@ defmodule StatifierUI.TruthTableTest do
     test "defaults to every expression and dataset, both sorted" do
       table = TruthTable.build(bundle())
 
-      assert Enum.map(table.expressions, & &1.name) == ["is-adult-us", "malformed", "signup-date"]
-      assert table.datasets == ["adult-sparse", "adult-us", "minor"]
+      assert Enum.map(table.expressions, & &1.name) == [
+               "is-complete-variant-b",
+               "malformed",
+               "started-date"
+             ]
+
+      assert table.datasets == ["variant-a-early", "variant-b-complete", "variant-b-sparse"]
     end
 
     test "carries each expression's source onto the axis" do
       table = TruthTable.build(bundle())
 
-      assert %{name: "is-adult-us", source: "user.age >= 18 and user.country == 'US'"} =
-               Enum.find(table.expressions, &(&1.name == "is-adult-us"))
+      assert %{
+               name: "is-complete-variant-b",
+               source: "signup.steps_completed >= 3 and signup.variant == 'B'"
+             } =
+               Enum.find(table.expressions, &(&1.name == "is-complete-variant-b"))
     end
 
     test "narrows and orders both axes when given them" do
       table =
         TruthTable.build(bundle(),
-          expressions: ["signup-date", "is-adult-us"],
-          datasets: ["minor", "adult-us"]
+          expressions: ["started-date", "is-complete-variant-b"],
+          datasets: ["variant-a-early", "variant-b-complete"]
         )
 
-      assert Enum.map(table.expressions, & &1.name) == ["signup-date", "is-adult-us"]
-      assert table.datasets == ["minor", "adult-us"]
+      assert Enum.map(table.expressions, & &1.name) == ["started-date", "is-complete-variant-b"]
+      assert table.datasets == ["variant-a-early", "variant-b-complete"]
       assert map_size(table.cells) == 4
     end
   end
@@ -69,7 +79,7 @@ defmodule StatifierUI.TruthTableTest do
     end
 
     test "a satisfied predicate is :satisfied, carrying the true it evaluated to", %{table: table} do
-      {:ok, cell} = TruthTable.cell(table, "is-adult-us", "adult-us")
+      {:ok, cell} = TruthTable.cell(table, "is-complete-variant-b", "variant-b-complete")
 
       assert cell.verdict == :satisfied
       assert cell.value == true
@@ -78,7 +88,7 @@ defmodule StatifierUI.TruthTableTest do
     end
 
     test "an unsatisfied predicate is :unsatisfied", %{table: table} do
-      {:ok, cell} = TruthTable.cell(table, "is-adult-us", "minor")
+      {:ok, cell} = TruthTable.cell(table, "is-complete-variant-b", "variant-a-early")
 
       assert cell.verdict == :unsatisfied
       assert cell.value == false
@@ -86,7 +96,7 @@ defmodule StatifierUI.TruthTableTest do
     end
 
     test "an absent input is :undefined, never :unsatisfied", %{table: table} do
-      {:ok, cell} = TruthTable.cell(table, "signup-date", "adult-sparse")
+      {:ok, cell} = TruthTable.cell(table, "started-date", "variant-b-sparse")
 
       assert cell.verdict == :undefined
       assert cell.value == :undefined
@@ -94,7 +104,7 @@ defmodule StatifierUI.TruthTableTest do
     end
 
     test "a non-boolean result is :value, labelled with the value", %{table: table} do
-      {:ok, cell} = TruthTable.cell(table, "signup-date", "adult-us")
+      {:ok, cell} = TruthTable.cell(table, "started-date", "variant-b-complete")
 
       assert cell.verdict == :value
       assert cell.value == "2026-01-15"
@@ -102,7 +112,7 @@ defmodule StatifierUI.TruthTableTest do
     end
 
     test "an evaluation failure is :error carrying the error as data", %{table: table} do
-      {:ok, cell} = TruthTable.cell(table, "malformed", "adult-us")
+      {:ok, cell} = TruthTable.cell(table, "malformed", "variant-b-complete")
 
       assert cell.verdict == :error
       assert cell.value == nil
@@ -116,8 +126,8 @@ defmodule StatifierUI.TruthTableTest do
     end
 
     test "the undefined and unsatisfied verdicts are distinct terms", %{table: table} do
-      undefined = verdict(table, "signup-date", "adult-sparse")
-      unsatisfied = verdict(table, "is-adult-us", "minor")
+      undefined = verdict(table, "started-date", "variant-b-sparse")
+      unsatisfied = verdict(table, "is-complete-variant-b", "variant-a-early")
 
       refute undefined == unsatisfied
       assert TruthTable.label(undefined) != TruthTable.label(unsatisfied)
@@ -142,10 +152,10 @@ defmodule StatifierUI.TruthTableTest do
 
   describe "build/2 names that are on an axis but not in the bundle" do
     test "an unknown dataset yields :missing_dataset rather than a dropped column" do
-      table = TruthTable.build(bundle(), datasets: ["minor", "no-such-dataset"])
+      table = TruthTable.build(bundle(), datasets: ["variant-a-early", "no-such-dataset"])
 
-      assert table.datasets == ["minor", "no-such-dataset"]
-      {:ok, cell} = TruthTable.cell(table, "is-adult-us", "no-such-dataset")
+      assert table.datasets == ["variant-a-early", "no-such-dataset"]
+      {:ok, cell} = TruthTable.cell(table, "is-complete-variant-b", "no-such-dataset")
 
       assert cell.verdict == :missing_dataset
       assert cell.label == "no dataset"
@@ -156,7 +166,7 @@ defmodule StatifierUI.TruthTableTest do
       table = TruthTable.build(bundle(), expressions: ["no-such-expression"])
 
       assert [%{name: "no-such-expression", source: nil}] = table.expressions
-      {:ok, cell} = TruthTable.cell(table, "no-such-expression", "minor")
+      {:ok, cell} = TruthTable.cell(table, "no-such-expression", "variant-a-early")
 
       assert cell.verdict == :error
       assert cell.error == {:unknown_expression, "no-such-expression"}
@@ -167,35 +177,35 @@ defmodule StatifierUI.TruthTableTest do
     setup do
       table =
         TruthTable.build(bundle(),
-          expressions: ["is-adult-us", "signup-date"],
-          datasets: ["minor", "adult-us"]
+          expressions: ["is-complete-variant-b", "started-date"],
+          datasets: ["variant-a-early", "variant-b-complete"]
         )
 
       %{table: table}
     end
 
     test "row/2 walks the dataset axis in order", %{table: table} do
-      assert table |> TruthTable.row("is-adult-us") |> Enum.map(& &1.dataset) ==
-               ["minor", "adult-us"]
+      assert table |> TruthTable.row("is-complete-variant-b") |> Enum.map(& &1.dataset) ==
+               ["variant-a-early", "variant-b-complete"]
     end
 
     test "column/2 walks the expression axis in order", %{table: table} do
-      assert table |> TruthTable.column("minor") |> Enum.map(& &1.expression) ==
-               ["is-adult-us", "signup-date"]
+      assert table |> TruthTable.column("variant-a-early") |> Enum.map(& &1.expression) ==
+               ["is-complete-variant-b", "started-date"]
     end
 
     test "cells/1 is expression-then-dataset order", %{table: table} do
       assert table |> TruthTable.cells() |> Enum.map(&{&1.expression, &1.dataset}) == [
-               {"is-adult-us", "minor"},
-               {"is-adult-us", "adult-us"},
-               {"signup-date", "minor"},
-               {"signup-date", "adult-us"}
+               {"is-complete-variant-b", "variant-a-early"},
+               {"is-complete-variant-b", "variant-b-complete"},
+               {"started-date", "variant-a-early"},
+               {"started-date", "variant-b-complete"}
              ]
     end
 
     test "cell/3 returns :error for a name off the axes", %{table: table} do
-      assert TruthTable.cell(table, "is-adult-us", "adult-sparse") == :error
-      assert TruthTable.cell(table, "malformed", "minor") == :error
+      assert TruthTable.cell(table, "is-complete-variant-b", "variant-b-sparse") == :error
+      assert TruthTable.cell(table, "malformed", "variant-a-early") == :error
     end
 
     test "row/2 for an off-axis expression reports it rather than returning nothing", %{
@@ -204,7 +214,7 @@ defmodule StatifierUI.TruthTableTest do
       [cell | _rest] = TruthTable.row(table, "malformed")
 
       assert cell.verdict == :error
-      assert cell.error == {:off_axis, "malformed", "minor"}
+      assert cell.error == {:off_axis, "malformed", "variant-a-early"}
     end
   end
 
@@ -213,18 +223,18 @@ defmodule StatifierUI.TruthTableTest do
       {:ok, fixtures} = Fixtures.from_source(ExpressionsSource)
       table = TruthTable.build(fixtures)
 
-      assert Enum.map(table.expressions, & &1.name) == ["is-adult-us", "signup-date"]
-      assert table.datasets == ["adult-us", "minor"]
+      assert Enum.map(table.expressions, & &1.name) == ["is-complete-variant-b", "started-date"]
+      assert table.datasets == ["variant-a-early", "variant-b-complete"]
 
-      assert verdict(table, "is-adult-us", "adult-us") == :satisfied
-      assert verdict(table, "is-adult-us", "minor") == :unsatisfied
+      assert verdict(table, "is-complete-variant-b", "variant-b-complete") == :satisfied
+      assert verdict(table, "is-complete-variant-b", "variant-a-early") == :unsatisfied
 
-      # Neither dataset carries a signup_date, so both cells are undefined -
+      # Neither dataset carries a started_at, so both cells are undefined -
       # including the one whose stated `expect` is a Date. The table reports
       # what evaluates, not what was hoped for; disagreement with `expect` is
       # StatifierUI.Fixtures.Expectations' question.
-      assert verdict(table, "signup-date", "adult-us") == :undefined
-      assert verdict(table, "signup-date", "minor") == :undefined
+      assert verdict(table, "started-date", "variant-b-complete") == :undefined
+      assert verdict(table, "started-date", "variant-a-early") == :undefined
     end
   end
 

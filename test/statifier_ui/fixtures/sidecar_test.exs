@@ -83,7 +83,7 @@ defmodule StatifierUI.Fixtures.SidecarTest do
       assert {:ok, %Fixtures{diagnostics: []}} =
                Sidecar.from_json(%{
                  "version" => 1,
-                 "datasets" => %{"minor" => %{"age" => 15}},
+                 "datasets" => %{"variant-a-early" => %{"age" => 15}},
                  "expressions" => %{"e" => %{"source" => "age >= 18"}}
                })
     end
@@ -142,19 +142,25 @@ defmodule StatifierUI.Fixtures.SidecarTest do
                Sidecar.from_json(decoded)
 
       assert map_size(datasets) == 2
-      assert datasets["minor"] == %{"user" => %{"age" => 15, "country" => "US"}}
-      assert datasets["adult-us"] == %{"user" => %{"age" => 30, "country" => "US"}}
+
+      assert datasets["variant-a-early"] == %{
+               "signup" => %{"steps_completed" => 1, "variant" => "A"}
+             }
+
+      assert datasets["variant-b-complete"] == %{
+               "signup" => %{"steps_completed" => 4, "variant" => "B"}
+             }
     end
 
-    test "expressions loads with the is-adult-us entry and its two expectations",
+    test "expressions loads with the is-complete-variant-b entry and its two expectations",
          %{decoded: decoded} do
       assert {:ok, %Fixtures{} = fixtures} = Sidecar.from_json(decoded)
 
       assert {:ok, %{"source" => source, "expect" => expect}} =
-               Fixtures.expression(fixtures, "is-adult-us")
+               Fixtures.expression(fixtures, "is-complete-variant-b")
 
-      assert source == "user.age >= 18 and user.country == 'US'"
-      assert expect == %{"minor" => false, "adult-us" => true}
+      assert source == "signup.steps_completed >= 3 and signup.variant == 'B'"
+      assert expect == %{"variant-a-early" => false, "variant-b-complete" => true}
     end
   end
 
@@ -166,12 +172,13 @@ defmodule StatifierUI.Fixtures.SidecarTest do
                  "expressions" => %{
                    "e" => %{
                      "source" => "x",
-                     "expect" => %{"minor" => %{"$undefined" => true}}
+                     "expect" => %{"variant-a-early" => %{"$undefined" => true}}
                    }
                  }
                })
 
-      assert {:ok, %{"expect" => %{"minor" => :undefined}}} = Fixtures.expression(fixtures, "e")
+      assert {:ok, %{"expect" => %{"variant-a-early" => :undefined}}} =
+               Fixtures.expression(fixtures, "e")
     end
 
     test "a $duration expect value decodes, proving expect values are not key-walked" do
@@ -181,12 +188,14 @@ defmodule StatifierUI.Fixtures.SidecarTest do
                  "expressions" => %{
                    "e" => %{
                      "source" => "x",
-                     "expect" => %{"minor" => %{"$duration" => %{"days" => 14}}}
+                     "expect" => %{"variant-a-early" => %{"$duration" => %{"days" => 14}}}
                    }
                  }
                })
 
-      assert {:ok, %{"expect" => %{"minor" => duration}}} = Fixtures.expression(fixtures, "e")
+      assert {:ok, %{"expect" => %{"variant-a-early" => duration}}} =
+               Fixtures.expression(fixtures, "e")
+
       assert duration.days == 14
     end
 
@@ -243,13 +252,14 @@ defmodule StatifierUI.Fixtures.SidecarTest do
 
       File.write!(path, ~s({
         "version": 1,
-        "datasets": {"minor": {"trial_left": {"$duration": {"days": 14}}}}
+        "datasets": {"variant-a-early": {"trial_left": {"$duration": {"days": 14}}}}
       }))
 
       on_exit(fn -> File.rm(path) end)
 
       assert {:error,
-              {:invalid_sidecar_contents, ^path, {:duration_in_dataset, ["minor", "trial_left"]}}} =
+              {:invalid_sidecar_contents, ^path,
+               {:duration_in_dataset, ["variant-a-early", "trial_left"]}}} =
                Sidecar.load(path)
     end
   end
