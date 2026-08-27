@@ -28,7 +28,7 @@ defmodule StatifierUI.Fixtures.Lint do
 
   Reads a compiled `%Statifier.Machine{}` only for its transitions' guard
   source text (`Statifier.Machine.Transition.cond`, the `{:compiled, _,
-  source}` shape `Statifier.Machine.expr/0` documents). Nothing here calls
+  source}` shape `t:Statifier.Machine.expr/0` documents). Nothing here calls
   `Predicator` - it reads source strings, it does not evaluate them - and
   nothing here modifies the engine (ADR-0002).
   """
