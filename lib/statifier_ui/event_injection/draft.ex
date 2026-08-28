@@ -68,11 +68,11 @@ defmodule StatifierUI.EventInjection.Draft do
 
   ## Examples
 
-      iex> {:ok, event} = StatifierUI.EventInjection.Draft.build("payment.success", ~s({"amount":1999}))
+      iex> {:ok, event} = StatifierUI.EventInjection.Draft.build("authorize.approved", ~s({"amount_cents":1999}))
       iex> event.data
-      %{"amount" => 1999}
+      %{"amount_cents" => 1999}
 
-      iex> {:ok, event} = StatifierUI.EventInjection.Draft.build("payment.success", "")
+      iex> {:ok, event} = StatifierUI.EventInjection.Draft.build("authorize.approved", "")
       iex> event.data
       :undefined
 

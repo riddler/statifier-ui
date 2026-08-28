@@ -68,11 +68,11 @@ defmodule StatifierUI.Diagram do
 
       iex> {:ok, machine} =
       ...>   Statifier.compile(\"\"\"
-      ...>       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="on">
-      ...>         <state id="on">
-      ...>           <transition event="toggle" target="off"/>
+      ...>       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="pending">
+      ...>         <state id="pending">
+      ...>           <transition event="authorize.approved" target="authorized"/>
       ...>         </state>
-      ...>         <state id="off"/>
+      ...>         <state id="authorized"/>
       ...>       </scxml>
       ...>   \"\"\")
       iex> source = StatifierUI.Diagram.render(machine, [1])
