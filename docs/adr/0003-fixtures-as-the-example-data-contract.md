@@ -1,6 +1,51 @@
 # ADR-0003: Fixtures as the example-data contract
 
 Status: accepted (2026-08-16)
+Amendment status: **proposed** (2026-08-27, sui-0of) - see below; the
+accepted text is unchanged and stays authoritative until the amendment is
+read and accepted.
+
+## Amendment proposed 2026-08-27 (sui-0of): canonical example domains
+
+*Proposed, not accepted. Nothing below this section has been edited.*
+
+The fleet ruling of 2026-08-27 fixes exactly two example domains for the
+whole family - credit-card processing (accounts, budgets, transactions,
+authorization and settlement) and a signup wizard with A/B testing (steps,
+variants, conversion events) - and retires per-repo ad-hoc domains. This
+record's illustrations predate that ruling and are off it.
+
+`sui-6ld` set the precedent that a substitution reaching an accepted ADR's
+own text is recorded as a dated amendment rather than made silently. This
+amendment goes one step further and does not edit the accepted text at
+all: it proposes the substitution and leaves the reading to the operator.
+
+**Names and example values only. No part of the contract changes.** Two
+maps, two delivery paths, one struct; the sidecar shape, the version field,
+the inference rule, and every rejected alternative all stand exactly as
+accepted. Only the strings the claims are demonstrated with move.
+
+Proposed substitutions, by site:
+
+| Site | Accepted text | Proposed |
+|---|---|---|
+| Decision, "Shape", scenarios bullet | scenario `"gold-tier-user"` | `"within-budget-account"` |
+| Decision, "Shape", events bullet | event `"payment.success"` mapped to `{"amount": 1999, "currency": "USD"}` | `"authorize.approved"` mapped to `{"amount_cents": 1999, "currency": "USD"}` |
+| Decision, "Delivery", sidecar bullet | a chart at `payment.scxml` may carry `payment.fixtures.json` | `authorization.scxml` may carry `authorization.fixtures.json` |
+| Consequences, first bullet | `_event.data.` inside `<transition event="payment.success">` | `<transition event="authorize.approved">` |
+
+`"gold-tier-user"` is a loyalty tier, which belongs to neither canonical
+domain; `"within-budget-account"` is the card-processing situation the same
+claim needs (a complete host-supplied datamodel for one account). The event
+rename carries `amount` to `amount_cents` with it, because the canonical
+card-processing examples are minor-unit integers throughout and an example
+payload that disagrees with them teaches the wrong shape.
+
+On acceptance, the same substitution applies to whatever still carries this
+corpus, so the record and the executable examples continue to agree. As of
+this amendment that is `test/support/fixtures/payment.fixtures.json`,
+`test/support/fixtures/payment_source.ex`, and the tests that read them;
+`lib/` moved under `sui-v91` and `docs/fixture-bundles.md` under `sui-6ez`.
 
 ## Context
 
