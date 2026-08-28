@@ -11,21 +11,38 @@ parallel work starts, not after the first conflict). A user-facing change
 gets one file per bead under `changelog.d/`; the rules - when a fragment is
 and is not warranted, format, naming - live in `changelog.d/README.md`.
 
-While the package is `0.1.0-dev` with no users and no public API, most
-changes still warrant no fragment: apply the README test (could someone who
-only ever calls the public API tell the difference?) and expect the answer
-to usually be no. 0.1.0's own changelog section is still written in one
-pass from git history at release time (sui-n0r), which is only possible
-while there is no prior release to diff against; fragments cover what lands
-after that pass makes sense.
+The package is published on Hex and has released versions behind it - the
+version in `mix.exs` and the sections in `CHANGELOG.md` are the record; do
+not restate either number here or anywhere else that can rot. The
+consequence for this file is that the fragment test now bites both ways.
+It is no longer safe to assume the answer is usually no: a public API
+addition or change, a behavior change, or a change to a published contract
+(the fixtures layout, the trace wire format) is something a released
+consumer can see, and it gets a fragment. Apply the README test honestly -
+could someone who only ever calls the public API tell the difference? -
+rather than defaulting to "skip it".
 
-`CHANGELOG.md` itself does not exist yet and is never edited outside a
-release.
+The one-pass-from-git-history route (sui-n0r) was a first-release-only
+device: it worked because there was no prior release to diff against. That
+no longer holds. Every version section after the first is assembled from
+the fragments that landed since the previous one.
+
+`CHANGELOG.md` exists and is maintained. It is still **never edited outside
+a release**: at release the fragments in `changelog.d/` are assembled into a
+new version section and deleted in the same commit, per the "At release"
+section of `changelog.d/README.md`. An ordinary commit adds a fragment; it
+does not touch `CHANGELOG.md`.
 
 ## Version bump: none
 
-`mix.exs` holds `0.1.0-dev` until a release bead says otherwise. Never edit the
-version field as part of an ordinary commit.
+`mix.exs`'s `@version` attribute is the single source of truth for the
+package version - read it there, and never repeat it into prose that will
+outlive it. Never edit the version field as part of an ordinary commit; a
+release bead moves it.
+
+The manifest's `release` key is `null`, so `/wurk:release` refuses to run in
+this repo: there is no recipe here and cutting a release is a hand-driven
+operator step, not something this workflow performs.
 
 ## Gate thresholds are a human's call
 
@@ -54,11 +71,19 @@ without moving its reason is incomplete regardless of who asked.
 statifier-ex's values (6d99b05). sui-a61 reviewed them against this repo's
 own history rather than accepting the copy silently.
 
-- **`total_lines_max: 40` - kept.** The longest message on `main` is 24 lines
-  (`Sets up the wurk manifest and extensions`); nothing is within striking
-  distance of 40. The limit is not binding today, but nothing in this repo's
-  commit style argues for a different number either, so there is no reason to
-  move it.
+- **`total_lines_max: 40` - kept.** At the time of the review the longest
+  message on `main` was well clear of the limit, and it still is - though the
+  headroom has narrowed since, as messages here have grown longer. Check it
+  rather than trusting a number written down once:
+
+  ```bash
+  git log origin/main --format=%H \
+    | while read h; do echo "$(git log -1 --format=%B "$h" | wc -l) $h"; done \
+    | sort -rn | head -3
+  ```
+
+  The limit is not binding today, but nothing in this repo's commit style
+  argues for a different number either, so there is no reason to move it.
 - **`trailer.key: "Refs"` - kept.** History has exactly one trailer at all,
   `Beads: sui-kua`, and it was written by `bd` itself (a bd-driven commit),
   not by `/wurk:commit` - it is not a precedent for what this workflow's
@@ -69,11 +94,11 @@ own history rather than accepting the copy silently.
   data point.
 - **`subject_under: 50` and `body_line_max: 72` - unchanged**, and out of
   scope for this review: they already match the CLAUDE.md prose and nothing
-  in the bead asked them to be re-litigated. Worth knowing in practice: two
-  commits on `main` have a body line of 73 characters, one over the limit.
-  That is not a reason to move the limit - it says the 72-character wrap is
-  already binding, which is the check doing its job the first time it will
-  actually run.
+  in the bead asked them to be re-litigated. Worth knowing in practice:
+  `main` carries a commit with a body line of 73 characters, one over the
+  limit. That is not a reason to move the limit - it says the 72-character
+  wrap is already binding, which is the check doing its job the first time it
+  will actually run.
 
 ## The attribution ban will reject some legitimate messages here
 
@@ -138,3 +163,18 @@ reviewer. The local full green remains the trigger:
   declared in `gate.not_applicable_skips` and explained in `CLAUDE.md`. A
   third skip line is not covered by that explanation - read it rather than
   assuming it belongs.
+
+## The gate attests its own run
+
+The manifest declares `gate.attest` as `mix quality.verify`, the attestation
+task ex_quality ships (the dependency is pinned in `mix.exs`; the resolved
+version is in `mix.lock`). `gate.rb` runs it after a full `gate.full` pass
+and reports `data.attested`, so an unattended commit can prove the green it
+is committing on came from a run that was not narrowed - no `--skip`, no
+`--quick`, no scoped profile. Without the key the gate could only report
+that a command exited zero.
+
+It attests the shape of the run, not the content of the checks. A full green
+that is attested is still not evidence that a weakened threshold was not the
+thing that made it green; that is what the "Gate thresholds are a human's
+call" section above is for.
