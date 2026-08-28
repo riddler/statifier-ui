@@ -6,10 +6,11 @@ defmodule StatifierUI.Fixtures do
 
   A fixture bundle is a set of maps:
 
-    * `scenarios` - a scenario name (for example `"gold-tier-user"`) mapped to
-      a complete example of the host-supplied datamodel for that situation.
-    * `events` - an event name (for example `"payment.success"`) mapped to a
-      sample `_event.data` payload for that event.
+    * `scenarios` - a scenario name (for example `"within-budget-account"`)
+      mapped to a complete example of the host-supplied datamodel for that
+      situation.
+    * `events` - an event name (for example `"authorize.approved"`) mapped to
+      a sample `_event.data` payload for that event.
     * `datasets` - a dataset name mapped to a situation for evaluating a
       free-standing expression against.
 
@@ -123,8 +124,8 @@ defmodule StatifierUI.Fixtures do
 
   ## Examples
 
-      iex> StatifierUI.Fixtures.new(scenarios: %{"gold-tier-user" => %{"tier" => "gold"}})
-      {:ok, %StatifierUI.Fixtures{scenarios: %{"gold-tier-user" => %{"tier" => "gold"}}}}
+      iex> StatifierUI.Fixtures.new(scenarios: %{"within-budget-account" => %{"currency" => "USD"}})
+      {:ok, %StatifierUI.Fixtures{scenarios: %{"within-budget-account" => %{"currency" => "USD"}}}}
 
   """
   @spec new(keyword()) :: {:ok, t()} | {:error, term()}

@@ -4,8 +4,8 @@ defmodule StatifierUI.Fixtures.Bundle do
   with a whole chart: the ADR-0003/ADR-0006 bundle plus the fragment's name
   and a record of where it was loaded from.
 
-  ADR-0003 pairs a bundle with a *chart* - `payment.scxml` carries
-  `payment.fixtures.json` beside it. An embedder composing charts from a
+  ADR-0003 pairs a bundle with a *chart* - `authorization.scxml` carries
+  `authorization.fixtures.json` beside it. An embedder composing charts from a
   palette of reusable fragments has no such file to sit beside: the fragment
   is a module in the host's code or an entry in a palette, and the chart it
   eventually lands in does not exist yet. This module is the same contract
@@ -134,14 +134,22 @@ defmodule StatifierUI.Fixtures.Bundle do
   ## Examples
 
       iex> {:ok, bundle} =
-      ...>   StatifierUI.Fixtures.Bundle.load("myapp.authorize", %{
-      ...>     datasets: %{"approved" => %{"amount" => 90}},
-      ...>     expressions: %{"large" => %{"source" => "amount > 50"}}
+      ...>   StatifierUI.Fixtures.Bundle.load("myapp.signup", %{
+      ...>     datasets: %{
+      ...>       "variant-b-complete" => %{
+      ...>         "signup" => %{"steps_completed" => 4, "variant" => "B"}
+      ...>       }
+      ...>     },
+      ...>     expressions: %{
+      ...>       "is-complete-variant-b" => %{
+      ...>         "source" => "signup.steps_completed >= 3 and signup.variant == 'B'"
+      ...>       }
+      ...>     }
       ...>   })
       iex> bundle.name
-      "myapp.authorize"
+      "myapp.signup"
       iex> StatifierUI.Fixtures.dataset_names(bundle.fixtures)
-      ["approved"]
+      ["variant-b-complete"]
 
   """
   @spec load(name(), term(), keyword()) :: {:ok, t()} | {:error, term()}

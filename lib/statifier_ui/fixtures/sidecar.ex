@@ -39,16 +39,16 @@ defmodule StatifierUI.Fixtures.Sidecar do
 
   @doc """
   Derives a sidecar path from a chart path, per ADR-0003's naming:
-  `payment.scxml` becomes `payment.fixtures.json`. A path with no
+  `authorization.scxml` becomes `authorization.fixtures.json`. A path with no
   extension has `.fixtures.json` appended.
 
   ## Examples
 
-      iex> StatifierUI.Fixtures.Sidecar.sidecar_path("payment.scxml")
-      "payment.fixtures.json"
+      iex> StatifierUI.Fixtures.Sidecar.sidecar_path("authorization.scxml")
+      "authorization.fixtures.json"
 
-      iex> StatifierUI.Fixtures.Sidecar.sidecar_path("payment")
-      "payment.fixtures.json"
+      iex> StatifierUI.Fixtures.Sidecar.sidecar_path("authorization")
+      "authorization.fixtures.json"
 
   """
   @spec sidecar_path(Path.t()) :: Path.t()
