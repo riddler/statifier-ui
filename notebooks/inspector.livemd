@@ -9,10 +9,12 @@ Mix.install([
 
 ## What this notebook is
 
-The Livebook inspector end to end, driving a small checkout chart. It is
-also the milestone's **manual acceptance test**: each numbered step below
-says what to do and what you should see, so walking it top to bottom
-verifies the assembled widget (`sui-t36.8`) against a live session.
+The Livebook inspector end to end, driving a small card-authorization
+chart - the same domain, and the same `pending -> authorized -> captured`
+spine, the README's worked example uses. It is also the milestone's
+**manual acceptance test**: each numbered step below says what to do and
+what you should see, so walking it top to bottom verifies the assembled
+widget (`sui-t36.8`) against a live session.
 
 Livebook evaluates cells in order; use "Evaluate" on each code cell as you
 reach it.
@@ -25,25 +27,37 @@ inspector shows is read from it or from the session's trace effects.
 ```elixir
 xml = """
 <?xml version="1.0" encoding="UTF-8"?>
-<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="cart" version="1.0">
+<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="pending" version="1.0">
     <datamodel>
-        <data id="attempts" expr="0"/>
+        <data id="amount_cents" expr="1999"/>
+        <data id="captured_cents" expr="0"/>
+        <data id="authorization_attempts" expr="0"/>
     </datamodel>
-    <state id="cart">
-        <transition event="checkout" target="pending">
-            <assign location="attempts" expr="attempts + 1"/>
+    <state id="pending">
+        <transition event="authorize.declined" target="pending">
+            <assign location="authorization_attempts" expr="authorization_attempts + 1"/>
+        </transition>
+        <transition event="authorize.approved" target="authorized">
+            <assign location="authorization_attempts" expr="authorization_attempts + 1"/>
         </transition>
     </state>
-    <state id="pending">
-        <transition event="payment.success" target="paid"/>
-        <transition event="payment.failure" target="cart"/>
+    <state id="authorized">
+        <transition event="capture.settled" target="captured">
+            <assign location="captured_cents" expr="amount_cents"/>
+        </transition>
     </state>
-    <final id="paid"/>
+    <final id="captured"/>
 </scxml>
 """
 
 {:ok, machine} = Statifier.compile(xml)
 ```
+
+One deliberate difference from the README's chart: a declined
+authorization here returns to `pending` rather than reaching a final
+`declined` state, so the card can be retried. The walk below needs one
+event that takes a real step without moving the highlight, and that
+self-transition is it.
 
 **Expect:** `{:ok, %Statifier.Machine{...}}`. A compile error here means
 the chart text was edited into something invalid - fix it before going on.
@@ -57,9 +71,9 @@ buttons in the injection pane.
 {:ok, fixtures} =
   StatifierUI.Fixtures.new(
     events: %{
-      "checkout" => %{},
-      "payment.success" => %{"amount" => 1999, "currency" => "USD"},
-      "payment.failure" => %{"reason" => "card_declined"}
+      "authorize.approved" => %{"amount_cents" => 1999, "currency" => "USD"},
+      "authorize.declined" => %{"reason" => "insufficient_funds"},
+      "capture.settled" => %{"captured_cents" => 1999}
     }
   )
 ```
@@ -87,9 +101,10 @@ StatifierUI.Kino.inspect(session, fixtures, source: xml)
 1. **Status header** - the session id, `attached`, a message count, and
    **no** "Live-only" warning.
 2. **Configuration diagram** (left) - the chart as a Mermaid state
-   diagram with `cart` highlighted. The initialize burst happened before
-   this cell ran; catch-up is why the diagram still knows about it.
-3. **Datamodel explorer** (right) - `attempts` with its initial `0`.
+   diagram with `pending` highlighted. The initialize burst happened
+   before this cell ran; catch-up is why the diagram still knows about it.
+3. **Datamodel explorer** (right) - `amount_cents` at `1999`,
+   `captured_cents` at `0`, and `authorization_attempts` at `0`.
 4. **Injection pane** - one button per fixture event, then a free-form
    name/payload form.
 5. **Event log** - macrostep 1 (the initialize burst), collapsed except
@@ -99,26 +114,47 @@ StatifierUI.Kino.inspect(session, fixtures, source: xml)
 
 Do these in order, watching the panes after each click:
 
-1. Click **checkout**. Expect: feedback line "Sent `checkout` ...";
-   diagram highlight moves to `pending`; datamodel shows `attempts` as
-   `1` with a changed marker; the event log grows a macrostep whose
-   cause is `checkout`.
-2. Click **payment.failure**. Expect: highlight returns to `cart`; the
-   log's newest macrostep names `payment.failure`.
-3. Click **checkout** again, then **payment.success**. Expect: highlight
-   reaches `paid` (a final state); `attempts` reads `2`; the status
-   header still says `attached` - a halted chart's session process is
-   alive, and the inspector keeps its whole trace readable.
+1. Click **authorize.declined**. Expect: feedback line "Sent
+   `authorize.declined` ..."; the highlight **stays** on `pending`, and
+   that is correct - the self-transition still exits and re-enters, so
+   the datamodel shows `authorization_attempts` as `1` with a changed
+   marker and the event log grows a macrostep whose cause is
+   `authorize.declined`. A step the diagram cannot show is exactly what
+   the log is for.
+2. Click **authorize.approved**. Expect: highlight moves to
+   `authorized`; `authorization_attempts` reads `2`; the log's newest
+   macrostep names `authorize.approved`.
+3. Click **capture.settled**. Expect: `captured_cents` reads `1999` with
+   a changed marker, copied from `amount_cents` by the transition's
+   `<assign>`; the log's newest macrostep names `capture.settled` and
+   carries the entry of `captured`; the status header still says
+   `attached` - a halted chart's session process is alive, and the
+   inspector keeps its whole trace readable.
+
+   **Expect the highlight to stay on `authorized`, not move to
+   `captured`.** That is today's real behavior, not a mistake in the
+   walk. Entering a top-level `<final>` halts the run, so the macrostep
+   ends in `trace.done` rather than `trace.macrostep_stable`, and
+   `StatifierUI.Inspector.active_configuration/2` reads only the newest
+   `macrostep_stable`. It therefore falls back to the previous quiescent
+   configuration. What the configuration pane should show for a halted
+   chart is an open question - `sui-dc7`. If you walk this notebook and
+   the highlight *does* reach `captured`, that bead has been answered
+   and this step needs updating.
 
 ## 6. The form, including its error path
 
-1. In the free-form fields, enter name `payment.failure` and payload
-   `{"reason": "manual"}`, press **Send**. Expect: "Sent" feedback (the
-   chart is in `paid`, so nothing transitions - the event is dequeued
-   and logged with no selected transitions, which is itself worth seeing
-   in the log).
+1. In the free-form fields, enter name `authorize.declined` and payload
+   `{"reason": "manual"}`, press **Send**. Expect: "Sent" feedback, and
+   **no new trace message anywhere** - not a macrostep, not even an
+   event-received line. The chart halted when it entered `captured`, so
+   the run is over and the event is dropped rather than processed. "Sent"
+   is honest about what the injection pane did (it handed the event to
+   the session); the empty log is honest about what the session did with
+   it. Worth seeing both, because they are two different facts.
 2. Now enter payload `{not json`. Expect: **Not sent**, with the JSON
-   error - the session was never touched (the draft failed to build).
+   error (`{:invalid_json, ...}`) - the session was never touched,
+   because the draft failed to build before anything was sent.
 
 ## 7. Re-evaluate the inspector cell
 
@@ -127,9 +163,11 @@ Re-evaluate the `StatifierUI.Kino.inspect(...)` cell (step 4).
 **Expect:** the previous widget's processes are terminated with the old
 cell evaluation (that is the clean detach - the session simply drops the
 dead subscriber), and the fresh widget shows the **entire** history
-again: every macrostep you drove above is in the log, `attempts` is `2`,
-and the diagram highlights `paid`. That round trip is catch-up doing its
-job.
+again: every macrostep you drove above is in the log,
+`authorization_attempts` is `2`, `captured_cents` is `1999`, and the
+diagram highlights `authorized` for the reason step 5 gives (`sui-dc7`).
+That round trip is catch-up doing its job: a fresh widget over the same
+recorded session reproduces the previous one exactly, halt included.
 
 To see the honest degraded mode: start a session **without**
 `record: true`, inspect it, and note the status header's **Live-only**
