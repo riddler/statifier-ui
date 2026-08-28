@@ -1,11 +1,52 @@
 # ADR-0012: Trace projection and redaction
 
 Status: accepted (2026-08-26)
+Amendment status: **proposed** (2026-08-27, sui-0of) - see "Amendment
+proposed" below; the accepted text is unchanged and stays authoritative
+until the amendment is read and accepted.
 
 Extends ADR-0005 additively: one new reserved value shape, one new
 `session.start` field, and a producer-side transform. No type is added,
 removed, or renamed; no existing field changes meaning. The format
 version stays `1` - see "Versioning decision" below.
+
+## Amendment proposed 2026-08-27 (sui-0of): canonical example domains
+
+*Proposed, not accepted. Nothing below this section has been edited.*
+
+The fleet ruling of 2026-08-27 fixes exactly two example domains for the
+whole family - credit-card processing (accounts, budgets, transactions,
+authorization and settlement) and a signup wizard with A/B testing (steps,
+variants, conversion events) - and retires per-repo ad-hoc domains. The
+allowlist illustration in this record's Decision uses an order/checkout
+domain, which is retired.
+
+`sui-6ld` set the precedent that a substitution reaching an accepted ADR's
+own text is recorded as a dated amendment rather than made silently. This
+amendment does not edit the accepted text at all: it proposes the
+substitution and leaves the reading to the operator.
+
+**Names and example values only. No part of the contract changes.** The
+two-part allowlist, prefix matching, the closed position set, the
+`session.datamodel` correspondence, and the versioning decision all stand
+exactly as accepted. Only the strings the claims are demonstrated with
+move.
+
+Proposed substitutions, in the Decision's "Located positions" passage:
+
+| Accepted text | Proposed |
+|---|---|
+| `allow_paths: [["order", "status"], ["user", "tier"]]` | `allow_paths: [["authorization", "status"], ["account", "currency"]]` |
+| `["order"]` allows the whole `order` subtree and `["order", "status"]` allows one leaf | `["authorization"]` allows the whole `authorization` subtree and `["authorization", "status"]` allows one leaf |
+| a host that may show `order.status` but not `order.total` can say so | a host that may show `authorization.status` but not `authorization.amount_cents` can say so |
+
+The passage's whole point is that one prefix expression covers both
+`session.datamodel` and `effect.datamodel_change`, and that a host can
+allow one leaf of a subtree while withholding a sibling. The proposed pair
+preserves that exactly: `authorization.status` is the safe leaf,
+`authorization.amount_cents` the withheld sibling, and the second entry
+(`["account", "currency"]`) is still a second top-level subtree, so the
+list is still a list.
 
 ## Context
 

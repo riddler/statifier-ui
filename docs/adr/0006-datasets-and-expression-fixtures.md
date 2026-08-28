@@ -4,6 +4,9 @@ Status: accepted (2026-08-16); corpus amended 2026-08-27 (sui-6ld) - the
 worked example moved off an ad-hoc age-eligibility domain and onto the
 family's canonical example domains; dataset names, expression names, and
 example values only, no part of the contract changed
+Amendment status: a **proposed** second amendment (2026-08-27, sui-0of)
+reaches two illustrative names the first pass left behind - see the note
+below; the accepted text is unchanged until it is read and accepted
 
 **Amendment note.** *(2026-08-27, sui-6ld, executing the fleet ruling of the
 same date.)* The record originally illustrated both new keys with an
@@ -26,6 +29,27 @@ powered features is unchanged - only the names and values the claims are
 demonstrated with. The same substitution was applied in the same commit to the
 fixture files and tests that carry this corpus, so the executable examples and
 the record continue to agree.
+
+**Second amendment, proposed 2026-08-27 (sui-0of) - two sites the first one
+did not reach.** *Proposed, not accepted; nothing below this note has been
+edited.* The sui-6ld pass moved the worked corpus in the Decision and left
+two illustrative names elsewhere in the record off the canonical domains:
+
+| Site | Accepted text | Proposed |
+|---|---|---|
+| Alternatives considered, "Reuse scenarios as the `expect` axis" | every pointed situation an expression wants (`"variant-a-early"`, `"expired-card"`) | (`"variant-a-early"`, `"over-budget"`) |
+| Open questions carried, "Dataset-overlays-a-base-scenario ergonomics" | `"variant-b-complete"` as scenario `"gold-tier-user"` plus overrides | as scenario `"within-budget-account"` plus overrides |
+
+`"expired-card"` is card-processing flavored and so is not off-domain in
+subject, but it names no dataset that exists anywhere in the repo, which is
+the reason to move it: `"over-budget"` is a dataset the fixture-bundles
+guide actually carries, so a reader who goes looking finds it. The
+`"gold-tier-user"` pairing is the stronger of the two - it is a loyalty tier
+in a signup-wizard sentence, off-domain twice over - and
+`"within-budget-account"` is the same substitution proposed for ADR-0003.
+
+Names and example values only. Nothing about the overlay question, the
+rejected alternatives, or the contract changes.
 
 ## Context
 
