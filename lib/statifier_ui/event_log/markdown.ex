@@ -112,6 +112,15 @@ defmodule StatifierUI.EventLog.Markdown do
     "Session halted: #{reason}"
   end
 
+  # Projection replaces this reason with the sentinel object, which is the one
+  # position where a field's JSON type changes (ADR-0012). Interpolating a map
+  # raises Protocol.UndefinedError, so the sentinel is matched ahead of the
+  # string clause rather than relying on String.Chars.
+  defp footer_line(%Message{type: "session.terminated", payload: %{"reason" => reason}})
+       when is_map(reason) do
+    "Session terminated: #{redaction_label(reason)}"
+  end
+
   defp footer_line(%Message{type: "session.terminated", payload: %{"reason" => reason}}) do
     "Session terminated: #{reason}"
   end
@@ -305,8 +314,23 @@ defmodule StatifierUI.EventLog.Markdown do
   @spec payload_suffix(map(), [String.t()]) :: String.t()
   defp payload_suffix(payload, keys) do
     case Enum.filter(keys, &Map.has_key?(payload, &1)) do
-      [] -> ""
-      present -> ": " <> Enum.map_join(present, ", ", &"#{&1}=#{inspect(Map.get(payload, &1))}")
+      [] ->
+        ""
+
+      present ->
+        ": " <> Enum.map_join(present, ", ", &"#{&1}=#{value_cell(Map.get(payload, &1))}")
     end
   end
+
+  # A redacted value renders as an explicit affordance, never as the literal
+  # one-key sentinel map (ADR-0012's flow-through clause).
+  @spec value_cell(term()) :: String.t()
+  defp value_cell(%{"$redacted" => true} = value) when map_size(value) == 1,
+    do: redaction_label(value)
+
+  defp value_cell(value), do: inspect(value)
+
+  @spec redaction_label(term()) :: String.t()
+  defp redaction_label(%{"$redacted" => true} = value) when map_size(value) == 1, do: "(redacted)"
+  defp redaction_label(value), do: inspect(value)
 end

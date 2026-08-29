@@ -82,6 +82,21 @@ defmodule StatifierUI.Trace.Subscriber do
   exiting - observed as this subscriber's own monitor `:DOWN` - produces
   `session.terminated` and moves `stats/1`'s `status` to `:terminated`; the
   buffer is kept and stays readable either way.
+
+  ## Projection
+
+  When started with a `:projection` profile this subscriber applies
+  `StatifierUI.Trace.Projection.project/2` to every message in
+  `buffer_and_fanout/2` - the single point every message reaches, whether it
+  came from the manifest, from a normalized effect, from a replayed catch-up
+  prefix, or from the hand-built `session.terminated` on monitor `:DOWN`.
+  Projection therefore happens before the message is buffered and before any
+  listener sees it, which is what lets a projected stream be buffered,
+  encoded, persisted, or replayed without any of those having held a
+  datamodel value (ADR-0012).
+
+  Without the option nothing changes: no `projection` header, no sentinels,
+  full values, identical bytes.
   """
 
   use GenServer
@@ -94,6 +109,7 @@ defmodule StatifierUI.Trace.Subscriber do
   alias StatifierUI.Trace.Manifest
   alias StatifierUI.Trace.Message
   alias StatifierUI.Trace.Normalizer
+  alias StatifierUI.Trace.Projection
 
   @type server :: GenServer.server()
 
@@ -106,7 +122,8 @@ defmodule StatifierUI.Trace.Subscriber do
           dropped: non_neg_integer(),
           errors: non_neg_integer(),
           foreign: non_neg_integer(),
-          diagnostics: [Fixtures.diagnostic()]
+          diagnostics: [Fixtures.diagnostic()],
+          projection: %{mode: String.t(), profile: String.t()} | nil
         }
 
   @default_capacity 1000
@@ -131,6 +148,7 @@ defmodule StatifierUI.Trace.Subscriber do
             buffer: Buffer.t(),
             session_pid: pid() | nil,
             monitor_ref: reference() | nil,
+            projection: Projection.Profile.t() | nil,
             error_reasons: MapSet.t(),
             errors: non_neg_integer(),
             foreign: non_neg_integer(),
@@ -151,6 +169,7 @@ defmodule StatifierUI.Trace.Subscriber do
               buffer: nil,
               session_pid: nil,
               monitor_ref: nil,
+              projection: nil,
               error_reasons: MapSet.new(),
               errors: 0,
               foreign: 0,
@@ -175,6 +194,10 @@ defmodule StatifierUI.Trace.Subscriber do
     - `:capacity` - the bounded buffer's capacity, default `1000`.
     - `:listeners` - pids receiving `{:statifier_ui, session_id, %Message{}}`
       as messages arrive. Default `[]`.
+    - `:projection` - a `StatifierUI.Trace.Projection.Profile` struct. When
+      given, every message is projected before it is buffered or fanned out
+      and `session.start` carries the `projection` header (ADR-0012).
+      Default `nil`, which is full fidelity and byte-unchanged.
     - `:name` - passed to `GenServer.start_link/3` unchanged.
   """
   @spec start_link(keyword()) :: GenServer.on_start()
@@ -254,6 +277,7 @@ defmodule StatifierUI.Trace.Subscriber do
       invokeid: Keyword.get(opts, :invokeid),
       capacity: capacity,
       listeners: Keyword.get(opts, :listeners, []),
+      projection: Keyword.get(opts, :projection),
       buffer: Buffer.new(capacity)
     }
 
@@ -483,12 +507,24 @@ defmodule StatifierUI.Trace.Subscriber do
     }
   end
 
+  # The single point every message passes through, and therefore the only
+  # place projection has to be applied: the manifest, every normalized
+  # effect, the replayed catch-up prefix, and the hand-built
+  # session.terminated all arrive here. Projection runs before the buffer
+  # push and before the fan-out, so nothing downstream ever holds a value the
+  # profile withheld.
   @spec buffer_and_fanout(State.t(), Message.t()) :: State.t()
   defp buffer_and_fanout(state, %Message{} = message) do
+    message = project(state.projection, message)
+
     Enum.each(state.listeners, fn pid -> send(pid, {:statifier_ui, state.session, message}) end)
 
     %{state | buffer: Buffer.push(state.buffer, message), seq: state.seq + 1}
   end
+
+  @spec project(Projection.Profile.t() | nil, Message.t()) :: Message.t()
+  defp project(nil, message), do: message
+  defp project(%Projection.Profile{} = profile, message), do: Projection.project(message, profile)
 
   # -- session death ----------------------------------------------------------
 
@@ -516,6 +552,11 @@ defmodule StatifierUI.Trace.Subscriber do
 
   # -- stats ------------------------------------------------------------------
 
+  @spec projection_stats(Projection.Profile.t() | nil) ::
+          %{mode: String.t(), profile: String.t()} | nil
+  defp projection_stats(nil), do: nil
+  defp projection_stats(%Projection.Profile{name: name}), do: %{mode: "projected", profile: name}
+
   @spec build_stats(State.t()) :: stats()
   defp build_stats(state) do
     %{
@@ -526,7 +567,8 @@ defmodule StatifierUI.Trace.Subscriber do
       dropped: Buffer.dropped(state.buffer),
       errors: state.errors,
       foreign: state.foreign,
-      diagnostics: state.diagnostics
+      diagnostics: state.diagnostics,
+      projection: projection_stats(state.projection)
     }
   end
 end

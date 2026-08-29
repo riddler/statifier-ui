@@ -6,7 +6,11 @@ defmodule StatifierUI.Shape do
   `infer/1` walks a value from the predicator value domain (ADR-0003) and
   produces a `t()` term describing its structure - scalars, lists, maps,
   and the predicator-specific `:null` / `:undefined` / `:duration`
-  distinctions. `label/2` renders that term as a short human-readable string
+  distinctions, plus `:redacted` for a value a projected trace stream is not
+  carrying (ADR-0012). `:redacted` is deliberately distinct from
+  `:undefined`: a redacted slot held a value, an undefined one did not, and
+  a datamodel pane that renders the first as the second reports a live
+  datamodel as permanently unbound. `label/2` renders that term as a short human-readable string
   for use in the explorer tree; a later phase's editor completions consume
   the structured term directly instead of the label.
 
@@ -35,6 +39,7 @@ defmodule StatifierUI.Shape do
           | :duration
           | :null
           | :undefined
+          | :redacted
           | :unknown
           | {:list, t() | :empty}
           | {:map, %{optional(String.t()) => t()}}
@@ -63,6 +68,7 @@ defmodule StatifierUI.Shape do
 
   def infer(nil), do: :null
   def infer(:undefined), do: :undefined
+  def infer(:redacted), do: :redacted
   def infer(value) when is_boolean(value), do: :boolean
   def infer(value) when is_integer(value), do: :integer
   def infer(value) when is_float(value), do: :float
@@ -215,6 +221,7 @@ defmodule StatifierUI.Shape do
   defp render(:duration, _max_keys, _max_depth, _depth), do: "duration"
   defp render(:null, _max_keys, _max_depth, _depth), do: "null"
   defp render(:undefined, _max_keys, _max_depth, _depth), do: "undefined"
+  defp render(:redacted, _max_keys, _max_depth, _depth), do: "redacted"
   defp render(:unknown, _max_keys, _max_depth, _depth), do: "unknown"
 
   defp render({:list, :empty}, _max_keys, _max_depth, _depth), do: "list<>"

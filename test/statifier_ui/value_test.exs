@@ -30,6 +30,21 @@ defmodule StatifierUI.ValueTest do
       assert Value.decode(%{"$undefined" => true}) == {:ok, :undefined}
     end
 
+    test "decodes $redacted to the :redacted sentinel" do
+      assert Value.decode(%{"$redacted" => true}) == {:ok, :redacted}
+    end
+
+    test "decodes $redacted distinctly from $undefined" do
+      # ADR-0012's central rule: redaction is a claim about the stream,
+      # absence is a claim about the run, and collapsing them reports a live
+      # datamodel as permanently unbound.
+      refute Value.decode(%{"$redacted" => true}) == Value.decode(%{"$undefined" => true})
+    end
+
+    test "decodes $redacted nested inside a composite value" do
+      assert Value.decode(%{"a" => [%{"$redacted" => true}]}) == {:ok, %{"a" => [:redacted]}}
+    end
+
     test "decodes $date to a Date" do
       assert Value.decode(%{"$date" => "2026-08-16"}) == {:ok, ~D[2026-08-16]}
     end
@@ -62,6 +77,15 @@ defmodule StatifierUI.ValueTest do
   describe "decode/1 - reserved shape enforcement" do
     test "rejects an unrecognized $-prefixed one-key object" do
       assert {:error, {:unknown_tag, "$bogus"}} = Value.decode(%{"$bogus" => true})
+    end
+
+    test "treats a multi-key object containing $redacted as an ordinary host map" do
+      assert Value.decode(%{"$redacted" => true, "other" => 1}) ==
+               {:ok, %{"$redacted" => true, "other" => 1}}
+    end
+
+    test "rejects $redacted with a value other than true" do
+      assert {:error, {:unknown_tag, "$redacted"}} = Value.decode(%{"$redacted" => false})
     end
 
     test "treats a multi-key object containing $date as an ordinary host map" do
@@ -214,6 +238,7 @@ defmodule StatifierUI.ValueTest do
           {"list", [1, "a", nil]},
           {"map", %{"amount" => 1999}},
           {"undefined", :undefined},
+          {"redacted", :redacted},
           {"date", ~D[2026-08-16]},
           {"datetime", ~U[2026-08-16 10:30:00Z]},
           {"duration", @duration}

@@ -830,6 +830,14 @@ moved out from under the ADR's assumption.
    `StatifierUI.Shape.t()` variant, the `infer/1` clause, and the `render/4`
    label, none of which the ADR mentions.
 
+   **Machine-checked (unattended, 2026-08-29):** ruled by the operator -
+   a dedicated `:redacted` atom. Implemented and asserted:
+   `StatifierUI.Value.decode/1` at `value.ex:84` and `encode/1` at `:155`,
+   `StatifierUI.Shape`'s `t()` variant, `infer/1` clause and `render/4`
+   label. Round-tripped in `value_test.exs`'s table and asserted distinct
+   from `:undefined` there and in `shape_test.exs`. Not a human
+   confirmation.
+
 2. **What does an `allow_paths` prefix mean when the write is shallower than
    the prefix?** The ADR says "A prefix matches a write when it matches the
    write's leading segments", which is unambiguous when the allowed prefix is
@@ -840,6 +848,15 @@ moved out from under the ADR's assumption.
    sibling; denying it withholds an allowed leaf; descending into the value
    to redact selectively is a third behavior the ADR does not describe.
 
+   **Machine-checked (unattended, 2026-08-29):** ruled by the operator -
+   the projection DESCENDS and redacts selectively. Implemented as
+   `project_located/3`'s three-case rule in `trace/projection.ex`, with a
+   scalar that cannot carry the allowed leaf redacting whole. Asserted in
+   `projection_test.exs`'s "the shallower write descends" describe block,
+   including nested maps, list indexes, the scalar case, and the
+   already-matching prefix winning over one that would descend. Not a human
+   confirmation.
+
 3. **Do `allow_paths` prefixes descend into `session.datamodel`'s values?**
    The ADR says the same prefixes apply and that "keys are the first segment
    of every path", which settles a one-segment prefix. A two-segment prefix
@@ -849,6 +866,13 @@ moved out from under the ADR's assumption.
    fold ([`docs/wire-format.md:752-760`](https://github.com/riddler/statifier-ui/blob/d566de026c73cca444f66cad935610c44e096e5d/docs/wire-format.md#L752-L760)), so the ambiguity is currently
    unobservable - but the implementation still has to pick a behavior.
 
+   **Machine-checked (unattended, 2026-08-29):** ruled by the operator -
+   prefixes descend into `session.datamodel` by the same rule.
+   `project_datamodel_snapshot/2` routes each snapshot value through the
+   same `project_located/3`, so one sentence describes both messages.
+   Asserted in `projection_test.exs` ("descent applies to session.datamodel
+   snapshot values"). Not a human confirmation.
+
 4. **The datamodel explorer's in-place value editing does not exist.** The
    ADR requires it be disabled under projection
    (`architecture.md`, "the datamodel explorer's two modes"), but
@@ -857,6 +881,16 @@ moved out from under the ADR's assumption.
    Whether sui-hmn should ship a disabling mechanism for an affordance that
    does not exist, or record the requirement as a constraint on sui-t36.8, is
    not something the ADR decides.
+
+   **Machine-checked (unattended, 2026-08-29):** confirmed there is still
+   no write path - a grep for write/edit/set-value entry points across
+   `datamodel_explorer.ex` and its three submodules returns nothing. NEW
+   FINDING: `sui-t36.8`, which the moduledoc names as the owner, is CLOSED
+   (merged 2026-08-22, inspector assembly and demo notebook only), so the
+   constraint had no live owner and the moduledoc reference is stale. Filed
+   as `sui-8hg` (discovered-from sui-hmn), which also owns correcting the
+   moduledoc. Not fixed here: this bead ships no editor. Not a human
+   confirmation.
 
 5. **`EventInjection` is not seeded from observed values.** The ADR requires
    disabling "`EventInjection`'s payload composition where it is seeded from
@@ -869,12 +903,29 @@ moved out from under the ADR's assumption.
    position row 15 - in which case whether the palette should be suppressed
    when the stream is projected is a decision the ADR does not make.
 
+   **Machine-checked (unattended, 2026-08-29):** confirmed vacuous today -
+   a grep for `Trace.Message` / `%Message{}` across `event_injection.ex` and
+   its three submodules finds only a moduledoc mention at
+   `event_injection.ex:25`, never a read. No observed-value leg exists, so
+   there is nothing to disable. The transitive fixtures reading is carried
+   forward on `sui-8hg` rather than guessed at here. Not a human
+   confirmation.
+
 6. **`session.terminated`'s sentinel `reason` would raise, not mis-render.**
    [`lib/statifier_ui/event_log/markdown.ex:116`](https://github.com/riddler/statifier-ui/blob/d566de026c73cca444f66cad935610c44e096e5d/lib/statifier_ui/event_log/markdown.ex#L116) string-interpolates the
    reason; a map raises `Protocol.UndefinedError`. The ADR's flow-through
    list names the datamodel explorer, the event-log labels, and the Kino
    panes, and it does not name this site. Whether fixing it is in sui-hmn's
    scope or is a separate bead is unrecorded.
+
+   **Machine-checked (unattended, 2026-08-29):** ruled in scope by the
+   operator, and FIXED. `event_log/markdown.ex`'s `footer_line/1` now
+   matches a map reason ahead of the string clause and renders
+   `(redacted)`; `payload_suffix/2` routes values through `value_cell/1` so
+   `effect.log`'s value never prints as a literal one-key map. Asserted in
+   `projection_consumers_test.exs`, which covers both the sentinel reason
+   (previously a `Protocol.UndefinedError`) and an ordinary string reason
+   still rendering unchanged. Not a human confirmation.
 
 7. **Where the new Projection section sits interacts with the existing drift
    test.** Section 7 records the mechanism: the existing parser splits on
@@ -883,6 +934,15 @@ moved out from under the ADR's assumption.
    after it would leak matching first-column cells into the type-index
    assertion. The ADR says the new drift-style test "belongs with the
    type-index drift test" but does not say where the doc section goes.
+
+   **Machine-checked (unattended, 2026-08-29):** resolved by placement. The
+   new `## Projection` section sits after `## The `session.*` types` and
+   before `## Worked example`, so it precedes `## Type index` and the
+   existing parser's split-and-scan-to-EOF cannot see its table.
+   `wire_format_spec_test.exs` is unmodified and passes. The new
+   `projection_drift_test.exs` anchors on its own heading AND stops at the
+   next top-level heading rather than scanning to EOF, so the reverse
+   interaction cannot happen either. Not a human confirmation.
 
 8. **Is `Trace.Json.encode_lines/1` in scope for a projected golden?**
    ADR-0012 places the transform before the encoder and says a profile's
@@ -893,3 +953,13 @@ moved out from under the ADR's assumption.
    so a second golden is a hand-produced committed file under the same
    constraint. Whether that is acceptable or whether regeneration tooling
    should land with it is not decided anywhere.
+
+   **Machine-checked (unattended, 2026-08-29):** implementer's judgement,
+   no second golden file. `projection_session_test.exs` drives a real
+   session through `Json.encode_lines/1` and asserts on the encoded bytes
+   (no `1999`, no `2500`, `$redacted` present), with a positive control
+   asserting the same values DO appear in the unprojected stream - the same
+   evidence a golden gives, without a hand-maintained fixture that has no
+   regeneration tooling. The existing `two_state.jsonl` golden is untouched
+   and passes, which is the byte-unchanged-default claim. Not a human
+   confirmation.

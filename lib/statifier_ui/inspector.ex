@@ -108,8 +108,23 @@ defmodule StatifierUI.Inspector do
         "> **#{label(diagnostic.kind)}:** #{diagnostic.message}"
       end)
 
-    Enum.join([header | warnings], "\n\n")
+    Enum.join([header | projection_note(stats) ++ warnings], "\n\n")
   end
+
+  # The profile name is surfaced wherever the mode is, so a user asking "why
+  # can't I see this" has something to quote (ADR-0012). A stream with no
+  # projection says nothing extra, which keeps the unprojected status line
+  # byte-identical to what it was.
+  @spec projection_note(Subscriber.stats()) :: [String.t()]
+  defp projection_note(%{projection: %{profile: profile}}) do
+    [
+      "> **Projected:** datamodel and payload values are withheld from this " <>
+        "stream under profile `#{profile}`. Redacted slots render as " <>
+        "`(redacted)`, which is not the same as unbound."
+    ]
+  end
+
+  defp projection_note(_stats), do: []
 
   @spec label(atom()) :: String.t()
   defp label(:not_recorded), do: "Live-only"

@@ -159,12 +159,20 @@ resolved `params`/`content` - is encoded through the same four-form scheme
   list or a map value, so the sentinel needs an explicit encoding there
   even though it is spelled by key-absence at a message's top level (see
   "Absence" below).
+- A value withheld by a projected stream encodes as `{"$redacted": true}`
+  (ADR-0012). It is legal wherever a value is legal, including nested inside
+  a list or map value. Unlike the four forms above it is a claim about the
+  *stream* rather than about the run: it says a value stood here and this
+  stream is not carrying it. It is never spelled by key-absence, by `null`,
+  by `{}`, or by `{"$undefined": true}`, each of which already means
+  something else - see "Projection" below.
 
 The one-key `$`-prefixed object shape is reserved by this document for
-exactly these four forms. A host value that happens to be a one-key map
+exactly these five forms. A host value that happens to be a one-key map
 whose only key starts with `$` and is not one of `$undefined`, `$date`,
-`$datetime`, or `$duration` is a spec violation on the producer's side, not
-a value this format can carry unambiguously - accepted as vanishingly rare.
+`$datetime`, `$duration`, or `$redacted` is a spec violation on the
+producer's side, not a value this format can carry unambiguously - accepted
+as vanishingly rare.
 
 ### Absence
 
@@ -208,7 +216,7 @@ tag and whose remaining fields name its positional elements:
 
 and so on for every variant listed under "Origins" and "Owners" below.
 `"kind"` rather than `"$kind"`: the `$`-prefixed one-key shape above is
-reserved for the value codec's four forms, and these are multi-key
+reserved for the value codec's five forms, and these are multi-key
 structural objects appearing in a known field position, not values sitting
 in a value slot.
 
@@ -256,6 +264,7 @@ it needs to resolve an index arrived once, up front.
 | fixtures | object | present only when the host supplies a fixtures bundle |
 | parent_session | string | present only when this session was started by `<invoke>` |
 | invokeid | string | present only when this session was started by `<invoke>` |
+| projection | object | present only when the stream is projected - see "Projection" below |
 
 `version` is `1` for this document. It is the fixtures sidecar's own
 `version` convention (ADR-0003), reused here rather than invented fresh.
@@ -795,6 +804,13 @@ monitor `:DOWN`).
 Elixir process exit reason has no language-neutral shape, so this document
 does not attempt to give it one.
 
+Under a projected stream this is the one field whose JSON type changes: it
+carries `{"$redacted": true}` instead of a string. It earns the exception
+because it is `inspect/1` of an exit reason, so a crash inside a datamodel
+operation can carry datamodel terms into it verbatim, and it is the one
+string field on the wire whose content is genuinely unbounded. Nothing may
+be branching on its shape, because the paragraph above already says not to.
+
 ### `session.unroutable`
 
 Emitted when the session reports `{:unroutable, effect}` to its subscriber
@@ -805,6 +821,220 @@ reachable.
 | Field | Type | Presence |
 |---|---|---|
 | effect | object | always - the unrouted effect, encoded the same way its own `effect.*` or `trace.*` type would encode it, under a `kind` key naming that type |
+
+## Projection
+
+A projected stream carries the run's structure, transitions, outcomes and
+ordering, and withholds its values. It exists for the second consumer of
+this format: a multi-tenant host showing a run's history to the end user
+whose run it is, who is not entitled to the datamodel behind it. ADR-0012 is
+the record.
+
+**Full fidelity is the default and is byte-unchanged.** A producer not asked
+to project emits no `projection` key, no sentinels, and full values. Every
+existing golden trace is byte-identical. Projection is something a host
+turns on for a subscription, one session at a time.
+
+**The version stays `1`.** A v1 producer never emitted `$redacted`, so no
+existing stream changes; a v1 consumer meeting one renders an unfamiliar
+one-key map, which is conspicuous rather than silently wrong, and the
+`projection` header says why. Nothing a v1 consumer previously read
+correctly is now read incorrectly, which is this document's own test for a
+bump.
+
+### The `projection` header
+
+`session.start` carries a `projection` object whenever the stream is
+projected:
+
+```json
+{"mode": "projected", "profile": "end_user_run_history"}
+```
+
+| Field | Type | Presence |
+|---|---|---|
+| mode | string | always, within the object - `"projected"` |
+| profile | string | always, within the object - the profile's name |
+
+Key absence means full fidelity. Distinguishability is not optional: a
+capture that cannot say whether it is redacted cannot be filed by an
+operator; a golden-trace comparison between a projected capture and a full
+golden fails for a reason that has nothing to do with conformance, and the
+header is what lets a test say so; and a datamodel pane rendering a redacted
+stream must show "redacted", not "unbound".
+
+Per-message self-announcement through the `$redacted` sentinel is kept **in
+addition** to the header, not instead of it, so a consumer that joined
+mid-stream or a single message pulled out of a log still says what it is.
+
+### The closed set of value positions
+
+Every position below is redacted unless a profile allows it back. The table
+is the checklist: a value position added to this format later without a
+projection rule would carry values through a projected stream silently,
+which is the worst failure available here because it is invisible.
+
+| Message | Position |
+|---|---|
+| `session.datamodel` | every value in `datamodel` |
+| `effect.datamodel_change` | `new_value`, `prior_value` |
+| `trace.event_dequeued` | `event.data` |
+| `trace.transitions_selected` | `event.data` |
+| `trace.finalize_autoforward` | `event.data` |
+| `trace.done` | `donedata` |
+| `effect.done` | `donedata` |
+| `effect.autoforward` | `event.data` |
+| `effect.budget_exhausted` | `data` on each `pending_internal_events` entry |
+| `effect.log` | `value` |
+| `effect.invoke` | `params`, `content` |
+| `effect.send` | `data` |
+| `effect.send_delayed` | `data` |
+| `session.unroutable` | every value position of the nested `effect`, recursively |
+| `session.start` | `fixtures`, replaced whole; `source` when `allow_source` is false |
+| `session.terminated` | `reason`, replaced whole |
+
+`session.unroutable` wraps another type's encoding under a `kind` key, so a
+projection must recurse into it rather than pattern-matching the outer type.
+It is unreachable in the engine as shipped, which is exactly why it is easy
+to forget.
+
+`session.datamodel` keeps its keys. Variable names come from the chart, not
+from the run, and this message's stated job is to name the datamodel's
+variables reliably - which it still does.
+
+`session.start`'s `fixtures` is a datamodel bundle by construction
+(ADR-0003), so it is replaced whole rather than descended into. A host that
+supplied no fixtures still omits the key, as today, and the two states stay
+distinguishable.
+
+**Redaction replaces at a key that is already present; it never creates
+one.** Nine of these positions are conditionally absent, and writing a
+sentinel into an absent key would assert something the run never did: an
+eventless round (`trace.transitions_selected` with no `event`) becoming
+evented, a first write (`effect.datamodel_change` with no `prior_value`)
+acquiring a prior value, or a host that supplied no fixtures acquiring a
+bundle.
+
+### What is never projected
+
+`type`, `session`, `seq`, `macrostep`, `microstep`, `round`; state indexes,
+`t_index`, `c_index`, `d_index`, `invokeid`, `send_id`, `state_index`,
+`invoke_index`; every `session.start` table (`states`, `transitions`,
+`contents`, `data`) and every `location` and `value_location` object in
+them; configurations; exit and entry sequences in their engine order;
+selected `t_index` lists; `kind` and `type` discriminators; owner and origin
+objects; event `name`s; transition event descriptors; `label` on
+`effect.log`; `src` and `invoke_type` on `effect.invoke`; `target` and
+`send_type` on the send family; `location_path` and `location_source` on
+`effect.datamodel_change`; `session.halted`'s `reason` (a closed three-value
+set); and `effect.done`'s `configuration`.
+
+That list is what leaves a projected stream worth rendering at all: the
+timeline, the diagram highlighting, the click-through to source, and the
+run's outcome are built entirely from fields in it.
+
+`session.start`'s `data` table is already deliberately identity-only - it
+carries `d_index`, `id`, `location`, and `value_location`, and no
+representation of the declared value - so it needs no rule.
+
+### Allowlists: two shapes, because there are two kinds of position
+
+Within projected mode the default is deny.
+
+**Located positions** - the datamodel - are allowlisted by **path prefix**,
+written as arrays of segments in the same encoding
+`effect.datamodel_change`'s `location_path` already uses:
+
+```
+allow_paths: [["authorization", "status"], ["account", "currency"]]
+```
+
+So `["authorization"]` allows the whole `authorization` subtree and
+`["authorization", "status"]` allows one leaf. The same prefixes apply to
+`session.datamodel`, whose keys are the first segment of every path. That is
+why the datamodel allowlist is expressed by path and not by variable name:
+one expression covers both messages, and a host that may show
+`authorization.status` but not `authorization.amount_cents` can say so.
+
+Three cases, and the third is the operator ruling of 2026-08-29 recorded on
+ADR-0012:
+
+- An allowed prefix **matches the write's leading segments** (the prefix is
+  no longer than the write's path): the whole value passes.
+- No allowed prefix relates to the path: the whole value is redacted.
+- An allowed prefix is **longer than the write's path and extends it** - the
+  write is shallower than the prefix, so the written value contains both the
+  allowed leaf and its withheld siblings. The projection **descends into the
+  value** and redacts selectively, so the allowed leaf passes and every
+  sibling is redacted. Allowing the whole write would leak a sibling the
+  profile withheld; denying it would withhold a leaf the profile allowed.
+
+Descent applies identically to `session.datamodel`'s snapshot values. Where
+a value cannot be descended into because it is a scalar rather than an
+object or an array, the allowed leaf is unreachable and the value is
+redacted whole.
+
+**Unlocated positions** - payloads, which have no path - are allowlisted by
+naming the position, from a closed set:
+
+```
+allow_positions: [:event_data, :log_value, :send_data,
+                  :invoke_params, :invoke_content, :donedata]
+```
+
+Naming a position allows it wholesale, at every message that carries it.
+There is deliberately no per-key allowlist inside a payload: an event
+payload has no stable schema the way a datamodel location does, so a
+key-level rule there would be a guess that silently stops matching when a
+chart changes - and a redaction rule that silently stops matching is the
+failure this whole section exists to avoid. A host needing finer control
+over a payload narrows what the chart puts in it.
+
+### `allow_source`
+
+`session.start`'s `source` is verbatim SCXML. It is authored rather than run
+data, and it is what the whole inspector resolves indexes against, so
+projection retains it by default.
+
+The honest caveat: the `data` table's `value_location` exists so a consumer
+can recover a `<data>` element's declared initial value by slicing `source`.
+So retaining `source` retains **declared** initial values, even under a
+profile that redacts everything else. Runtime values are unaffected - the
+binding fold's results arrive as `effect.datamodel_change` and are redacted
+normally - but a chart with a literal secret in a `<data expr="...">` is not
+protected by projection.
+
+A profile may set `allow_source: false`, which replaces `source` with the
+sentinel. The cost is stated plainly: without `source`, location objects
+still resolve to line and column but nothing can display the text at them,
+so click-through degrades to coordinates.
+
+### What projection is not
+
+**It is not anonymization.** Structure leaks. Which branch a run took, how
+many rounds a macrostep needed, which transition fired on which event -
+these imply things about the values that produced them, and an observer with
+the chart in hand can infer a great deal from a fully redacted stream. The
+guarantee is narrow and worth stating in those terms: **no datamodel value
+crosses the producer boundary.** A host needing more than that needs to
+withhold structure, which this format does not provide.
+
+**It is not access control.** It shapes one stream. It does not
+authenticate a subscriber, does not decide which sessions a subscriber may
+see, and does not stop a host attaching a full-fidelity subscriber alongside
+a projected one. Choosing the profile correctly per tenant is the host's
+job, and this format cannot check it.
+
+**A projected capture is not byte-comparable to a full one.** Golden-trace
+conformance does not transfer: a profile whose output matters is tested
+against its own golden, produced under that profile. The existing goldens
+stay valid because the default is untouched.
+
+`location_path`'s integer segments are resolved index expressions, so a
+projected stream still reveals which array index a write landed on - a
+narrow inference channel about a value the same stream redacts. It is
+retained because a consumer that cannot see the path cannot fold the write
+at all, which would cost the whole datamodel-shape view for very little.
 
 ## Worked example
 

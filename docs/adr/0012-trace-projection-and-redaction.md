@@ -48,6 +48,77 @@ preserves that exactly: `authorization.status` is the safe leaf,
 (`["account", "currency"]`) is still a second top-level subtree, so the
 list is still a list.
 
+## Amendment proposed 2026-08-29 (sui-hmn): the three implementation rulings
+
+Status: proposed
+
+*Proposed, not accepted. Nothing outside this section has been edited, and
+no Status line elsewhere in this record has been changed.*
+
+Implementing `sui-hmn` against this record surfaced three questions the
+accepted text does not settle. Each was raised to the operator rather than
+guessed at, and each was ruled on 2026-08-29. This section records the
+rulings additively so the implementation and the record do not diverge; the
+accepted text above stands unchanged.
+
+**1. The in-process term for the sentinel.** The accepted text fixes the
+JSON encoding as `{"$redacted": true}` and forbids a consumer rendering it
+as unbound, null, empty, or a literal one-key map, but names no Elixir term.
+`:undefined` was unavailable: it already means unbound, and
+`StatifierUI.DatamodelExplorer` already substitutes it on a decode error, so
+reusing it would have reintroduced exactly the confusion this record exists
+to prevent.
+
+*Ruled:* the sentinel decodes to a dedicated atom **`:redacted`**, with its
+own `StatifierUI.Shape` variant, its own `infer/1` clause, and its own
+render label. `StatifierUI.Value.decode/1` and `encode/1` carry the pair.
+
+**2. An allowlist prefix against a write that is shallower than the
+prefix.** The accepted text says a prefix matches a write when it matches
+the write's leading segments, which settles the case where the prefix is no
+longer than the write's path. It does not say what happens when a profile
+allows a two-segment leaf and the write's `location_path` is the
+one-segment parent, whose value carries both the allowed leaf and its
+withheld siblings. Three behaviors were consistent with the text: allow the
+whole write, deny the whole write, or descend.
+
+*Ruled:* the projection **descends** and redacts selectively, so the allowed
+leaf passes and every withheld sibling is redacted. Allowing the whole write
+would leak a sibling the profile withheld, which contradicts this record's
+own "no datamodel value crosses the producer boundary" guarantee; denying it
+would withhold a leaf the profile allowed. Where the value is a scalar and
+cannot be descended into, the allowed leaf is unreachable and the value is
+redacted whole.
+
+**3. Whether prefixes descend into `session.datamodel`'s values.** The
+accepted text says the same prefixes apply and that the snapshot's keys are
+the first segment of every path, which settles a one-segment prefix. A
+longer prefix would have to descend into the snapshot's value for that key.
+
+*Ruled:* prefixes **descend into `session.datamodel` by the same rule** as
+ruling 2. This remains unobservable in the stream as the engine emits it
+today, because the snapshot's values are all `{"$undefined": true}` before
+the binding fold, which is why the accepted text could leave it open without
+consequence. The implementation still had to pick a behavior, and picking
+the same one twice is what keeps the two messages describable by one
+sentence.
+
+**Nothing else changes.** The seam, the sentinel's JSON form, the closed
+position table, the two allowlist shapes, `allow_source`, the `projection`
+header, the versioning decision, and the default all stand exactly as
+accepted. Rulings 2 and 3 narrow an under-specified case toward withholding
+more rather than less; ruling 1 names a term the record never named.
+
+The non-blocking items raised alongside these - `StatifierUI.EventInjection`
+being seeded from the fixtures bundle rather than from observed values, the
+`session.terminated` render site that raised rather than mis-rendered, the
+placement of the specification's Projection section relative to the
+type-index drift test, and whether a projected golden needs regeneration
+tooling - were left to the implementer's judgement and are recorded in
+`docs/research/260829-sui-hmn-trace-projection-code-map.md`. The in-place
+datamodel-editing constraint this record names lands on `sui-t36.8`, which
+owns the write path that does not exist yet.
+
 ## Context
 
 Wire format v1 carries real datamodel values by design. That is the right
