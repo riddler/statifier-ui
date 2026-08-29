@@ -4,6 +4,22 @@ defmodule StatifierUI.ShapeTest do
 
   alias StatifierUI.Shape
 
+  describe "infer/1 - the redaction sentinel" do
+    test "infers :redacted, not :undefined or :unknown" do
+      assert Shape.infer(:redacted) == :redacted
+    end
+
+    test "labels :redacted distinctly from :undefined" do
+      assert Shape.label(:redacted) == "redacted"
+      assert Shape.label(:undefined) == "undefined"
+    end
+
+    test "a redacted slot inside a map keeps the surrounding shape" do
+      assert Shape.infer(%{"status" => "ok", "amount_cents" => :redacted}) ==
+               {:map, %{"status" => :string, "amount_cents" => :redacted}}
+    end
+  end
+
   describe "infer/1 - scalars" do
     test "boolean" do
       assert Shape.infer(true) == :boolean

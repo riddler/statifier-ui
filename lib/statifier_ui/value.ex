@@ -6,8 +6,14 @@ defmodule StatifierUI.Value do
   `decode/1` reads a JSON-decoded term (as produced by the stdlib `JSON`
   module) and recovers the predicator value it encodes, resolving the
   `$`-prefixed one-key tagged shapes ADR-0005 reserves: `$undefined`,
-  `$date`, `$datetime`, `$duration`. `encode/1` is the inverse, present so
-  the codec is round-trip testable; it is not wired to any writer.
+  `$date`, `$datetime`, `$duration`, plus `$redacted`, which ADR-0012 adds
+  to the reserved set. `encode/1` is the inverse, present so the codec is
+  round-trip testable; it is not wired to any writer.
+
+  `$redacted` decodes to the dedicated atom `:redacted` (operator ruling of
+  2026-08-29, recorded on ADR-0012). It is deliberately not `:undefined`:
+  absence and redaction are different claims, and collapsing them is the
+  failure ADR-0012 exists to prevent.
 
   JSON-native values (booleans, numbers, strings, `nil`, lists, ordinary
   maps) map to themselves in both directions. JSON `null` always decodes to
@@ -25,10 +31,11 @@ defmodule StatifierUI.Value do
   `encode/1` is closed over predicator's value domain (ADR-0005): the
   JSON-native scalars, `Date`, `DateTime`, durations, string- or
   atom-keyed maps, and lists of the above. A term outside that domain -
-  a bare atom other than `nil`, `:undefined`, `true`, or `false`, a pid,
-  tuple, reference, port, function, or a struct other than `Date` or
-  `DateTime` - is rejected with `{:error, {:unsupported_value, term}}`
-  rather than passed through or allowed to raise.
+  a bare atom other than `nil`, `:undefined`, `:redacted`, `true`, or
+  `false`, a pid, tuple, reference, port, function, or a struct other than
+  `Date` or `DateTime` - is rejected with
+  `{:error, {:unsupported_value, term}}` rather than passed through or
+  allowed to raise.
   """
 
   alias StatifierUI.Shape
@@ -50,7 +57,7 @@ defmodule StatifierUI.Value do
   Decodes a JSON-decoded term into a predicator value.
 
   Recurses through lists and map values. A one-key map whose key starts
-  with `$` and is not one of the four reserved tags is an error: ADR-0005
+  with `$` and is not one of the five reserved tags is an error: ADR-0005
   reserves the whole one-key `$`-prefixed shape, so an unrecognized tag is a
   spec violation on the producer's side rather than a host map to pass
   through. A multi-key map containing a `$`-prefixed key is an ordinary host
@@ -67,9 +74,14 @@ defmodule StatifierUI.Value do
       iex> StatifierUI.Value.decode(%{"$undefined" => true})
       {:ok, :undefined}
 
+      iex> StatifierUI.Value.decode(%{"$redacted" => true})
+      {:ok, :redacted}
+
   """
   @spec decode(term()) :: {:ok, term()} | {:error, term()}
   def decode(%{"$undefined" => true} = map) when map_size(map) == 1, do: {:ok, :undefined}
+
+  def decode(%{"$redacted" => true} = map) when map_size(map) == 1, do: {:ok, :redacted}
 
   def decode(%{"$date" => value} = map) when map_size(map) == 1 do
     case Date.from_iso8601(value) do
@@ -121,7 +133,8 @@ defmodule StatifierUI.Value do
   is round-trip testable.
 
   A term outside predicator's closed value domain - a bare atom other than
-  `nil`, `:undefined`, `true`, or `false`, a pid, tuple, reference, port,
+  `nil`, `:undefined`, `:redacted`, `true`, or `false`, a pid, tuple,
+  reference, port,
   function, or a struct other than `Date` or `DateTime` - returns
   `{:error, {:unsupported_value, term}}`. This function never raises.
 
@@ -130,12 +143,16 @@ defmodule StatifierUI.Value do
       iex> StatifierUI.Value.encode(:undefined)
       {:ok, %{"$undefined" => true}}
 
+      iex> StatifierUI.Value.encode(:redacted)
+      {:ok, %{"$redacted" => true}}
+
       iex> StatifierUI.Value.encode(1999)
       {:ok, 1999}
 
   """
   @spec encode(term()) :: {:ok, term()} | {:error, term()}
   def encode(:undefined), do: {:ok, %{"$undefined" => true}}
+  def encode(:redacted), do: {:ok, %{"$redacted" => true}}
   def encode(%Date{} = date), do: {:ok, %{"$date" => Date.to_iso8601(date)}}
   def encode(%DateTime{} = datetime), do: {:ok, %{"$datetime" => DateTime.to_iso8601(datetime)}}
 

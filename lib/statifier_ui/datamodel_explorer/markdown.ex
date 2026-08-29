@@ -141,10 +141,18 @@ defmodule StatifierUI.DatamodelExplorer.Markdown do
     name = qualified_name(prefix, entry.name)
     marked_name = if entry.changed?, do: name <> changed_marker, else: name
     type_label = Shape.label(entry.shape, shape_opts)
-    row = "| #{marked_name} | #{type_label} | #{inspect(entry.value)} |"
+    row = "| #{marked_name} | #{type_label} | #{value_cell(entry.value)} |"
 
     [row | Enum.flat_map(entry.children, &entry_rows(&1, name, changed_marker, shape_opts))]
   end
+
+  # A redacted slot renders as an explicit affordance rather than as
+  # `inspect(:redacted)`, and never as unbound (ADR-0012): a datamodel pane
+  # that shows "undefined" for a withheld value tells the reader the chart is
+  # broken.
+  @spec value_cell(term()) :: String.t()
+  defp value_cell(:redacted), do: "(redacted)"
+  defp value_cell(value), do: inspect(value)
 
   @spec qualified_name(String.t() | nil, String.t()) :: String.t()
   defp qualified_name(nil, name), do: name
