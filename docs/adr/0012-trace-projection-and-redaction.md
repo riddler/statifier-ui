@@ -1,7 +1,7 @@
 # ADR-0012: Trace projection and redaction
 
 Status: accepted (2026-08-26)
-Amendment status: **proposed** (2026-08-27, sui-0of) - see "Amendment
+Amendment status: **proposed** (2026-08-27, sui-0of); **accepted** (2026-08-29, sui-hmn: the three implementation rulings, accepted under the operator campaign-015 direction-agent gate grant, PR 55) - see "Amendment
 proposed" below; the accepted text is unchanged and stays authoritative
 until the amendment is read and accepted.
 
@@ -48,11 +48,11 @@ preserves that exactly: `authorization.status` is the safe leaf,
 (`["account", "currency"]`) is still a second top-level subtree, so the
 list is still a list.
 
-## Amendment proposed 2026-08-29 (sui-hmn): the three implementation rulings
+## Amendment accepted 2026-08-29 (sui-hmn): the three implementation rulings
 
-Status: proposed
+Status: accepted (2026-08-29, unqualified direction-agent verdict under the operator campaign-015 grant, PR 55)
 
-*Proposed, not accepted. Nothing outside this section has been edited, and
+*Accepted 2026-08-29. Nothing outside this section has been edited, and
 no Status line elsewhere in this record has been changed.*
 
 Implementing `sui-hmn` against this record surfaced three questions the
@@ -116,8 +116,8 @@ placement of the specification's Projection section relative to the
 type-index drift test, and whether a projected golden needs regeneration
 tooling - were left to the implementer's judgement and are recorded in
 `docs/research/260829-sui-hmn-trace-projection-code-map.md`. The in-place
-datamodel-editing constraint this record names lands on `sui-t36.8`, which
-owns the write path that does not exist yet.
+datamodel-editing constraint this record names lands on `sui-8hg` (filed
+from this bead; `sui-t36.8` closed 2026-08-22 without a write path).
 
 ## Context
 
