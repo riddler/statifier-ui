@@ -44,9 +44,38 @@ defmodule StatifierUI.Trace.ManifestTest do
   </scxml>
   """
 
+  @written_type """
+  <?xml version="1.0" encoding="UTF-8"?>
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="a" version="1.0" datamodel="predicator">
+      <state id="a">
+          <transition event="go" target="b" type="external" />
+      </state>
+      <state id="b" />
+  </scxml>
+  """
+
   defp compile!(xml) do
     {:ok, machine} = Statifier.compile(xml)
     machine
+  end
+
+  # Stands in for a Machine compiled by an engine that does not populate
+  # `attribute_locations` - the field defaults to `%{}` upstream, so
+  # emptying it here reproduces that producer input exactly.
+  defp strip_attribute_locations(%Machine{} = machine) do
+    states =
+      machine.states
+      |> Tuple.to_list()
+      |> Enum.map(&%{&1 | attribute_locations: %{}})
+      |> List.to_tuple()
+
+    transitions =
+      machine.transitions
+      |> Tuple.to_list()
+      |> Enum.map(&%{&1 | attribute_locations: %{}})
+      |> List.to_tuple()
+
+    %{machine | states: states, transitions: transitions}
   end
 
   defp slice(source, %{"start_offset" => start_offset, "end_offset" => end_offset}) do
@@ -105,6 +134,129 @@ defmodule StatifierUI.Trace.ManifestTest do
       assert transition["content"] == []
       assert Map.has_key?(transition, "cond_location")
       assert Map.has_key?(transition, "location")
+    end
+  end
+
+  describe "build/3 - attribute_locations" do
+    test "a transition row's entries are exactly the attributes the author wrote, each spanning its own value" do
+      machine = compile!(@two_state)
+      {:ok, message} = Manifest.build(machine, "sess_1", source: @two_state)
+
+      [transition] = message.payload["transitions"]
+      spans = transition["attribute_locations"]
+
+      assert MapSet.new(Map.keys(spans)) == MapSet.new(~w(event target cond))
+
+      assert slice(@two_state, spans["event"]) == "go"
+      assert slice(@two_state, spans["target"]) == "b"
+      assert slice(@two_state, spans["cond"]) == "1 == 1"
+    end
+
+    test "key presence answers 'was type written', which the lowered value cannot" do
+      machine = compile!(@two_state)
+      {:ok, message} = Manifest.build(machine, "sess_1")
+
+      [transition] = message.payload["transitions"]
+
+      # The compiler lowered the unwritten `type` to the `:external` default,
+      # so the value says "external" either way. Only key absence separates
+      # a defaulted transition from one written `type="external"`.
+      assert transition["type"] == "external"
+      refute Map.has_key?(transition["attribute_locations"], "type")
+
+      written = compile!(@written_type)
+      {:ok, written_message} = Manifest.build(written, "sess_1")
+
+      [written_transition] = written_message.payload["transitions"]
+      assert written_transition["type"] == "external"
+      assert Map.has_key?(written_transition["attribute_locations"], "type")
+    end
+
+    test "a state row carries its own written attributes, and the root carries the scxml element's" do
+      machine = compile!(@two_state)
+      {:ok, message} = Manifest.build(machine, "sess_1", source: @two_state)
+
+      state_a = Enum.find(message.payload["states"], &(&1["id"] == "a"))
+      assert MapSet.new(Map.keys(state_a["attribute_locations"])) == MapSet.new(~w(id))
+      assert slice(@two_state, state_a["attribute_locations"]["id"]) == "a"
+
+      root = Enum.find(message.payload["states"], &(&1["index"] == 0))
+      root_attributes = MapSet.new(Map.keys(root["attribute_locations"]))
+      assert MapSet.subset?(MapSet.new(~w(initial version datamodel)), root_attributes)
+      assert slice(@two_state, root["attribute_locations"]["initial"]) == "a"
+    end
+
+    test "every entry is a whole six-field location object, the same shape as `location`" do
+      machine = compile!(@two_state)
+      {:ok, message} = Manifest.build(machine, "sess_1")
+
+      [transition] = message.payload["transitions"]
+
+      for {_attribute, span} <- transition["attribute_locations"] do
+        assert %{
+                 "start_line" => _,
+                 "start_column" => _,
+                 "start_offset" => _,
+                 "end_line" => _,
+                 "end_column" => _,
+                 "end_offset" => _
+               } = span
+
+        assert map_size(span) == 6
+      end
+    end
+
+    test "cond_location is retained alongside the map rather than replaced by it" do
+      machine = compile!(@two_state)
+      {:ok, message} = Manifest.build(machine, "sess_1", source: @two_state)
+
+      [transition] = message.payload["transitions"]
+
+      assert slice(@two_state, transition["cond_location"]) ==
+               slice(@two_state, transition["attribute_locations"]["cond"])
+
+      assert Map.has_key?(transition, "cond_location")
+    end
+
+    test "an empty map degrades to the element-level location and changes nothing else" do
+      machine = compile!(@two_state)
+      {:ok, rich} = Manifest.build(machine, "sess_1")
+
+      # A Machine compiled by an engine that does not populate the field, or
+      # an element that wrote no attributes at all: the map is `%{}` and a
+      # consumer falls back to the row's own `location`.
+      stripped = strip_attribute_locations(machine)
+      {:ok, degraded} = Manifest.build(stripped, "sess_1")
+
+      [rich_transition] = rich.payload["transitions"]
+      [degraded_transition] = degraded.payload["transitions"]
+
+      assert degraded_transition["attribute_locations"] == %{}
+      assert degraded_transition["location"] == rich_transition["location"]
+
+      assert Map.delete(degraded_transition, "attribute_locations") ==
+               Map.delete(rich_transition, "attribute_locations")
+
+      for state <- degraded.payload["states"] do
+        assert state["attribute_locations"] == %{}
+      end
+
+      assert Enum.map(degraded.payload["states"], &Map.delete(&1, "attribute_locations")) ==
+               Enum.map(rich.payload["states"], &Map.delete(&1, "attribute_locations"))
+    end
+
+    test "the object survives JSON encoding with its keys in canonical order" do
+      machine = compile!(@two_state)
+      {:ok, message} = Manifest.build(machine, "sess_1")
+
+      decoded = message |> Json.encode_message() |> JSON.decode!()
+
+      [transition] = decoded["transitions"]
+      assert Map.has_key?(transition, "attribute_locations")
+      assert Map.has_key?(transition["attribute_locations"], "event")
+
+      encoded = Json.encode_to_string(transition["attribute_locations"])
+      assert String.starts_with?(encoded, ~s({"cond":))
     end
   end
 

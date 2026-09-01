@@ -38,6 +38,34 @@ defmodule StatifierUI.Trace.Manifest do
   itself instead, naming `Assign` and `Script` as the two kinds whose span
   is `:node_location` and treating every other kind's `:location` as the
   span it already is.
+
+  ## `attribute_locations`: key presence is the contract
+
+  A state row and a transition row each carry an `attribute_locations`
+  object alongside the element-level `location`, built from the Machine
+  field of the same name (`Statifier.Machine.State`,
+  `Statifier.Machine.Transition`). It maps an attribute name to that
+  attribute's own value span, and its value is not the interesting part:
+  **an entry exists only for an attribute the author actually wrote**, so
+  `Map.has_key?(row["attribute_locations"], "type")` is the "was `type`
+  written" question that `type`'s own value cannot answer once lowering has
+  applied the `:external` default. The map is carried verbatim from the
+  Document node through the Machine, so that contract survives the whole
+  trip to the wire.
+
+  The object is always present and is `%{}` for an element that wrote no
+  attributes at all, for the synthesized initial transition no author wrote,
+  and for a Machine compiled by an engine old enough not to populate the
+  field. Those three are indistinguishable on the wire and deliberately so:
+  a consumer that finds no entry for the attribute it wants falls back to
+  the row's element-level `location`, which is exactly the granularity the
+  format offered before this field existed.
+
+  `cond_location` stays where it is. It is not folded into this object
+  because it carries a fallback the raw map does not - the transition's own
+  `location` when `cond` was written without a recorded span - so the two
+  answer different questions. Prefer `attribute_locations["cond"]` for new
+  work; read `cond_location` when the fallback is what is wanted.
   """
 
   alias Statifier.Machine
@@ -124,7 +152,8 @@ defmodule StatifierUI.Trace.Manifest do
       "kind" => Atom.to_string(state.kind),
       "children" => state.children,
       "transitions" => state.transitions,
-      "location" => location_object(state.location)
+      "location" => location_object(state.location),
+      "attribute_locations" => attribute_locations_object(state.attribute_locations)
     }
     |> put_present("id", state.id)
     |> put_present("parent", state.parent)
@@ -148,7 +177,8 @@ defmodule StatifierUI.Trace.Manifest do
       "events" => transition.events,
       "type" => Atom.to_string(transition.type),
       "content" => transition.content,
-      "location" => location_object(transition.location)
+      "location" => location_object(transition.location),
+      "attribute_locations" => attribute_locations_object(transition.attribute_locations)
     }
     |> put_present("cond_location", location_object_or_nil(transition.cond_location))
   end
@@ -224,6 +254,17 @@ defmodule StatifierUI.Trace.Manifest do
       "end_column" => location.end_column,
       "end_offset" => location.end_offset
     }
+  end
+
+  # The attribute name is an atom on the Machine and a string on the wire.
+  # The map is passed through key by key rather than filtered: what the
+  # compiler recorded is exactly what a consumer needs, and dropping a key
+  # here would destroy the key-presence contract this field exists to carry.
+  @spec attribute_locations_object(%{optional(atom()) => Location.t()}) :: map()
+  defp attribute_locations_object(attribute_locations) do
+    Map.new(attribute_locations, fn {attribute, %Location{} = location} ->
+      {Atom.to_string(attribute), location_object(location)}
+    end)
   end
 
   @spec location_object_or_nil(Location.t() | nil) :: map() | nil
