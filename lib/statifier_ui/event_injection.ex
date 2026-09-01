@@ -33,6 +33,32 @@ defmodule StatifierUI.EventInjection do
   case `diagnostics/1` says why). The free-form escape hatch
   (`send_draft/3` with a name and payload text typed by hand) needs no
   fixtures at all and always works, degraded mode or not.
+
+  ## Projection (ADR-0012): excluded, and why
+
+  ADR-0012's flow-through clause asks consumers to disable value-editing
+  affordances over a projected stream, naming "`EventInjection`'s payload
+  composition **where it is seeded from observed values**". This pane is
+  **excluded from that clause**, deliberately (`sui-8hg`).
+
+  Nothing here is seeded from an observed value. `build/1` takes a
+  `StatifierUI.Fixtures` bundle - an authoring-time artifact the operator
+  already holds in full - and `Palette.build/1` composes every payload from
+  that bundle's `events` map. The free-form path is typed by hand. Neither
+  source is the trace stream, so projecting the stream cannot redact
+  anything this pane offers, and a `{"$redacted": true}` value can never
+  reach a draft: a redacted slot is not a fixture.
+
+  The consequence is the point of recording it. A palette entry stays
+  live under projection because the operator composing it is entitled to
+  the fixture it came from, and greying the form out would remove the one
+  affordance that still works while telling the user something untrue about
+  why. If a future revision ever seeds a draft from an observed value - a
+  "resend this event" button reading `effect.*` off the stream, say - this
+  exclusion lapses at that moment and ADR-0012's clause applies in full:
+  such a seed must consult the projection header before offering the draft.
+  `StatifierUI.DatamodelExplorer.edit_disabled_reason/1` is the guard to
+  reuse.
   """
 
   import Kernel, except: [send: 2]

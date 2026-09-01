@@ -10,7 +10,10 @@ defmodule StatifierUI.DatamodelExplorer.Markdown do
   ## Structure
 
   A header line naming the mode and either the scenario (authoring) or the
-  session and macrostep (live), a drop warning when `truncated?`, then one
+  session and macrostep (live), the ADR-0012 line naming the projection
+  profile and saying editing is off when the pane is projected
+  (`DatamodelExplorer.edit_disabled_reason/1`), a drop warning when
+  `truncated?`, then one
   section per tier **in the pane's tier order** - `entries/1` already
   produces its entries grouped contiguously by tier, so this module chunks
   on that grouping rather than re-deriving or re-sorting it (ADR-0011). Each
@@ -92,7 +95,18 @@ defmodule StatifierUI.DatamodelExplorer.Markdown do
         "macrostep: #{macrostep_text(pane.macrostep)})"
     ]
 
-    Enum.join(lines ++ truncation_lines(pane), "\n")
+    Enum.join(lines ++ projection_lines(pane) ++ truncation_lines(pane), "\n")
+  end
+
+  # ADR-0012 asks that the profile name be surfaced where the mode is, so a
+  # reader asking "why can't I see this" has something to quote, and that the
+  # editing guard say why rather than going quiet (`sui-8hg`).
+  @spec projection_lines(DatamodelExplorer.t()) :: [String.t()]
+  defp projection_lines(pane) do
+    case DatamodelExplorer.edit_disabled_reason(pane) do
+      nil -> []
+      reason -> [reason]
+    end
   end
 
   @spec macrostep_text(non_neg_integer() | nil) :: String.t()
