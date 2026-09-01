@@ -101,9 +101,23 @@ holds fifteen core modules, none of which reference `Kino` or
 - `StatifierUI.Trace.Subscriber` - the `GenServer` that attaches to a live
   `Statifier.Session`, stamps `seq`, and fans messages out to listeners.
 
-No LiveComponent, no Kino widget, and no JS asset exists yet. Everything
-described below past this section is intended design, tracked by beads and
-phased as summarized under "Phasing" in the research doc:
+Two integration layers have since been built on top of that core, and the
+module list above is no longer the whole of `lib/`. The Livebook inspector
+(`StatifierUI.Kino` over the pure `StatifierUI.Inspector`) is phase 1 below.
+The read-only **ops view** - `StatifierUI.Live`'s function components over
+`StatifierUI.Live.State`, the current-state diagram and the run-history
+event log over a live or persisted trace stream - is a first slice of phase
+2, written for a host's admin and support screens rather than for authoring;
+`docs/ops-embedding.md` is its guide. Both integrations keep their optional
+dependency behind a compile-time `Code.ensure_loaded?/1` guard, as ADR-0004
+requires, and both are pure folds underneath.
+
+Still true: no JS asset exists yet, and none of the three authoring
+LiveComponents described below is built - the ops view's diagram pane emits
+`StatifierUI.Diagram`'s Mermaid source for a host-supplied client, not the
+elkjs SVG the viewer will eventually draw. Everything described below past
+this section is intended design, tracked by beads and phased as summarized
+under "Phasing" in the research doc:
 
 1. The Livebook inspector (a Kino widget - configuration rendering, event
    log, fixture-fed event injection, datamodel explorer).
