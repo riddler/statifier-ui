@@ -100,15 +100,18 @@ StatifierUI.Kino.inspect(session, fixtures, source: xml)
 
 1. **Status header** - the session id, `attached`, a message count, and
    **no** "Live-only" warning.
-2. **Configuration diagram** (left) - the chart as a Mermaid state
+2. **Scrubber row** - four buttons, **|< First**, **< Prev**, **Next >**,
+   **Live** - and under them the line **Showing the live tip.**
+3. **Configuration diagram** (left) - the chart as a Mermaid state
    diagram with `pending` highlighted. The initialize burst happened
    before this cell ran; catch-up is why the diagram still knows about it.
-3. **Datamodel explorer** (right) - `amount_cents` at `1999`,
+4. **Datamodel explorer** (right) - `amount_cents` at `1999`,
    `captured_cents` at `0`, and `authorization_attempts` at `0`.
-4. **Injection pane** - one button per fixture event, then a free-form
+5. **Injection pane** - one button per fixture event, then a free-form
    name/payload form.
-5. **Event log** - macrostep 1 (the initialize burst), collapsed except
-   the last macrostep.
+6. **Event log** - macrostep 1 (the initialize burst), collapsed except
+   the last macrostep, and nothing marked "shown in the diagram" while
+   the scrubber is live.
 
 ## 5. Walk the chart from the palette
 
@@ -142,7 +145,40 @@ Do these in order, watching the panes after each click:
    the highlight *does* reach `captured`, that bead has been answered
    and this step needs updating.
 
-## 6. The form, including its error path
+## 6. Scrub back through the run
+
+The scrubber moves the **diagram** to any macrostep in the log while the
+log itself stays whole. Nothing is recomputed: every configuration it can
+show was stamped by the engine on a `trace.macrostep_stable`, and a
+caught-up stream got there through statifier ADR-0034 replay.
+
+1. Click **|< First**. Expect: the note reads **Showing macrostep 1
+   (initialize), at its quiescent configuration**, the diagram highlights
+   `pending`, and macrostep 1's entry in the log is open and suffixed
+   **- shown in the diagram**. Exactly one entry carries that suffix.
+2. Click **Next >** repeatedly. Expect: the note and the marked log entry
+   advance together, macrostep by macrostep; the highlight follows what
+   each macrostep settled in (so it sits on `pending` through the
+   declined attempt, then moves to `authorized`).
+3. Keep clicking **Next >** past the newest macrostep. Expect: the note
+   returns to **Showing the live tip**, no entry is marked, and the
+   diagram is following the run again.
+4. Click **< Prev** from the live tip. Expect: the newest macrostep is
+   *pinned* - the same picture as the live tip, but no longer following
+   it, and its log entry now carries the marker. **Live** clears both.
+5. Select the macrostep that entered `captured` - the halting one. Expect
+   the note to say **which is not quiescent; the configuration drawn is
+   macrostep N's, carried forward**. That is `sui-dc7` stated out loud
+   rather than silently: the halting macrostep ends in `trace.done`, so
+   it stamped no configuration of its own, and the scrubber says so
+   instead of presenting an earlier configuration as that macrostep's.
+
+The datamodel explorer does **not** move with the scrubber - it always
+shows the current values. Time-travelling the datamodel needs a
+per-macrostep fold the explorer does not have yet; the diagram and the
+log are the pair this walk exercises.
+
+## 7. The form, including its error path
 
 1. In the free-form fields, enter name `authorize.declined` and payload
    `{"reason": "manual"}`, press **Send**. Expect: "Sent" feedback, and
@@ -156,7 +192,7 @@ Do these in order, watching the panes after each click:
    error (`{:invalid_json, ...}`) - the session was never touched,
    because the draft failed to build before anything was sent.
 
-## 7. Re-evaluate the inspector cell
+## 8. Re-evaluate the inspector cell
 
 Re-evaluate the `StatifierUI.Kino.inspect(...)` cell (step 4).
 
@@ -173,7 +209,7 @@ To see the honest degraded mode: start a session **without**
 `record: true`, inspect it, and note the status header's **Live-only**
 warning - the inspector refuses to present a partial stream as whole.
 
-## 8. Session death
+## 9. Session death
 
 ```elixir
 Process.exit(session, :kill)

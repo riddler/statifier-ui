@@ -34,6 +34,7 @@ defmodule StatifierUI.EventLog.Markdown do
           {:labels, Labels.t()}
           | {:collapsible, boolean()}
           | {:open, open_selector()}
+          | {:selected, non_neg_integer() | nil}
 
   @doc """
   Renders `log` as a Markdown string.
@@ -48,15 +49,22 @@ defmodule StatifierUI.EventLog.Markdown do
     * `:open` - which macrosteps start open when `:collapsible` is `true`:
       `:last` (the default, opens the highest-numbered macrostep), `:all`,
       `:none`, or a list of macrostep numbers.
+    * `:selected` - the macrostep number the diagram beside this log is
+      currently showing (sui-3gg), or `nil` (the default) when the diagram
+      is on the live tip. The selected macrostep's summary is suffixed
+      `- shown in the diagram`, which is the whole of the link between the
+      two panes: the log says which entry the picture belongs to. It is
+      only a marker - use `:open` to open that entry as well.
   """
   @spec render(EventLog.t(), [opt()]) :: String.t()
   def render(%EventLog{} = log, opts \\ []) do
     labels = Keyword.get(opts, :labels, Labels.from_log(log))
     collapsible? = Keyword.get(opts, :collapsible, true)
     open = Keyword.get(opts, :open, :last)
+    selected = Keyword.get(opts, :selected)
 
     ([header(log)] ++
-       macrostep_blocks(log.macrosteps, labels, collapsible?, open) ++
+       macrostep_blocks(log.macrosteps, labels, collapsible?, open, selected) ++
        footer_blocks(log))
     |> Enum.reject(&(&1 == ""))
     |> Enum.join("\n\n")
@@ -131,13 +139,18 @@ defmodule StatifierUI.EventLog.Markdown do
 
   # -- Macrostep blocks -----------------------------------------------------
 
-  @spec macrostep_blocks([Macrostep.t()], Labels.t(), boolean(), open_selector()) :: [
-          String.t()
-        ]
-  defp macrostep_blocks(macrosteps, labels, collapsible?, open) do
+  @spec macrostep_blocks(
+          [Macrostep.t()],
+          Labels.t(),
+          boolean(),
+          open_selector(),
+          non_neg_integer() | nil
+        ) :: [String.t()]
+  defp macrostep_blocks(macrosteps, labels, collapsible?, open, selected) do
     Enum.map(macrosteps, fn macrostep ->
       open? = macrostep_open?(macrosteps, open, macrostep)
-      macrostep_block(macrostep, labels, collapsible?, open?)
+      selected? = macrostep.macrostep == selected
+      macrostep_block(macrostep, labels, collapsible?, open?, selected?)
     end)
   end
 
@@ -156,10 +169,11 @@ defmodule StatifierUI.EventLog.Markdown do
     macrostep.macrostep in indexes
   end
 
-  @spec macrostep_block(Macrostep.t(), Labels.t(), boolean(), boolean()) :: String.t()
-  defp macrostep_block(%Macrostep{} = macrostep, labels, true, open?) do
+  @spec macrostep_block(Macrostep.t(), Labels.t(), boolean(), boolean(), boolean()) ::
+          String.t()
+  defp macrostep_block(%Macrostep{} = macrostep, labels, true, open?, selected?) do
     open_attr = if open?, do: " open", else: ""
-    summary = summary_text(macrostep, labels)
+    summary = summary_text(macrostep, labels, selected?)
 
     lines =
       ["<details#{open_attr}>", "<summary>#{summary}</summary>", ""] ++
@@ -169,8 +183,8 @@ defmodule StatifierUI.EventLog.Markdown do
     Enum.join(lines, "\n")
   end
 
-  defp macrostep_block(%Macrostep{} = macrostep, labels, false, _open?) do
-    summary = summary_text(macrostep, labels)
+  defp macrostep_block(%Macrostep{} = macrostep, labels, false, _open?, selected?) do
+    summary = summary_text(macrostep, labels, selected?)
 
     lines =
       ["### Macrostep #{macrostep.macrostep}", "", summary, ""] ++
@@ -185,14 +199,19 @@ defmodule StatifierUI.EventLog.Markdown do
       round_note_lines(rounds, labels) ++ effects_lines(effects)
   end
 
-  @spec summary_text(Macrostep.t(), Labels.t()) :: String.t()
-  defp summary_text(%Macrostep{} = macrostep, labels) do
+  @spec summary_text(Macrostep.t(), Labels.t(), boolean()) :: String.t()
+  defp summary_text(%Macrostep{} = macrostep, labels, selected?) do
     round_count = length(macrostep.rounds)
 
     "Macrostep #{macrostep.macrostep}: #{event_summary(macrostep.event)}, " <>
       "#{round_count} #{pluralize(round_count, "round")}, " <>
-      quiescence_summary(macrostep.configuration, labels)
+      quiescence_summary(macrostep.configuration, labels) <>
+      selection_suffix(selected?)
   end
+
+  @spec selection_suffix(boolean()) :: String.t()
+  defp selection_suffix(true), do: " - shown in the diagram"
+  defp selection_suffix(false), do: ""
 
   @spec event_summary(map() | nil) :: String.t()
   defp event_summary(nil), do: "initialize"

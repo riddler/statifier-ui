@@ -39,6 +39,17 @@ defmodule StatifierUI.EventLog do
   one timeline (statifier ADR-0050 lets one mailbox carry an invoke tree of
   related sessions), so `build/1` refuses a message list naming more than
   one session id rather than corrupting the log.
+
+  ## Reading a past configuration
+
+  `configuration_at/2` answers "what was the configuration at macrostep
+  `n`" by looking up the stamps already in the log, never by re-deriving
+  one. The engine wrote every `trace.macrostep_stable` payload this reads,
+  and a stream reconstructed through catch-up got there by statifier
+  ADR-0034 replay, which re-drives the core rather than rewinding a live
+  session (ADR-0002's inherited clause). Time travel here is therefore a
+  read of replay output as data - nothing in this repo re-implements
+  Appendix D to answer it.
   """
 
   alias StatifierUI.EventLog.Macrostep
@@ -77,6 +88,46 @@ defmodule StatifierUI.EventLog do
       }
 
       {:ok, log}
+    end
+  end
+
+  @doc """
+  The configuration in force at `macrostep`, read from the log's own
+  `trace.macrostep_stable` stamps.
+
+  Three outcomes, kept distinct because a caller that collapsed them would
+  present a carried configuration as a measured one:
+
+    * `{:quiescent, configuration}` - macrostep `macrostep` itself reached
+      quiescence and this is the configuration it settled in.
+    * `{:carried, from, configuration}` - macrostep `macrostep` carries no
+      quiescent configuration (it is still in flight, or its
+      `trace.macrostep_stable` was dropped), so the newest one at or below
+      it is returned along with the macrostep `from` that stamped it.
+    * `:before_first` - no macrostep at or below `macrostep` stamped a
+      configuration at all. The caller decides what to show; the inspector
+      falls back to the session's initial configuration.
+
+  A `macrostep` naming no bucket in this log is not an error: it resolves
+  the same way, against whatever buckets sit below it.
+  """
+  @spec configuration_at(t(), non_neg_integer()) ::
+          {:quiescent, [non_neg_integer()]}
+          | {:carried, non_neg_integer(), [non_neg_integer()]}
+          | :before_first
+  def configuration_at(%__MODULE__{macrosteps: macrosteps}, macrostep) do
+    macrosteps
+    |> Enum.filter(&(&1.macrostep <= macrostep and &1.configuration != nil))
+    |> List.last()
+    |> case do
+      nil ->
+        :before_first
+
+      %Macrostep{macrostep: ^macrostep, configuration: configuration} ->
+        {:quiescent, configuration}
+
+      %Macrostep{macrostep: from, configuration: configuration} ->
+        {:carried, from, configuration}
     end
   end
 
