@@ -724,13 +724,13 @@ a Keep-a-Changelog heading (`### Added`, `### Fixed`) over prose bullets, as in
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes (`mix quality`).
-- [ ] `test/statifier_ui/trace/wire_format_spec_test.exs` passes - the type
+- [x] Full quality gate passes (`mix quality`).
+- [x] `test/statifier_ui/trace/wire_format_spec_test.exs` passes - the type
       index table still parses to exactly `Normalizer.types/0`.
-- [ ] `test/statifier_ui/trace/projection_drift_test.exs` passes.
-- [ ] `changelog.d/sui-czr.md` exists and follows the directory's existing
+- [x] `test/statifier_ui/trace/projection_drift_test.exs` passes.
+- [x] `changelog.d/sui-czr.md` exists and follows the directory's existing
       fragment shape.
-- [ ] The word "exclusive" appears on the `end_line`, `end_column`, and
+- [x] The word "exclusive" appears on the `end_line`, `end_column`, and
       `end_offset` rows of the location table.
 
 #### Manual Verification:
@@ -922,5 +922,28 @@ the human to confirm the manual testing before moving to the next phase. In
 looped (`--loop`) execution, this phase's Automated Verification gates
 advancement automatically (via `/wurk:commit --auto`), and Manual Verification
 items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 3
+
+- [ ] Read the `error` object subsection as a consumer with no Elixir: is the
+      distinction between `span` (over `expression`) and `location` (over
+      `source`) unambiguous, and is it clear that only `location` is used for
+      underlining?
+- [ ] Confirm the doc nowhere implies the producer detects the helper's
+      internal degradation - `"resolved"`'s caveat must read as a limitation,
+      not as a promise.
+- [ ] Terminology scan: nothing in the doc, the fragment, the fixture, or the
+      tests contains employer or product terminology; example domains are
+      `myapp:`-style throughout.
+- [ ] No regressions in related features.
+
+**Implementation Note**: This phase touches no Elixir under `lib/`, so per
+CLAUDE.md's commit row the diff review carries it - but `mix quality` still runs
+and must be green, because the two drift tests parse this document. In
+interactive execution, pause here for the human to confirm the manual testing.
+In looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically, and Manual Verification items are deferred.
 
 ---

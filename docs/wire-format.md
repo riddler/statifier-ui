@@ -431,9 +431,17 @@ present or wholly absent - there is no partial location:
 | start_line | integer (1-based) |
 | start_column | integer (1-based, Unicode codepoints) |
 | start_offset | integer (0-based byte offset) |
-| end_line | integer (1-based) |
-| end_column | integer (1-based, Unicode codepoints) |
+| end_line | integer (1-based, exclusive) |
+| end_column | integer (1-based, Unicode codepoints, exclusive) |
 | end_offset | integer (0-based byte offset, exclusive) |
+
+**Ends are exclusive.** A location's `end_line`/`end_column`/`end_offset`
+and a span object's `end_line`/`end_column` all name the position **one past**
+the last character of the span, so a zero-width span has its start equal to
+its end and a consumer slices `[start, end)` without adjustment. This is the
+convention statifier's own `Statifier.Parser.Location` and predicator's
+`t:Predicator.Types.span/0` both use, and it is stated here rather than left
+for a consumer to infer from the data.
 
 **`source`**, when present, is the chart's SCXML text, verbatim. It cannot
 be derived from the compiled Machine - the compiled form does not retain
@@ -490,13 +498,50 @@ Emitted when an event is selected off a queue for processing.
 | Field | Type | Presence |
 |---|---|---|
 | name | string | always |
-| data | value | present only when data was supplied (absence-rule: `:undefined` omits the key, `nil` present as `null`, `%{}` present as `{}`) |
+| data | value | present only when data was supplied and is not an expression-evaluation failure (absence-rule: `:undefined` omits the key, `nil` present as `null`, `%{}` present as `{}`; omitted, instead of failing to normalize, when the event's data is an expression-evaluation failure - such an event carries `error` instead) |
+| error | error object | present only when the event's data is an expression-evaluation failure |
 | type | string | always - `"external"`, `"internal"`, or `"platform"` |
 | cause | cause object | present only for `"internal"`/`"platform"` events the platform itself raised |
 | invokeid | string | present only when set |
 | origin | string | present only when set |
 | origintype | string | present only when set |
 | sendid | string | present only when set |
+
+**An error object** is the wire rendering of a failed expression
+evaluation (`Statifier.Evaluator.Error.t()`), produced when an event's data
+is such a failure rather than a value:
+
+| Field | Type | Presence |
+|---|---|---|
+| kind | string | always - the underscored name of the predicator error struct, trailing `_error` dropped (e.g. `"undefined_variable"`, `"type_mismatch"`, `"evaluation"`, `"parse"`, `"location"`) |
+| expression | string | always - the failing expression's **entity-expanded** text, not the raw source |
+| span | span object (`start_line`, `start_column`, `end_line`, `end_column`) | present only when the underlying evaluator error carries a span within `expression` |
+| location | location object | present only when the producer had both a `Statifier.Machine.t()` and `source` to resolve against, and could anchor the failure on a location at all |
+| location_kind | string | present only alongside `location` - `"resolved"` or `"node"`, see below |
+
+Three notes a consumer needs before using this object to underline
+anything:
+
+- **`expression` is not raw source.** It is the entity-expanded string the
+  expression engine counted columns in - a `cond` written `amount &lt; limit`
+  appears here as `amount < limit`. `span`'s columns are offsets into this
+  expanded string, not into `source`, and cannot be added to a raw-source
+  column directly. This is why `location` exists: it is pre-resolved for
+  you.
+- **`location` is absolute and already resolved.** A consumer underlines it
+  directly against `source`, with no span composition of its own. This is
+  the field that makes the format usable by a consumer with no Elixir and no
+  compiler.
+- **`location_kind` says what the producer did, not what happened
+  internally.** `"resolved"` means the span was composed against the
+  expression's own value location; `"node"` means there was no span to
+  compose, or no value location to compose it against, and the owning
+  node's whole span was emitted instead. **`"resolved"` may still span the
+  whole attribute value**: the composition degrades rather than failing
+  when the raw and entity-expanded text desync, and the producer does not
+  distinguish that case from a genuine resolution. Treat this as a
+  documented limitation, not a promise that `"resolved"` always narrows to
+  the failing subexpression.
 
 **A cause object** (`Statifier.Event.Cause.t()`):
 
@@ -938,6 +983,11 @@ is the checklist: a value position added to this format later without a
 projection rule would carry values through a projected stream silently,
 which is the worst failure available here because it is invisible.
 
+`error` carries no value position by construction: the predicator error's
+rendered message - the field that would embed datamodel values - is
+deliberately not on the wire (see the `error` object's fields above), so
+`trace.event_dequeued`'s `error` key needs no row in this table.
+
 | Message | Position |
 |---|---|
 | `session.datamodel` | every value in `datamodel` |
@@ -991,7 +1041,8 @@ objects; event `name`s; transition event descriptors; `label` on
 `effect.log`; `src` and `invoke_type` on `effect.invoke`; `target` and
 `send_type` on the send family; `location_path` and `location_source` on
 `effect.datamodel_change`; `session.halted`'s `reason` (a closed three-value
-set); and `effect.done`'s `configuration`.
+set); `effect.done`'s `configuration`; and, on `trace.event_dequeued`'s
+`error` object, `kind`, `span`, `location`, and `location_kind`.
 
 That list is what leaves a projected stream worth rendering at all: the
 timeline, the diagram highlighting, the click-through to source, and the
@@ -1081,6 +1132,11 @@ A profile may set `allow_source: false`, which replaces `source` with the
 sentinel. The cost is stated plainly: without `source`, location objects
 still resolve to line and column but nothing can display the text at them,
 so click-through degrades to coordinates.
+
+`trace.event_dequeued`'s `error.expression` is chart text under the same
+reasoning - it is the failing expression's entity-expanded source, not run
+data - so `allow_source: false` redacts it alongside `source`. `error`'s
+other keys (`kind`, `span`, `location`, `location_kind`) are unaffected.
 
 ### What projection is not
 
