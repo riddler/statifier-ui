@@ -82,10 +82,11 @@ defmodule StatifierUI.ShapeTest do
       assert Shape.infer(duration) == :duration
     end
 
-    test "the seven-key duration predicator's parser actually emits infers as :duration" do
-      # Predicator.Duration.new/1 fills all eight units, but the expression
-      # parser omits :milliseconds. Requiring all eight missed every duration
-      # produced by evaluating an expression, which is the common path.
+    test "a seven-key duration from outside predicator infers as :duration" do
+      # No longer anything predicator emits: since 9.0 the evaluator seeds all
+      # eight units (px-69c). This pins the viewer's own tolerance instead -
+      # a hand-written fixture, an older engine, or another interpreter can
+      # hand us a duration short a unit, and it still renders as a duration.
       seven_key = %{
         years: 0,
         months: 0,
@@ -106,8 +107,23 @@ defmodule StatifierUI.ShapeTest do
     test "durations from real predicator expressions infer as :duration" do
       for expr <- ["3d", "2w", "1h30m", "3d8h"] do
         assert {:ok, value} = Predicator.evaluate(expr)
+
+        # Pins predicator's eight-key contract (px-69c, shipped in 9.0). If
+        # the evaluator ever goes back to seeding seven, it fails here, at the
+        # dependency, rather than somewhere downstream that assumed eight.
+        assert map_size(value) == 8, "#{expr} did not evaluate to all eight units"
+
         assert Shape.infer(value) == :duration, "#{expr} did not infer as a duration"
         assert Shape.label(Shape.infer(value)) == "duration"
+
+        # And pins the subset tolerance against real output rather than a
+        # hand-written map: dropping a unit must not change the verdict.
+        # Without this line the assertions above would still pass under a rule
+        # tightened to require exactly eight keys, since every expression now
+        # yields all eight - which is the incidental pass sui-cw0 was filed
+        # to catch.
+        assert Shape.infer(Map.delete(value, :milliseconds)) == :duration,
+               "#{expr} stopped being a duration when a unit was dropped"
       end
     end
 
