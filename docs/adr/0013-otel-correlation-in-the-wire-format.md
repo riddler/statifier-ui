@@ -1,6 +1,6 @@
 # ADR-0013: OTel correlation in the trace wire format
 
-Status: proposed (2026-09-01)
+Status: accepted (2026-09-01, campaign-025; unqualified direction-agent verdict)
 
 Extends ADR-0005 additively: one new optional envelope key, reserved by
 name, carried on the message families that already carry the step counters.

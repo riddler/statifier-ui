@@ -10,7 +10,7 @@ bridge implements for the engine) and statifier ADR-0062 (the bridge is a
 separate package, `opentelemetry_statifier`, scoped to the whole family
 rather than to the engine alone).
 
-**Status: proposed.** Nothing here is emitted today. The surface below is
+**Status: accepted (2026-09-01, campaign-025; unqualified direction-agent verdict).** Nothing here is emitted today. The surface below is
 the decision about what this package *will* emit and what it will never
 emit; the emit sites and their tests are a follow-up bead.
 
