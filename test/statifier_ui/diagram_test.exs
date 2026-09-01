@@ -257,6 +257,65 @@ defmodule StatifierUI.DiagramTest do
     end
   end
 
+  describe "render/2 - internal and targetless transitions" do
+    test "draws a targetless transition as a self-edge marked internal" do
+      machine =
+        compile!("""
+            <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a">
+              <state id="a">
+                <transition event="ping"/>
+                <transition event="go" target="b"/>
+              </state>
+              <state id="b"/>
+            </scxml>
+        """)
+
+      a = index!(machine, "a")
+      b = index!(machine, "b")
+      lines = trimmed_lines(Diagram.render(machine, []))
+
+      assert "s#{a} --> s#{a} : ping [internal]" in lines
+      assert "s#{a} --> s#{b} : go" in lines
+    end
+
+    test "marks a targeted internal transition and leaves an external one bare" do
+      machine =
+        compile!("""
+            <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="outer">
+              <state id="outer" initial="inner">
+                <transition event="int" target="inner" type="internal"/>
+                <transition event="ext" target="inner"/>
+                <state id="inner"/>
+              </state>
+            </scxml>
+        """)
+
+      outer = index!(machine, "outer")
+      inner = index!(machine, "inner")
+      lines = trimmed_lines(Diagram.render(machine, []))
+
+      assert "s#{outer} --> s#{inner} : int [internal]" in lines
+      assert "s#{outer} --> s#{inner} : ext" in lines
+    end
+
+    test "keeps the cond marker alongside the internal marker" do
+      machine =
+        compile!("""
+            <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a" datamodel="predicator">
+              <state id="a">
+                <transition event="ping" cond="true"/>
+              </state>
+            </scxml>
+        """)
+
+      a = index!(machine, "a")
+
+      assert "s#{a} --> s#{a} : ping [cond] [internal]" in trimmed_lines(
+               Diagram.render(machine, [])
+             )
+    end
+  end
+
   describe "render/2 - final and history states" do
     test "labels a final state" do
       machine =
@@ -298,6 +357,174 @@ defmodule StatifierUI.DiagramTest do
 
       assert "state \"h_shallow (H)\" as s#{shallow}" in lines
       assert "state \"h_deep (H*)\" as s#{deep}" in lines
+    end
+
+    test "draws each history state's default transition with a default marker" do
+      machine =
+        compile!("""
+            <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="outer">
+              <state id="outer" initial="inner">
+                <history id="h_shallow" type="shallow">
+                  <transition target="inner"/>
+                </history>
+                <history id="h_deep" type="deep">
+                  <transition target="inner"/>
+                </history>
+                <state id="inner"/>
+              </state>
+            </scxml>
+        """)
+
+      shallow = index!(machine, "h_shallow")
+      deep = index!(machine, "h_deep")
+      inner = index!(machine, "inner")
+      lines = trimmed_lines(Diagram.render(machine, []))
+
+      assert "s#{shallow} --> s#{inner} : [default]" in lines
+      assert "s#{deep} --> s#{inner} : [default]" in lines
+    end
+
+    test "a history state declared inside its parent's block is reachable by event" do
+      machine =
+        compile!("""
+            <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="outer">
+              <state id="outer" initial="inner">
+                <history id="h"><transition target="inner"/></history>
+                <state id="inner">
+                  <transition event="out" target="other"/>
+                </state>
+              </state>
+              <state id="other">
+                <transition event="back" target="h"/>
+              </state>
+            </scxml>
+        """)
+
+      outer = index!(machine, "outer")
+      h = index!(machine, "h")
+      other = index!(machine, "other")
+      lines = trimmed_lines(Diagram.render(machine, []))
+
+      # The history state is declared inside the composite it restores.
+      assert ~s(state "outer" as s#{outer} {) in lines
+      assert "state \"h (H)\" as s#{h}" in lines
+      assert "s#{other} --> s#{h} : back" in lines
+    end
+  end
+
+  describe "render/2 - structural invariants over representative charts" do
+    test "every declared state's alias is unique and matches its index" do
+      for xml <- [@flat, @nested, @cross, @parallel] do
+        machine = compile!(xml)
+        source = Diagram.render(machine, [])
+
+        aliases = Regex.scan(~r/^\s*state ".*" as (s\d+)/m, source, capture: :all_but_first)
+
+        assert aliases == Enum.uniq(aliases)
+
+        # Every non-root state is declared exactly once; the root never is.
+        expected = for i <- 1..(tuple_size(machine.states) - 1)//1, do: ["s#{i}"]
+        assert Enum.sort(aliases) == Enum.sort(expected)
+        refute Enum.any?(aliases, &(&1 == ["s0"]))
+      end
+    end
+
+    test "composite blocks are balanced in every representative chart" do
+      for xml <- [@flat, @nested, @cross, @parallel] do
+        source = Diagram.render(compile!(xml), [])
+        lines = trimmed_lines(source)
+
+        opens = Enum.count(lines, &String.ends_with?(&1, "{"))
+        closes = Enum.count(lines, &(&1 == "}"))
+
+        assert opens == closes
+      end
+    end
+
+    test "a parallel state gets no initial marker while each of its regions does" do
+      machine = compile!(@parallel)
+      p = index!(machine, "p")
+      r1 = index!(machine, "region_one")
+      r2 = index!(machine, "region_two")
+      r1a = index!(machine, "r1a")
+      r2a = index!(machine, "r2a")
+
+      lines = trimmed_lines(Diagram.render(machine, []))
+
+      assert "[*] --> s#{r1a}" in lines
+      assert "[*] --> s#{r2a}" in lines
+      assert "[*] --> s#{p}" in lines
+
+      # The parallel enters every region at once, so it has no single entry.
+      refute "[*] --> s#{r1}" in lines
+      refute "[*] --> s#{r2}" in lines
+    end
+
+    test "a compound with no initial attribute still gets a resolved marker" do
+      machine =
+        compile!("""
+            <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0">
+              <state id="outer">
+                <state id="x"/>
+                <state id="y"/>
+              </state>
+            </scxml>
+        """)
+
+      x = index!(machine, "x")
+
+      assert "[*] --> s#{x}" in trimmed_lines(Diagram.render(machine, []))
+    end
+
+    test "an edge between two regions of one parallel is lifted to the regions" do
+      machine =
+        compile!("""
+            <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="p">
+              <parallel id="p">
+                <state id="ra" initial="ra1">
+                  <state id="ra1">
+                    <transition event="x" target="rb2"/>
+                  </state>
+                </state>
+                <state id="rb" initial="rb1">
+                  <state id="rb1"/>
+                  <state id="rb2"/>
+                </state>
+              </parallel>
+            </scxml>
+        """)
+
+      ra = index!(machine, "ra")
+      rb = index!(machine, "rb")
+      lines = trimmed_lines(Diagram.render(machine, []))
+
+      assert "s#{ra} --> s#{rb} : x [lifted: ra1 -> rb2]" in lines
+    end
+
+    test "a deeply nested compound nests to full depth with a deep initial marker" do
+      machine =
+        compile!("""
+            <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="top">
+              <state id="top" initial="deepc">
+                <state id="mid" initial="deepc">
+                  <state id="deepc"/>
+                </state>
+              </state>
+            </scxml>
+        """)
+
+      top = index!(machine, "top")
+      mid = index!(machine, "mid")
+      deepc = index!(machine, "deepc")
+
+      source = Diagram.render(machine, [])
+      lines = String.split(source, "\n")
+
+      assert ~s(    state "top" as s#{top} {) in lines
+      assert ~s(        state "mid" as s#{mid} {) in lines
+      assert ~s(            state "deepc" as s#{deepc}) in lines
+      assert "        [*] --> s#{mid} : [deep: deepc]" in lines
+      assert "            [*] --> s#{deepc}" in lines
     end
   end
 
