@@ -178,6 +178,57 @@ Two things the bridge should know about this surface specifically:
   the per-macrostep join is the `otel` key in the wire format, and it is
   fed from the host rather than from this event surface.
 
+## Deep links: the consuming end of the `otel` key
+
+ADR-0013's key exists so an operator can move between this package's
+rendering of a run and the APM backend's rendering of the same run. The
+producer half stamps it (`StatifierUI.Trace.Otel`); the consuming half turns
+it into a URL, and lives in two modules:
+
+- `StatifierUI.Trace.DeepLink` compiles a **host-configured URL template**
+  and renders it against a message's `otel` object.
+- `StatifierUI.EventLog.DeepLink` is the seam a renderer calls: it asks the
+  macrostep-shaped question ("what is this step's trace?"), because a
+  macrostep is the unit upstream opens one span for and the unit an operator
+  sees in the log.
+
+```elixir
+links =
+  log
+  |> StatifierUI.EventLog.DeepLink.for_log(
+       StatifierUI.EventLog.DeepLink.from_opts(
+         deep_link: "https://apm.example.com/trace/{trace_id}?span={span_id}"
+       )
+     )
+```
+
+**The template is host configuration and has nothing else it could be.**
+This package does not know which backend the host's spans went to, and a
+default would be a guess that sends an operator to a URL that does not
+exist. The variables are `{trace_id}`, `{span_id}`, `{session}`, and
+`{macrostep}`; substituted values are percent-encoded to the unreserved set,
+so a variable is safe in a path segment or a query value.
+
+Two failure modes are separated deliberately, and the split is the whole
+design:
+
+- **A bad template is loud, at configuration time.** An unknown variable, a
+  stray brace, or a template naming neither id (which would render one URL
+  for every step) raises from `from_opts/1` where the option is read. A typo
+  that silently produced plausible URLs resolving nowhere is the outcome
+  this refuses.
+- **A step with no trace is silent, at render time.** No configured
+  template, no `otel` key on the stream, or ids that are not W3C Trace
+  Context hex all return `nil` - no link, no error, no log line. Absence is
+  the documented normal case: the key is omitted whenever no bridge is
+  attached, so most streams carry none, and a renderer asks for a link
+  unconditionally rather than first working out the stream's provenance.
+
+Malformed ids fold into "no link" rather than into an error because the wire
+format is language-neutral (ADR-0005): an `otel` object may come from a
+producer this repository never saw, and ids that cannot be looked up in any
+backend are worse to link to than nothing.
+
 ## Degradation
 
 `:telemetry.execute/3` with no attached handlers is a lookup and a return.
@@ -189,8 +240,10 @@ currently has no way to exist.
 
 ## What this note does not do
 
-- It does not add a dependency, a module, or a line of emitting code. The
-  emit sites are a follow-up bead in this repository.
+- It does not add a dependency or a line of emitting code. The emit sites
+  are a follow-up bead in this repository. (The deep-link section above
+  describes modules that exist; the telemetry surface itself still does
+  not.)
 - It does not decide the OTel span shape these events map to. That is the
   bridge's, in its own repository.
 - It does not touch the wire format. Correlation ids are ADR-0013;
