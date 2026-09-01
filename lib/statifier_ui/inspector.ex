@@ -39,12 +39,23 @@ defmodule StatifierUI.Inspector do
   below it is shown and `selection_note/2` says which macrostep it was
   carried from - a carried configuration is never presented as a measured
   one.
+
+  ## Linking out to a trace (sui-4w2)
+
+  Every fold function also takes `:deep_link`, the host's APM URL template
+  (ADR-0013). With one configured, the event log's macrostep summaries and
+  `selection_note/2` gain an `[open trace](...)` link for each macrostep
+  whose messages carry the wire format's `otel` key. Without the option, or
+  on a macrostep carrying no correlation, every pane renders exactly as it
+  did - including the carried-forward wording above, which the link is
+  appended to rather than replacing.
   """
 
   alias Statifier.Machine
   alias StatifierUI.DatamodelExplorer
   alias StatifierUI.Diagram
   alias StatifierUI.EventLog
+  alias StatifierUI.EventLog.DeepLink
   alias StatifierUI.Trace.Message
   alias StatifierUI.Trace.Subscriber
 
@@ -61,7 +72,10 @@ defmodule StatifierUI.Inspector do
         }
 
   @typedoc "Options shared by the fold functions."
-  @type opt :: {:initial_configuration, Enumerable.t()} | {:selection, selection()}
+  @type opt ::
+          {:initial_configuration, Enumerable.t()}
+          | {:selection, selection()}
+          | {:deep_link, String.t() | StatifierUI.Trace.DeepLink.t() | nil}
 
   @doc """
   The configuration `messages` and `opts[:selection]` imply.
@@ -168,7 +182,7 @@ defmodule StatifierUI.Inspector do
   @spec selection_note([Message.t()], [opt()]) :: String.t()
   def selection_note(messages, opts \\ []) do
     case Keyword.get(opts, :selection, :live) do
-      {:macrostep, n} -> selected_note(messages, n)
+      {:macrostep, n} -> selected_note(messages, n, DeepLink.from_opts(opts))
       _live -> "**Showing** the live tip."
     end
   end
@@ -201,9 +215,15 @@ defmodule StatifierUI.Inspector do
 
   @spec markdown_opts([opt()]) :: [EventLog.Markdown.opt()]
   defp markdown_opts(opts) do
-    case Keyword.get(opts, :selection, :live) do
-      {:macrostep, n} -> [open: [n], selected: n]
-      _live -> []
+    selection =
+      case Keyword.get(opts, :selection, :live) do
+        {:macrostep, n} -> [open: [n], selected: n]
+        _live -> []
+      end
+
+    case DeepLink.from_opts(opts) do
+      nil -> selection
+      template -> [{:deep_link, template} | selection]
     end
   end
 
@@ -277,28 +297,48 @@ defmodule StatifierUI.Inspector do
   end
 
   # One fold, three readings: the note names the macrostep, its event, and
-  # how the drawn configuration was arrived at.
-  @spec selected_note([Message.t()], non_neg_integer()) :: String.t()
-  defp selected_note(messages, n) do
+  # how the drawn configuration was arrived at. The trace link, when the host
+  # configured a template and the macrostep carries `otel`, is appended to
+  # all three without changing any of them.
+  @spec selected_note([Message.t()], non_neg_integer(), StatifierUI.Trace.DeepLink.t() | nil) ::
+          String.t()
+  defp selected_note(messages, n, deep_link) do
     case EventLog.build(messages) do
       {:ok, log} ->
         suffix = event_suffix(log, n)
 
-        case EventLog.configuration_at(log, n) do
-          {:quiescent, _configuration} ->
-            "**Showing** macrostep #{n}#{suffix}, at its quiescent configuration."
+        note =
+          case EventLog.configuration_at(log, n) do
+            {:quiescent, _configuration} ->
+              "**Showing** macrostep #{n}#{suffix}, at its quiescent configuration."
 
-          {:carried, from, _configuration} ->
-            "**Showing** macrostep #{n}#{suffix}, which is not quiescent; the " <>
-              "configuration drawn is macrostep #{from}'s, carried forward."
+            {:carried, from, _configuration} ->
+              "**Showing** macrostep #{n}#{suffix}, which is not quiescent; the " <>
+                "configuration drawn is macrostep #{from}'s, carried forward."
 
-          :before_first ->
-            "**Showing** macrostep #{n}#{suffix}; no configuration was stamped at or " <>
-              "below it, so the session's initial configuration is drawn."
-        end
+            :before_first ->
+              "**Showing** macrostep #{n}#{suffix}; no configuration was stamped at or " <>
+                "below it, so the session's initial configuration is drawn."
+          end
+
+        note <> trace_suffix(log, n, deep_link)
 
       {:error, reason} ->
         "**Showing** the live tip - selection unavailable: `#{inspect(reason)}`"
+    end
+  end
+
+  # `nil` for no template, no `otel` key, or ids that are not W3C Trace
+  # Context hex - in every one of those the note is byte-identical to what it
+  # was before sui-4w2.
+  @spec trace_suffix(EventLog.t(), non_neg_integer(), StatifierUI.Trace.DeepLink.t() | nil) ::
+          String.t()
+  defp trace_suffix(log, n, deep_link) do
+    with %EventLog.Macrostep{} = macrostep <- Enum.find(log.macrosteps, &(&1.macrostep == n)),
+         link when is_binary(link) <- DeepLink.markdown(macrostep, deep_link, label: "open trace") do
+      " #{link}"
+    else
+      _absent -> ""
     end
   end
 

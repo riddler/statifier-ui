@@ -325,6 +325,82 @@ defmodule StatifierUI.InspectorTest do
     end
   end
 
+  # sui-4w2: the same nested run with a host resolver attached, so the
+  # messages carry the wire format's `otel` key exactly as a bridged host's
+  # would (ADR-0013) rather than being hand-stamped here. One trace per
+  # macrostep, matching the upstream span topology.
+  @deep_link "https://apm.example.com/trace/{trace_id}?span={span_id}"
+
+  defp correlated_messages(session_id) do
+    resolver = fn _session, macrostep ->
+      digit = Integer.to_string(macrostep)
+
+      {:ok, %{trace_id: String.duplicate(digit, 32), span_id: String.duplicate(digit, 16)}}
+    end
+
+    machine = SessionCase.compile!(@nested)
+    {sub, session} = SessionCase.start_early!(machine, session_id, otel_context: resolver)
+    Session.send_event(session, "start")
+    SessionCase.wait_for_macrostep(session, 2)
+    Session.send_event(session, "tick")
+    SessionCase.wait_for_macrostep(session, 3)
+    wait_for_quiescent_macrostep(sub, 3)
+    Subscriber.messages(sub)
+  end
+
+  describe "deep links (sui-4w2)" do
+    test "the event log links each macrostep to its own trace" do
+      messages = correlated_messages("sess_insp_link_log")
+
+      markdown = Inspector.event_log(messages, deep_link: @deep_link)
+
+      assert markdown =~
+               "[trace](https://apm.example.com/trace/#{String.duplicate("2", 32)}" <>
+                 "?span=#{String.duplicate("2", 16)})"
+
+      assert markdown =~ "[trace](https://apm.example.com/trace/#{String.duplicate("3", 32)}"
+    end
+
+    test "the selection note links the macrostep on screen" do
+      messages = correlated_messages("sess_insp_link_note")
+
+      note = Inspector.selection_note(messages, selection: {:macrostep, 2}, deep_link: @deep_link)
+
+      assert note =~ "quiescent configuration."
+      assert note =~ "[open trace](https://apm.example.com/trace/#{String.duplicate("2", 32)}"
+    end
+
+    test "a carried configuration keeps its wording and gains no link" do
+      messages = correlated_messages("sess_insp_link_carried")
+
+      note = Inspector.selection_note(messages, selection: {:macrostep, 9}, deep_link: @deep_link)
+
+      assert note =~ "not quiescent"
+      assert note =~ "macrostep 3's, carried forward"
+      refute note =~ "[open trace]"
+    end
+
+    test "the panes are unchanged when the host configures no template" do
+      messages = correlated_messages("sess_insp_link_off")
+
+      assert Inspector.event_log(messages, selection: {:macrostep, 2}) ==
+               Inspector.event_log(messages, selection: {:macrostep, 2}, deep_link: nil)
+
+      refute Inspector.event_log(messages) =~ "[trace]("
+
+      refute Inspector.selection_note(messages, selection: {:macrostep, 2}) =~ "[open trace]"
+    end
+
+    test "a run with no correlation renders no link even with a template" do
+      {_machine, messages} = nested_messages("sess_insp_link_none")
+
+      refute Inspector.event_log(messages, deep_link: @deep_link) =~ "[trace]("
+
+      refute Inspector.selection_note(messages, selection: {:macrostep, 2}, deep_link: @deep_link) =~
+               "[open trace]"
+    end
+  end
+
   describe "event_log/2 under a selection" do
     test "marks and opens the selected macrostep" do
       {_machine, messages} = nested_messages("sess_insp_log_sel")
