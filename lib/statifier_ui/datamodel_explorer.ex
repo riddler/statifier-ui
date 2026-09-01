@@ -13,8 +13,32 @@ defmodule StatifierUI.DatamodelExplorer do
   either mode: authoring-mode tier-1 entries hold their declared source
   text for display but are never evaluated (predicator is non-evaluative,
   ADR-0004 upstream, adopted by ADR-0002), and live datamodel editing waits
-  for a recordable-channel design (statifier ADR-0029). `sui-t36.8` owns
-  the widget and the write affordance never arrives here.
+  for a recordable-channel design (statifier ADR-0029).
+
+  ## The editing guard (`sui-8hg`, ADR-0012)
+
+  When a write path is eventually built - here or in whatever widget wraps
+  this pane - ADR-0012's flow-through clause forbids offering it over a
+  **projected** stream. `edit_disabled_reason/1` and `edit_disabled_reason/2`
+  are that clause in code, and `editable?/1` and `editable?/2` are the
+  boolean form. They answer *may* a value-editing affordance be offered,
+  not *does one exist*: today none does, and the guard is here so the
+  constraint is consulted rather than rediscovered.
+
+  Two reasons close the door. **The pane is projected** - `build_live/2`
+  carries `session.start`'s `projection` header onto the struct, and an
+  editor over a stream whose values the pane cannot see has nothing to seed
+  from and nothing meaningful to write over. **The entry is redacted** - its
+  value is the `:redacted` atom `StatifierUI.Value` decodes
+  `{"$redacted": true}` to, and an editor seeded from it would write the
+  sentinel back or silently write nothing. Both reasons name the profile or
+  the slot, so a host can say *why* rather than greying a control out
+  silently.
+
+  (`sui-t36.8` used to be named here as the owner of the widget and the
+  write affordance. It closed 2026-08-22 having shipped the inspector
+  assembly and the demo notebook only, with no write path, which left this
+  constraint ownerless; `sui-8hg` picked it up.)
   """
 
   alias Statifier.Evaluator.Functions
@@ -27,6 +51,13 @@ defmodule StatifierUI.DatamodelExplorer do
   @typedoc "Which data source fed this pane: the merged fixture scope, or a live session."
   @type mode :: :authoring | :live
 
+  @typedoc """
+  `session.start`'s `projection` header, verbatim, when the stream this pane
+  folded carried one (ADR-0012). `nil` for an unprojected stream and for
+  authoring mode, which has no stream at all.
+  """
+  @type projection :: %{optional(String.t()) => String.t()}
+
   @type t :: %__MODULE__{
           mode: mode(),
           session: String.t() | nil,
@@ -35,6 +66,7 @@ defmodule StatifierUI.DatamodelExplorer do
           scenario_names: [String.t()],
           macrostep: non_neg_integer() | nil,
           truncated?: boolean(),
+          projection: projection() | nil,
           diagnostics: [Fixtures.diagnostic()]
         }
 
@@ -45,6 +77,7 @@ defmodule StatifierUI.DatamodelExplorer do
             scenario_names: [],
             macrostep: nil,
             truncated?: false,
+            projection: nil,
             diagnostics: []
 
   @typedoc "Options shared by both constructors; `Scope.opt()` is forwarded as-is."
@@ -155,6 +188,11 @@ defmodule StatifierUI.DatamodelExplorer do
   7. `shape` and `label` are computed once, from each entry's final decoded
      value, so an entry written more than once in one macrostep is
      labelled from its end state.
+  8. `projection` is `session.start`'s `projection` header verbatim, or
+     `nil` when the stream carried none. It is read, never derived: a
+     stream that happens to hold no redacted value is still projected if
+     the header says so, and that is what `edit_disabled_reason/1` keys on
+     (ADR-0012, `sui-8hg`).
 
   Tier 2b (provider functions) is appended unchanged from the same source
   `Scope` reads - `Statifier.Evaluator.Functions.base_context().functions` -
@@ -195,6 +233,7 @@ defmodule StatifierUI.DatamodelExplorer do
          entries: entries,
          macrostep: macrostep,
          truncated?: live_truncated?(messages),
+         projection: projection_header(messages),
          diagnostics: seed_diagnostics ++ Enum.reverse(fold.diagnostics)
        }}
     end
@@ -220,6 +259,95 @@ defmodule StatifierUI.DatamodelExplorer do
   """
   @spec diagnostics(t()) :: [Fixtures.diagnostic()]
   def diagnostics(%__MODULE__{diagnostics: diagnostics}), do: diagnostics
+
+  # -- The ADR-0012 editing guard (sui-8hg) ---------------------------------
+
+  @doc """
+  Whether this pane folded a projected stream (ADR-0012).
+
+  True exactly when `session.start` carried a `projection` header. Authoring
+  mode is never projected - it has no stream.
+
+      iex> {:ok, pane} = StatifierUI.DatamodelExplorer.build_live([])
+      iex> StatifierUI.DatamodelExplorer.projected?(pane)
+      false
+  """
+  @spec projected?(t()) :: boolean()
+  def projected?(%__MODULE__{projection: nil}), do: false
+  def projected?(%__MODULE__{}), do: true
+
+  @doc """
+  The projection profile's name, or `nil` when the pane is not projected.
+
+  This is the string ADR-0012 asks a host to surface alongside the mode, so
+  a user asking "why can't I see this" has something to quote.
+  """
+  @spec projection_profile(t()) :: String.t() | nil
+  def projection_profile(%__MODULE__{projection: nil}), do: nil
+  def projection_profile(%__MODULE__{projection: header}), do: Map.get(header, "profile")
+
+  @doc """
+  Why a value-editing affordance must not be offered over this pane, or
+  `nil` when nothing forbids one.
+
+  ADR-0012's flow-through clause in code. A projected pane always returns a
+  reason: an editor over values the pane cannot see has nothing to seed from
+  and nothing meaningful to write over. The returned string names the
+  profile and is written to be shown to a user, not logged.
+
+  There is no write path in this pane today (see the moduledoc). This
+  function exists so that whatever builds one asks first.
+  """
+  @spec edit_disabled_reason(t()) :: String.t() | nil
+  def edit_disabled_reason(%__MODULE__{projection: nil}), do: nil
+
+  def edit_disabled_reason(%__MODULE__{} = pane) do
+    "Editing is disabled: this session's trace is projected under the " <>
+      "#{inspect(projection_profile(pane) || "(unnamed)")} profile, so this pane " <>
+      "is not carrying the values an editor would read or overwrite."
+  end
+
+  @doc """
+  Why a value-editing affordance must not be offered for `entry` on this
+  pane, or `nil` when nothing forbids one.
+
+  The pane-level reason wins when the pane is projected. Otherwise a
+  **redacted** entry - one whose value is the `:redacted` atom
+  `StatifierUI.Value` decodes `{"$redacted": true}` to - carries its own
+  reason, because an editor seeded from the sentinel would write the
+  sentinel back or silently write nothing. A redacted slot is therefore
+  never presented as editable, whichever way it arrived.
+  """
+  @spec edit_disabled_reason(t(), Entry.t()) :: String.t() | nil
+  def edit_disabled_reason(%__MODULE__{} = pane, %Entry{} = entry) do
+    case edit_disabled_reason(pane) do
+      nil -> redacted_reason(entry)
+      reason -> reason
+    end
+  end
+
+  @doc """
+  Whether a value-editing affordance may be offered over this pane at all -
+  `edit_disabled_reason/1` returning nothing.
+  """
+  @spec editable?(t()) :: boolean()
+  def editable?(%__MODULE__{} = pane), do: is_nil(edit_disabled_reason(pane))
+
+  @doc """
+  Whether a value-editing affordance may be offered for `entry` -
+  `edit_disabled_reason/2` returning nothing.
+  """
+  @spec editable?(t(), Entry.t()) :: boolean()
+  def editable?(%__MODULE__{} = pane, %Entry{} = entry),
+    do: is_nil(edit_disabled_reason(pane, entry))
+
+  @spec redacted_reason(Entry.t()) :: String.t() | nil
+  defp redacted_reason(%Entry{value: :redacted, name: name}) do
+    "Editing is disabled: #{inspect(name)} is redacted, so its current value " <>
+      "is not here to edit."
+  end
+
+  defp redacted_reason(%Entry{}), do: nil
 
   # -- Scenario selection --------------------------------------------------
 
@@ -348,6 +476,22 @@ defmodule StatifierUI.DatamodelExplorer do
         |> Map.new(fn %{"id" => id, "d_index" => d_index} -> {id, d_index} end)
     end
   end
+
+  # ADR-0012's header, read rather than derived: a projected stream whose
+  # every allowed path happened to pass still says "projected", and the
+  # editing guard has to key on the claim, not on whether a sentinel
+  # happens to be present in this particular fold.
+  @spec projection_header([Message.t()]) :: projection() | nil
+  defp projection_header(messages) do
+    case Enum.find(messages, &(&1.type == "session.start")) do
+      nil -> nil
+      %Message{payload: payload} -> normalize_projection(Map.get(payload, "projection"))
+    end
+  end
+
+  @spec normalize_projection(term()) :: projection() | nil
+  defp normalize_projection(header) when is_map(header) and map_size(header) > 0, do: header
+  defp normalize_projection(_other), do: nil
 
   @spec classify_live_tier(String.t(), %{optional(String.t()) => non_neg_integer()}) ::
           Entry.tier()
