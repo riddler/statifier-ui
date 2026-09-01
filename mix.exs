@@ -50,6 +50,7 @@ defmodule StatifierUI.MixProject do
         "README.md",
         "CHANGELOG.md",
         "docs/architecture.md",
+        "docs/ops-embedding.md",
         "docs/fixture-bundles.md",
         "docs/wire-format.md",
         "docs/telemetry.md"
