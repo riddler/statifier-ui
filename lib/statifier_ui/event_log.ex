@@ -44,12 +44,21 @@ defmodule StatifierUI.EventLog do
 
   `configuration_at/2` answers "what was the configuration at macrostep
   `n`" by looking up the stamps already in the log, never by re-deriving
-  one. The engine wrote every `trace.macrostep_stable` payload this reads,
-  and a stream reconstructed through catch-up got there by statifier
-  ADR-0034 replay, which re-drives the core rather than rewinding a live
-  session (ADR-0002's inherited clause). Time travel here is therefore a
-  read of replay output as data - nothing in this repo re-implements
-  Appendix D to answer it.
+  one. The engine wrote every `trace.macrostep_stable` and `trace.done`
+  payload this reads, and a stream reconstructed through catch-up got
+  there by statifier ADR-0034 replay, which re-drives the core rather than
+  rewinding a live session (ADR-0002's inherited clause). Time travel here
+  is therefore a read of replay output as data - nothing in this repo
+  re-implements Appendix D to answer it.
+
+  Two message types stamp a configuration, not one (sui-dc7). A macrostep
+  that reaches quiescence stamps `trace.macrostep_stable`; the macrostep
+  that halts the run by entering a top-level `<final>` never reaches
+  quiescence and stamps `trace.done` instead. `docs/wire-format.md` gives
+  both the same field, the same shape, and the same authority -
+  `trace.done`'s `configuration` is "the full configuration as it stood at
+  exit" - so reading it here is one more read of an engine stamp, not a
+  new interpretation of one.
   """
 
   alias StatifierUI.EventLog.Macrostep
@@ -93,17 +102,20 @@ defmodule StatifierUI.EventLog do
 
   @doc """
   The configuration in force at `macrostep`, read from the log's own
-  `trace.macrostep_stable` stamps.
+  `trace.macrostep_stable` and `trace.done` stamps.
 
-  Three outcomes, kept distinct because a caller that collapsed them would
+  Four outcomes, kept distinct because a caller that collapsed them would
   present a carried configuration as a measured one:
 
     * `{:quiescent, configuration}` - macrostep `macrostep` itself reached
       quiescence and this is the configuration it settled in.
-    * `{:carried, from, configuration}` - macrostep `macrostep` carries no
-      quiescent configuration (it is still in flight, or its
-      `trace.macrostep_stable` was dropped), so the newest one at or below
-      it is returned along with the macrostep `from` that stamped it.
+    * `{:final, configuration}` - macrostep `macrostep` halted the run by
+      entering a top-level `<final>`, so it never stabilized; this is the
+      configuration `trace.done` stamped at exit (sui-dc7).
+    * `{:carried, from, configuration}` - macrostep `macrostep` stamped
+      neither (it is still in flight, or its stamp was dropped), so the
+      newest configuration at or below it is returned along with the
+      macrostep `from` that stamped it.
     * `:before_first` - no macrostep at or below `macrostep` stamped a
       configuration at all. The caller decides what to show; the inspector
       falls back to the session's initial configuration.
@@ -113,21 +125,26 @@ defmodule StatifierUI.EventLog do
   """
   @spec configuration_at(t(), non_neg_integer()) ::
           {:quiescent, [non_neg_integer()]}
+          | {:final, [non_neg_integer()]}
           | {:carried, non_neg_integer(), [non_neg_integer()]}
           | :before_first
   def configuration_at(%__MODULE__{macrosteps: macrosteps}, macrostep) do
     macrosteps
-    |> Enum.filter(&(&1.macrostep <= macrostep and &1.configuration != nil))
+    |> Enum.filter(&(&1.macrostep <= macrostep and Macrostep.stamped(&1) != nil))
     |> List.last()
     |> case do
       nil ->
         :before_first
 
+      %Macrostep{macrostep: ^macrostep, final_configuration: configuration}
+      when configuration != nil ->
+        {:final, configuration}
+
       %Macrostep{macrostep: ^macrostep, configuration: configuration} ->
         {:quiescent, configuration}
 
-      %Macrostep{macrostep: from, configuration: configuration} ->
-        {:carried, from, configuration}
+      %Macrostep{macrostep: from} = stamping ->
+        {:carried, from, Macrostep.stamped(stamping)}
     end
   end
 
