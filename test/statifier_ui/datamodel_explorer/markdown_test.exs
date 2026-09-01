@@ -11,7 +11,7 @@ defmodule StatifierUI.DatamodelExplorer.MarkdownTest do
   <?xml version="1.0" encoding="UTF-8"?>
   <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="a" version="1.0">
       <datamodel>
-          <data id="tier"/>
+          <data id="card_brand"/>
       </datamodel>
       <state id="a"/>
   </scxml>
@@ -75,13 +75,16 @@ defmodule StatifierUI.DatamodelExplorer.MarkdownTest do
   describe "render/2 - authoring mode" do
     test "names the selected scenario" do
       machine = SessionCase.compile!(@chart)
-      {:ok, fixtures} = Fixtures.new(scenarios: %{"gold" => %{"tier" => "gold"}})
+
+      {:ok, fixtures} =
+        Fixtures.new(scenarios: %{"within-budget-account" => %{"card_brand" => "visa"}})
+
       {:ok, pane} = DatamodelExplorer.build_authoring(machine, fixtures)
 
       lines = rendered_lines(pane)
 
-      assert "# Datamodel: authoring (scenario: gold)" in lines
-      assert Enum.any?(lines, &(&1 == "| tier | string | \"gold\" |"))
+      assert "# Datamodel: authoring (scenario: within-budget-account)" in lines
+      assert Enum.any?(lines, &(&1 == "| card_brand | string | \"visa\" |"))
     end
 
     test "no fixtures names no scenario" do
@@ -197,7 +200,9 @@ defmodule StatifierUI.DatamodelExplorer.MarkdownTest do
       machine = SessionCase.compile!(@chart)
 
       {:ok, fixtures} =
-        Fixtures.new(scenarios: %{"gold" => %{"tier" => %{"a" => 1, "b" => 2}}})
+        Fixtures.new(
+          scenarios: %{"within-budget-account" => %{"card_brand" => %{"a" => 1, "b" => 2}}}
+        )
 
       {:ok, pane} = DatamodelExplorer.build_authoring(machine, fixtures)
 
@@ -206,12 +211,12 @@ defmodule StatifierUI.DatamodelExplorer.MarkdownTest do
 
       assert Enum.any?(
                default_lines,
-               &(&1 == "| tier | map{a: integer, b: integer} | %{\"a\" => 1, \"b\" => 2} |")
+               &(&1 == "| card_brand | map{a: integer, b: integer} | %{\"a\" => 1, \"b\" => 2} |")
              )
 
       assert Enum.any?(
                truncated_lines,
-               &(&1 == "| tier | map{a: integer, ...} | %{\"a\" => 1, \"b\" => 2} |")
+               &(&1 == "| card_brand | map{a: integer, ...} | %{\"a\" => 1, \"b\" => 2} |")
              )
     end
   end

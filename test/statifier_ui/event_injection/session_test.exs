@@ -8,13 +8,13 @@ defmodule StatifierUI.EventInjection.SessionTest do
   alias StatifierUI.Test.Support.Trace.SessionCase
   alias StatifierUI.Trace.Subscriber
 
-  # A transition on "payment.success" - the fixture event name the palette
+  # A transition on "authorize.approved" - the fixture event name the palette
   # entry below is built from - from "pending" to "paid".
   @chart """
   <?xml version="1.0" encoding="UTF-8"?>
   <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="pending" version="1.0">
       <state id="pending">
-          <transition event="payment.success" target="paid"/>
+          <transition event="authorize.approved" target="paid"/>
       </state>
       <state id="paid"/>
   </scxml>
@@ -44,10 +44,10 @@ defmodule StatifierUI.EventInjection.SessionTest do
     paid_index = machine.id_to_index["paid"]
 
     assert {:ok, fixtures} =
-             Fixtures.new(events: %{"payment.success" => %{"amount" => 1999}})
+             Fixtures.new(events: %{"authorize.approved" => %{"amount_cents" => 1999}})
 
     assert {:ok, palette} = Palette.build(fixtures)
-    assert {:ok, entry} = Palette.entry(palette, "payment.success")
+    assert {:ok, entry} = Palette.entry(palette, "authorize.approved")
 
     {sub, session} = SessionCase.start_early!(machine, "sess_palette_send")
 
@@ -56,7 +56,13 @@ defmodule StatifierUI.EventInjection.SessionTest do
 
     SessionCase.wait_for_seq(sub, @full_seq)
 
-    assert [%{"name" => "payment.success", "type" => "external", "data" => %{"amount" => 1999}}] =
+    assert [
+             %{
+               "name" => "authorize.approved",
+               "type" => "external",
+               "data" => %{"amount_cents" => 1999}
+             }
+           ] =
              dequeued_event_payloads(sub)
 
     assert entered_index?(sub, paid_index)
@@ -69,11 +75,11 @@ defmodule StatifierUI.EventInjection.SessionTest do
     {sub, session} = SessionCase.start_early!(machine, "sess_free_form_send")
 
     assert :ok =
-             EventInjection.send_draft(session, "payment.success", ~s({"amount":2500}))
+             EventInjection.send_draft(session, "authorize.approved", ~s({"amount_cents":2500}))
 
     SessionCase.wait_for_seq(sub, @full_seq)
 
-    assert [%{"name" => "payment.success", "data" => %{"amount" => 2500}}] =
+    assert [%{"name" => "authorize.approved", "data" => %{"amount_cents" => 2500}}] =
              dequeued_event_payloads(sub)
 
     assert entered_index?(sub, paid_index)

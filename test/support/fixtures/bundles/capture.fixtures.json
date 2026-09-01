@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "generator": "statifier-ui test support",
+  "datasets": {
+    "approved": { "authorization": { "approved": true } }
+  },
+  "expressions": {
+    "may-capture": {
+      "source": "authorization.approved",
+      "expect": { "approved": true }
+    }
+  }
+}

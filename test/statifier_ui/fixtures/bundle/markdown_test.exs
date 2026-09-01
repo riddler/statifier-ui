@@ -39,7 +39,7 @@ defmodule StatifierUI.Fixtures.Bundle.MarkdownTest do
       rendered = Markdown.render(bundle)
 
       refute rendered =~ "# Truth table"
-      assert rendered =~ "needs_review"
+      assert rendered =~ "exceeds-budget"
       assert rendered =~ "within-budget"
     end
 
@@ -154,7 +154,7 @@ defmodule StatifierUI.Fixtures.Bundle.MarkdownTest do
   describe "render/2 diagnostics" do
     test "surfaces the loader's own notes on the panel" do
       {:ok, bundle} =
-        Bundle.load("myapp.notify", Path.join(@bundles_dir, "notify.fixtures.json"))
+        Bundle.load("myapp.capture", Path.join(@bundles_dir, "capture.fixtures.json"))
 
       rendered = Markdown.render(bundle)
 
@@ -174,9 +174,9 @@ defmodule StatifierUI.Fixtures.Bundle.MarkdownTest do
       rendered = Markdown.render_discovery(discovery)
 
       assert rendered =~ "# authorize"
-      assert rendered =~ "# notify"
+      assert rendered =~ "# capture"
 
-      assert :binary.match(rendered, "# authorize") < :binary.match(rendered, "# notify")
+      assert :binary.match(rendered, "# authorize") < :binary.match(rendered, "# capture")
     end
 
     test "names every bundle that failed to load" do
