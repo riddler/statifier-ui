@@ -21,9 +21,16 @@ defmodule StatifierUI.EventLog.Markdown do
 
   `exited` and `entered` render through `Labels.states/2` **in list order**
   (ADR-0011): this module never re-sorts either list.
+
+  With a `:deep_link` template configured, a macrostep whose messages carry
+  the wire format's `otel` key also gets a `[trace](...)` link at the end of
+  its summary line (ADR-0013, `StatifierUI.EventLog.DeepLink`). Without the
+  option, or on a macrostep carrying no correlation, the summary is exactly
+  what it was.
   """
 
   alias StatifierUI.EventLog
+  alias StatifierUI.EventLog.DeepLink
   alias StatifierUI.EventLog.Labels
   alias StatifierUI.EventLog.Macrostep
   alias StatifierUI.EventLog.Round
@@ -35,6 +42,12 @@ defmodule StatifierUI.EventLog.Markdown do
           | {:collapsible, boolean()}
           | {:open, open_selector()}
           | {:selected, non_neg_integer() | nil}
+          | {:deep_link, String.t() | StatifierUI.Trace.DeepLink.t() | nil}
+
+  # What a macrostep's summary line needs beyond the macrostep itself: whether
+  # the diagram is showing it (sui-3gg) and the compiled deep-link template
+  # (sui-4w2), which is `nil` unless the host configured one.
+  @typep summary_context :: {boolean(), StatifierUI.Trace.DeepLink.t() | nil}
 
   @doc """
   Renders `log` as a Markdown string.
@@ -55,6 +68,12 @@ defmodule StatifierUI.EventLog.Markdown do
       `- shown in the diagram`, which is the whole of the link between the
       two panes: the log says which entry the picture belongs to. It is
       only a marker - use `:open` to open that entry as well.
+    * `:deep_link` - the host's APM URL template (ADR-0013, sui-4w2), e.g.
+      `"https://apm.example.com/trace/{trace_id}?span={span_id}"`. A
+      macrostep whose messages carry the wire format's `otel` key gets a
+      `[trace](...)` link on its summary line; one that carries none, and
+      every macrostep when the option is absent, renders exactly as before.
+      A malformed template raises here, where the option is read.
   """
   @spec render(EventLog.t(), [opt()]) :: String.t()
   def render(%EventLog{} = log, opts \\ []) do
@@ -62,9 +81,10 @@ defmodule StatifierUI.EventLog.Markdown do
     collapsible? = Keyword.get(opts, :collapsible, true)
     open = Keyword.get(opts, :open, :last)
     selected = Keyword.get(opts, :selected)
+    deep_link = DeepLink.from_opts(opts)
 
     ([header(log)] ++
-       macrostep_blocks(log.macrosteps, labels, collapsible?, open, selected) ++
+       macrostep_blocks(log.macrosteps, labels, collapsible?, open, selected, deep_link) ++
        footer_blocks(log))
     |> Enum.reject(&(&1 == ""))
     |> Enum.join("\n\n")
@@ -144,13 +164,14 @@ defmodule StatifierUI.EventLog.Markdown do
           Labels.t(),
           boolean(),
           open_selector(),
-          non_neg_integer() | nil
+          non_neg_integer() | nil,
+          StatifierUI.Trace.DeepLink.t() | nil
         ) :: [String.t()]
-  defp macrostep_blocks(macrosteps, labels, collapsible?, open, selected) do
+  defp macrostep_blocks(macrosteps, labels, collapsible?, open, selected, deep_link) do
     Enum.map(macrosteps, fn macrostep ->
       open? = macrostep_open?(macrosteps, open, macrostep)
       selected? = macrostep.macrostep == selected
-      macrostep_block(macrostep, labels, collapsible?, open?, selected?)
+      macrostep_block(macrostep, labels, collapsible?, open?, {selected?, deep_link})
     end)
   end
 
@@ -169,11 +190,11 @@ defmodule StatifierUI.EventLog.Markdown do
     macrostep.macrostep in indexes
   end
 
-  @spec macrostep_block(Macrostep.t(), Labels.t(), boolean(), boolean(), boolean()) ::
+  @spec macrostep_block(Macrostep.t(), Labels.t(), boolean(), boolean(), summary_context()) ::
           String.t()
-  defp macrostep_block(%Macrostep{} = macrostep, labels, true, open?, selected?) do
+  defp macrostep_block(%Macrostep{} = macrostep, labels, true, open?, context) do
     open_attr = if open?, do: " open", else: ""
-    summary = summary_text(macrostep, labels, selected?)
+    summary = summary_text(macrostep, labels, context)
 
     lines =
       ["<details#{open_attr}>", "<summary>#{summary}</summary>", ""] ++
@@ -183,8 +204,8 @@ defmodule StatifierUI.EventLog.Markdown do
     Enum.join(lines, "\n")
   end
 
-  defp macrostep_block(%Macrostep{} = macrostep, labels, false, _open?, selected?) do
-    summary = summary_text(macrostep, labels, selected?)
+  defp macrostep_block(%Macrostep{} = macrostep, labels, false, _open?, context) do
+    summary = summary_text(macrostep, labels, context)
 
     lines =
       ["### Macrostep #{macrostep.macrostep}", "", summary, ""] ++
@@ -199,19 +220,30 @@ defmodule StatifierUI.EventLog.Markdown do
       round_note_lines(rounds, labels) ++ effects_lines(effects)
   end
 
-  @spec summary_text(Macrostep.t(), Labels.t(), boolean()) :: String.t()
-  defp summary_text(%Macrostep{} = macrostep, labels, selected?) do
+  @spec summary_text(Macrostep.t(), Labels.t(), summary_context()) :: String.t()
+  defp summary_text(%Macrostep{} = macrostep, labels, {selected?, deep_link}) do
     round_count = length(macrostep.rounds)
 
     "Macrostep #{macrostep.macrostep}: #{event_summary(macrostep.event)}, " <>
       "#{round_count} #{pluralize(round_count, "round")}, " <>
       quiescence_summary(macrostep.configuration, labels) <>
-      selection_suffix(selected?)
+      selection_suffix(selected?) <>
+      trace_suffix(macrostep, deep_link)
   end
 
   @spec selection_suffix(boolean()) :: String.t()
   defp selection_suffix(true), do: " - shown in the diagram"
   defp selection_suffix(false), do: ""
+
+  # No template, no `otel` key, or ids that are not W3C Trace Context hex:
+  # the summary line is byte-identical to what it was before sui-4w2.
+  @spec trace_suffix(Macrostep.t(), StatifierUI.Trace.DeepLink.t() | nil) :: String.t()
+  defp trace_suffix(macrostep, deep_link) do
+    case DeepLink.markdown(macrostep, deep_link) do
+      nil -> ""
+      link -> " - #{link}"
+    end
+  end
 
   @spec event_summary(map() | nil) :: String.t()
   defp event_summary(nil), do: "initialize"

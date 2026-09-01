@@ -190,16 +190,31 @@ it into a URL, and lives in two modules:
 - `StatifierUI.EventLog.DeepLink` is the seam a renderer calls: it asks the
   macrostep-shaped question ("what is this step's trace?"), because a
   macrostep is the unit upstream opens one span for and the unit an operator
-  sees in the log.
+  sees in the log. `StatifierUI.EventLog.Markdown` and
+  `StatifierUI.Inspector` both call it.
+
+Both renderers read the same option, so a host configures it once per
+render call rather than assembling links itself:
 
 ```elixir
-links =
-  log
-  |> StatifierUI.EventLog.DeepLink.for_log(
-       StatifierUI.EventLog.DeepLink.from_opts(
-         deep_link: "https://apm.example.com/trace/{trace_id}?span={span_id}"
-       )
-     )
+template = "https://apm.example.com/trace/{trace_id}?span={span_id}"
+
+StatifierUI.Inspector.event_log(messages, deep_link: template)
+StatifierUI.Inspector.selection_note(messages,
+  selection: {:macrostep, 2},
+  deep_link: template
+)
+```
+
+The event log appends `- [trace](...)` to the summary line of every
+macrostep that carries correlation, after the `- shown in the diagram`
+marker when both apply; `selection_note/2` appends `[open trace](...)` for
+the macrostep on screen, leaving the quiescent and carried-forward wording
+exactly as it was. Building the links directly, without a renderer, is
+`for_log/2`:
+
+```elixir
+links = StatifierUI.EventLog.DeepLink.for_log(log, StatifierUI.EventLog.DeepLink.from_opts(deep_link: template))
 ```
 
 **The template is host configuration and has nothing else it could be.**

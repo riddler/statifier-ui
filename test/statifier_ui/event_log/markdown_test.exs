@@ -126,10 +126,40 @@ defmodule StatifierUI.EventLog.MarkdownTest do
     %{
       log: log,
       labels: labels,
+      messages: messages,
       state_a: state_a,
       state_b: state_b,
       transition: transition
     }
+  end
+
+  # sui-4w2: the same messages with macrostep 2 stamped as the wire format's
+  # producer would stamp it (ADR-0013), and macrostep 1 left uncorrelated -
+  # one log carrying both cases.
+  @trace_id "4bf92f3577b34da6a3ce929d0e0e4736"
+  @span_id "00f067aa0ba902b7"
+  @template "https://apm.example.com/trace/{trace_id}?span={span_id}"
+
+  @spec log_with_otel([Message.t()]) :: EventLog.t()
+  defp log_with_otel(messages) do
+    {:ok, log} =
+      messages
+      |> Enum.map(fn
+        %Message{macrostep: 2} = message ->
+          %{message | otel: %{"trace_id" => @trace_id, "span_id" => @span_id}}
+
+        message ->
+          message
+      end)
+      |> EventLog.build()
+
+    log
+  end
+
+  @spec summary_of([String.t()], String.t()) :: String.t()
+  defp summary_of(lines, macrostep) do
+    [summary] = Enum.filter(lines, &(&1 =~ "Macrostep #{macrostep}:"))
+    summary
   end
 
   @spec rendered_lines(EventLog.t(), keyword()) :: [String.t()]
@@ -255,6 +285,62 @@ defmodule StatifierUI.EventLog.MarkdownTest do
       lines = rendered_lines(log, collapsible: false, selected: 2)
 
       assert Enum.any?(lines, &(&1 =~ "Macrostep 2:" and &1 =~ "shown in the diagram"))
+    end
+  end
+
+  describe "render/2 - deep link (sui-4w2)" do
+    test "links only the macrostep that carries otel context", %{messages: messages} do
+      lines = rendered_lines(log_with_otel(messages), deep_link: @template)
+
+      assert summary_of(lines, "2") =~
+               "[trace](https://apm.example.com/trace/#{@trace_id}?span=#{@span_id})"
+
+      refute summary_of(lines, "1") =~ "[trace]"
+    end
+
+    test "the link is a suffix on the existing summary, not a replacement", %{
+      messages: messages
+    } do
+      log = log_with_otel(messages)
+      plain = summary_of(rendered_lines(log), "2")
+      linked = summary_of(rendered_lines(log, deep_link: @template), "2")
+
+      assert linked ==
+               String.replace_suffix(plain, "</summary>", "") <>
+                 " - [trace](https://apm.example.com/trace/#{@trace_id}?span=#{@span_id})</summary>"
+    end
+
+    test "it follows the sui-3gg marker rather than displacing it", %{messages: messages} do
+      summary =
+        summary_of(
+          rendered_lines(log_with_otel(messages), selected: 2, deep_link: @template),
+          "2"
+        )
+
+      assert summary =~ "shown in the diagram - [trace]("
+    end
+
+    test "no option renders exactly what it rendered before", %{messages: messages} do
+      log = log_with_otel(messages)
+
+      assert Markdown.render(log) == Markdown.render(log, deep_link: nil)
+      refute Markdown.render(log) =~ "[trace]("
+    end
+
+    test "a stream carrying no otel key renders no link", %{log: log} do
+      refute Markdown.render(log, deep_link: @template) =~ "[trace]("
+    end
+
+    test "the link survives collapsible: false", %{messages: messages} do
+      lines = rendered_lines(log_with_otel(messages), collapsible: false, deep_link: @template)
+
+      assert summary_of(lines, "2") =~ "[trace]("
+    end
+
+    test "a malformed template raises where the option is read", %{messages: messages} do
+      log = log_with_otel(messages)
+
+      assert_raise ArgumentError, fn -> Markdown.render(log, deep_link: "https://apm/{nope}") end
     end
   end
 
