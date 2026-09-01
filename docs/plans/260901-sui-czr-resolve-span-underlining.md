@@ -594,22 +594,22 @@ creates one, so an event with no `error` object is untouched.
 ### Success Criteria:
 
 #### Automated Verification:
-- [ ] Full quality gate passes (`mix quality`).
-- [ ] The subscriber test asserts an `error.execution` message with a resolved
+- [x] Full quality gate passes (`mix quality`).
+- [x] The subscriber test asserts an `error.execution` message with a resolved
       absolute `error.location` is present in the stream - the direct
       regression for `{:unsupported_value, %Statifier.Evaluator.Error{}}`.
-- [ ] `test/statifier_ui/trace/golden_trace_test.exs` passes and
+- [x] `test/statifier_ui/trace/golden_trace_test.exs` passes and
       `git status --porcelain test/support/trace/two_state.jsonl` is empty:
       full-fidelity output for a chart that raises no error is byte-unchanged.
-- [ ] `StatifierUI.Trace.Normalizer.types/0` still returns 24 entries and
+- [x] `StatifierUI.Trace.Normalizer.types/0` still returns 24 entries and
       `test/statifier_ui/trace/wire_format_spec_test.exs` passes - no
       vocabulary growth.
-- [ ] `StatifierUI.Trace.Projection.positions/0` still returns 6 entries and
+- [x] `StatifierUI.Trace.Projection.positions/0` still returns 6 entries and
       `test/statifier_ui/trace/projection_drift_test.exs` passes.
-- [ ] Every existing normalizer test still constructs `ctx` as
+- [x] Every existing normalizer test still constructs `ctx` as
       `%{session: _, seq: _}` and passes - the optional keys are genuinely
       optional.
-- [ ] The module compiles with no arity warnings: `event/2`, `put_event/3`,
+- [x] The module compiles with no arity warnings: `event/2`, `put_event/3`,
       `event_list/2`, `decompose/2`, `trace_message/2`, and `core_message/2`
       all updated together, with no leftover arity-1 caller.
 
@@ -894,6 +894,26 @@ before considering the plan fully landed.
       `deps/statifier/lib/statifier/machine/content/*.ex` and confirm no kind
       was given a `*_location` field it does not have, and that `Content.Assign`
       is not anchored on its `:location` string.
+- [ ] No regressions in related features.
+
+**Implementation Note**: Use `mix quality --profile loop` between edits; run
+full `mix quality` as the phase gate. In interactive execution, pause here for
+the human to confirm the manual testing before moving to the next phase. In
+looped (`--loop`) execution, this phase's Automated Verification gates
+advancement automatically (via `/wurk:commit --auto`), and Manual Verification
+items are deferred and surfaced once at the end instead of blocking here.
+
+---
+
+### Phase 2
+
+- [ ] Run the Phase 1 chart through a live session and read the emitted JSON:
+      the `error` object is legible without an Elixir term in it, and the
+      `location` slices back out of `source` as the failing subexpression.
+- [ ] Confirm the `error` object contains no predicator struct field that
+      embeds a datamodel value (no `message`, no `values`, no `got`), so the
+      "no new projection position" claim holds by inspection as well as by
+      test.
 - [ ] No regressions in related features.
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run

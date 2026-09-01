@@ -515,7 +515,12 @@ defmodule StatifierUI.Trace.Subscriber do
 
   @spec emit_normalized(State.t(), Normalizer.input()) :: State.t()
   defp emit_normalized(state, input) do
-    ctx = %{session: state.session, seq: state.seq}
+    # `machine` and `source` widen the normalizer's ctx (Phase 2 of
+    # sui-czr): they let `StatifierUI.Trace.Diagnostic.object/4` resolve an
+    # absolute `error.location` for an `%Evaluator.Error{}` event. `source`
+    # may legitimately be `nil` (a host that supplied no chart text) - the
+    # resolver already treats that as "no location to resolve".
+    ctx = %{session: state.session, seq: state.seq, machine: state.machine, source: state.source}
 
     case Normalizer.normalize(input, ctx) do
       {:ok, message} -> buffer_and_fanout(state, message)

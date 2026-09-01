@@ -490,6 +490,67 @@ defmodule StatifierUI.Trace.ProjectionTest do
     end
   end
 
+  describe "event.error (sui-czr Phase 2)" do
+    @error_obj %{
+      "kind" => "undefined_variable",
+      "expression" => "amount < limit",
+      "span" => %{"start_line" => 1, "start_column" => 10, "end_line" => 1, "end_column" => 15},
+      "location" => %{
+        "start_line" => 4,
+        "start_column" => 63,
+        "start_offset" => 238,
+        "end_line" => 4,
+        "end_column" => 68,
+        "end_offset" => 243
+      },
+      "location_kind" => "resolved"
+    }
+
+    test "allow_source: false redacts error.expression and leaves the other four keys intact" do
+      profile = Projection.profile!("p", allow_source: false)
+
+      payload =
+        project(
+          "trace.event_dequeued",
+          %{
+            "event" => %{"name" => "error.execution", "type" => "platform", "error" => @error_obj}
+          },
+          profile
+        )
+
+      error_obj = payload["event"]["error"]
+      assert error_obj["expression"] == @redacted
+      assert error_obj["kind"] == @error_obj["kind"]
+      assert error_obj["span"] == @error_obj["span"]
+      assert error_obj["location"] == @error_obj["location"]
+      assert error_obj["location_kind"] == @error_obj["location_kind"]
+    end
+
+    test "allow_source: true (the default) changes nothing" do
+      payload =
+        project(
+          "trace.event_dequeued",
+          %{
+            "event" => %{"name" => "error.execution", "type" => "platform", "error" => @error_obj}
+          },
+          Projection.profile!("p", allow_source: true)
+        )
+
+      assert payload["event"]["error"] == @error_obj
+    end
+
+    test "an event with no error object is untouched" do
+      payload =
+        project(
+          "trace.event_dequeued",
+          %{"event" => %{"name" => "go", "type" => "external"}},
+          Projection.profile!("p", allow_source: false)
+        )
+
+      refute Map.has_key?(payload["event"], "error")
+    end
+  end
+
   describe "what is never projected" do
     test "the envelope is untouched" do
       profile = deny_all()
