@@ -1,8 +1,74 @@
 # ADR-0007: Text-first authoring
 
 Status: accepted (2026-08-16)
+Amendment status: **proposed** (2026-09-01, sui-qay: attribute-level
+stamping and the closed layering gap) - see "Amendment proposed" below;
+the accepted text is unchanged and stays authoritative until the amendment
+is read and accepted.
 
-## Context
+## Amendment proposed 2026-09-01 (sui-qay): attribute-level stamping, and the layering gap is closed
+
+*Proposed, not accepted. Nothing outside this section has been edited, and
+no Status line elsewhere in this record has been changed.*
+
+Two passages of the accepted text - the "Hover targets go finer than one
+element" bullet in the Decision, and the "Attribute-level hover locations
+live one layer higher than the identities on the wire" bullet in the
+Consequences - both rest on a fact that is no longer true. Each says that
+`attribute_locations` lives on the `%Statifier.Document{}` tree only, that
+`Machine.Transition` keeps `location` and `cond_location` and nothing
+finer, and that a consumer wanting `event`-versus-`cond` granularity must
+therefore read the Document tree rather than the wire's identity tables.
+Both bullets name the resolution as an upstream question and track it as
+`sui-qay`.
+
+**The upstream question was answered in the affirmative.** statifier's
+`st-9i5r` (statifier-ex PR #185) carries `attribute_locations` verbatim
+onto `Statifier.Machine.State` and `Statifier.Machine.Transition`, and
+ADR-0005's amendment of the same date puts it on the wire in
+`session.start`'s `states` and `transitions` rows. The layering constraint
+those two bullets describe is closed: attribute-level spans are now
+readable from the identity tables alone, and no consumer needs the Document
+tree for hover granularity. Neither bullet needs its reasoning revised -
+each was correct when written, and each named exactly the condition under
+which it would stop applying.
+
+**The amendment to the stamping contract.** The Decision's sync-contract
+bullet says the viewer stamps each rendered SVG element with the identity
+of the chart entity it draws, as `data-state-index`, `data-t-index` and
+`data-c-index`, and that hover resolves a stamped identity to a source
+range through the identity tables. That contract extends to attribute
+granularity on the same terms:
+
+- A rendered element that draws a specific *attribute* of a chart entity -
+  a transition label's event text, its target, a state's id - carries its
+  owning entity's identity stamp **plus** `data-attribute`, naming the
+  attribute (`event`, `target`, `type`, `id`, `initial`, `cond`).
+- Resolution is the same lookup one level deeper: the identity stamp picks
+  the row, `data-attribute` picks the entry in that row's
+  `attribute_locations`, and the entry is the source range to highlight.
+- **A missing entry degrades to the element-level span, and must.** An
+  attribute the author did not write has no entry, so an element stamped
+  with a `data-attribute` that resolves to nothing falls back to the row's
+  `location` - the element-level highlight the accepted contract already
+  specifies. A viewer must not treat a missing entry as an error, and must
+  not stamp `data-attribute` in a way that suppresses the fallback.
+- The reverse direction is unchanged in shape and finer in result: a cursor
+  position inside an attribute's span resolves to that entity's identity
+  and that attribute name, rather than only to the enclosing element.
+- `data-attribute` joins `data-state-index` / `data-t-index` /
+  `data-c-index` as public surface consumers and rendering tests may rely
+  on, under the same per-build validity rule: attribute entries are as
+  build-scoped as the indexes they hang off, regenerated with them on every
+  successful recompile and never mixed across builds.
+
+**Nothing here is implemented yet, and that is deliberate.** This repo has
+no SVG renderer: ADR-0008 fixes client-side elkjs as the destination stack
+and the current `StatifierUI.Diagram` emits Mermaid, which stamps nothing.
+The contract is recorded now, while the wire-format half is being written,
+so the renderer is built against it rather than retrofitted - the same
+reason the accepted text wrote down `data-state-index` before there was an
+SVG to put it on.
 
 Every authoring tool for statecharts has to answer one question first: what
 does the author actually edit? The candidates here are the SCXML text, a

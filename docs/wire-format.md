@@ -349,6 +349,7 @@ is always the synthesized `:scxml` root):
 | children | array of integers | always (empty for an atomic state) |
 | transitions | array of integers | always - the state's own selectable `t_index` list |
 | location | location object | always |
+| attribute_locations | object | always - `{}` when the element wrote no attributes; see below |
 
 **`transitions`** is one object per compiled transition, in `t_index`
 order:
@@ -362,6 +363,7 @@ order:
 | type | string | always - `"internal"` or `"external"` |
 | content | array of integers | always - the transition's own executable content, `c_index` list in document order; empty when the transition carries none |
 | location | location object | always |
+| attribute_locations | object | always - `{}` when the element wrote no attributes; see below |
 | cond_location | location object | present only when the transition carries a `cond` |
 
 **`contents`** is one object per compiled executable-content node, in
@@ -455,20 +457,64 @@ stamps, respectively. Together they let a consumer holding two sessions'
 without any other channel. Both are absent for a session with no invoking
 parent.
 
-**A caveat on location granularity.** The tables above are built from the
-compiled `%Statifier.Machine{}` layer, which carries element-level spans -
-a whole `<transition>`, a whole `<assign>` - plus a transition's own
-`cond_location` for its guard expression specifically and a `<data>`
-element's own `value_location` for its declared value where the element
-was written with one (see the `data` table's fallback note above). It
-does **not**
-carry attribute-level spans for every attribute (for example, a `<send>`
-element's individual `event`/`target`/`delay` attribute spans): that finer
-table, `attribute_locations`, lives one layer up, on the `Document` the
-compiler consumes, not on the `Machine` this document's producer reads
-(tracked as `sui-qay`). A consumer wanting hover-precision on an individual
-attribute rather than the whole element does not yet have it from
-`session.start` alone.
+**`attribute_locations`** is the attribute-level span table, carried on
+every `states` and `transitions` row alongside that row's element-level
+`location`. It maps an attribute's name to that attribute's own value
+span - a location object, in the same six-field shape:
+
+```json
+"attribute_locations": {
+  "event": { "start_line": 4, "start_column": 17, "start_offset": 96,
+             "end_line": 4, "end_column": 31, "end_offset": 110 },
+  "target": { "start_line": 4, "start_column": 40, "start_offset": 119,
+              "end_line": 4, "end_column": 48, "end_offset": 127 }
+}
+```
+
+**Key presence is the load-bearing part, not the span.** An entry exists
+only for an attribute the author actually *wrote*, so a consumer asking
+whether a transition was written `type="external"` or merely defaulted to
+external reads the presence of the `type` key, which the compiled `type`
+value can no longer answer. The same question applies to a state's
+`initial`, and to any attribute whose lowered value is indistinguishable
+from its default. The map is carried verbatim from the `Document` node
+through the compiled `Machine` to here, so the contract survives the whole
+trip rather than being reconstructed at any layer.
+
+The attributes that appear are whatever the element wrote; a consumer must
+not assume a fixed key set. In practice a transition row carries `event`,
+`target`, `type` and `cond` where written, and a state row carries `id`
+and `initial` where written, plus a history state's `type` and the root's
+`<scxml>` attributes (`initial`, `name`, `datamodel`, `binding`,
+`version`, `xmlns`) at index `0`.
+
+**Absence degrades to the element-level span, and always has.** The object
+is `{}` for an element that wrote no attributes, for the synthesized
+initial transition no author wrote, and for a producer reading a Machine
+compiled by an engine old enough not to populate the field. Those three
+are indistinguishable on the wire and deliberately so: a consumer that
+finds no entry for the attribute it wants falls back to the row's
+`location`, which is the granularity this format offered before the field
+existed. Nothing that read `location` before needs to change.
+
+**`cond_location` is not superseded by it.** A transition's `cond`
+attribute appears in both places when written, and the two are not
+interchangeable: `cond_location` *falls back* to the transition's own
+`location` when the guard was written without a recorded span, where
+`attribute_locations` simply omits the key. Prefer
+`attribute_locations["cond"]` for new work - it answers "where exactly is
+the guard text" without ever silently widening to the whole element - and
+read `cond_location` when that fallback is the wanted behaviour.
+
+`contents` and `data` rows carry no `attribute_locations`. The compiled
+Machine retains the map on its content nodes, but this table is
+deliberately identity-only (see the `data` note above) and no consumer has
+asked for attribute granularity there yet; adding it later is an additive
+change and therefore not a version bump.
+
+Being an identity table, `attribute_locations` is never projected - it
+falls under "every `session.start` table and every `location` object in
+them" in the Projection section below, and carries no datamodel value.
 
 ## The nine `trace.*` schemas
 
@@ -1133,8 +1179,12 @@ Chart:
 
 `xmlns` and `version` are required attributes on the root element
 (`Statifier.Validator`); a chart missing either fails to compile, so an
-example chart must carry both even though they add nothing to the
-trace itself.
+example chart must carry both. They do show up in the trace, in the root
+state row's `attribute_locations`, alongside `initial` - written
+attributes all, and the map records what the author wrote rather than what
+the format finds interesting. Note also what is *absent* from the
+transition row's map: `type`, because this chart does not write it, which
+is exactly the distinction that field exists to preserve.
 
 Driven with one external event, `"go"`, with no data, after the session
 has already come up and settled into `a` on its own. Trace (one JSON
@@ -1142,7 +1192,7 @@ object per line, each shown here with lexicographic keys exactly as the
 wire form produces - the actual bytes, not a reformatting):
 
 ```json
-{"contents":[],"data":[],"seq":0,"session":"sess_golden","states":[{"children":[1,2],"index":0,"kind":"scxml","location":{"end_column":9,"end_line":6,"end_offset":178,"start_column":1,"start_line":1,"start_offset":0},"transitions":[]},{"children":[],"id":"a","index":1,"kind":"state","location":{"end_column":13,"end_line":4,"end_offset":149,"start_column":5,"start_line":2,"start_offset":78},"parent":0,"transitions":[0]},{"children":[],"id":"b","index":2,"kind":"state","location":{"end_column":20,"end_line":5,"end_offset":169,"start_column":5,"start_line":5,"start_offset":154},"parent":0,"transitions":[]}],"transitions":[{"content":[],"events":[["go"]],"location":{"end_column":44,"end_line":3,"end_offset":136,"start_column":9,"start_line":3,"start_offset":101},"source":1,"t_index":0,"targets":[2],"type":"external"}],"type":"session.start","version":1}
+{"contents":[],"data":[],"seq":0,"session":"sess_golden","states":[{"attribute_locations":{"initial":{"end_column":58,"end_line":1,"end_offset":57,"start_column":57,"start_line":1,"start_offset":56},"version":{"end_column":72,"end_line":1,"end_offset":71,"start_column":69,"start_line":1,"start_offset":68},"xmlns":{"end_column":46,"end_line":1,"end_offset":45,"start_column":15,"start_line":1,"start_offset":14}},"children":[1,2],"index":0,"kind":"scxml","location":{"end_column":9,"end_line":6,"end_offset":178,"start_column":1,"start_line":1,"start_offset":0},"transitions":[]},{"attribute_locations":{"id":{"end_column":17,"end_line":2,"end_offset":90,"start_column":16,"start_line":2,"start_offset":89}},"children":[],"id":"a","index":1,"kind":"state","location":{"end_column":13,"end_line":4,"end_offset":149,"start_column":5,"start_line":2,"start_offset":78},"parent":0,"transitions":[0]},{"attribute_locations":{"id":{"end_column":17,"end_line":5,"end_offset":166,"start_column":16,"start_line":5,"start_offset":165}},"children":[],"id":"b","index":2,"kind":"state","location":{"end_column":20,"end_line":5,"end_offset":169,"start_column":5,"start_line":5,"start_offset":154},"parent":0,"transitions":[]}],"transitions":[{"attribute_locations":{"event":{"end_column":30,"end_line":3,"end_offset":122,"start_column":28,"start_line":3,"start_offset":120},"target":{"end_column":41,"end_line":3,"end_offset":133,"start_column":40,"start_line":3,"start_offset":132}},"content":[],"events":[["go"]],"location":{"end_column":44,"end_line":3,"end_offset":136,"start_column":9,"start_line":3,"start_offset":101},"source":1,"t_index":0,"targets":[2],"type":"external"}],"type":"session.start","version":1}
 {"datamodel":{"_event":{"$undefined":true},"_ioprocessors":{"http://www.w3.org/TR/scxml/#SCXMLEventProcessor":{"location":"#_scxml_sess_golden"}},"_name":{"$undefined":true},"_sessionid":"sess_golden"},"seq":1,"session":"sess_golden","type":"session.datamodel"}
 {"indexes":[0,1],"macrostep":1,"microstep":1,"round":0,"seq":2,"session":"sess_golden","type":"trace.entry_set"}
 {"macrostep":1,"microstep":1,"round":1,"seq":3,"session":"sess_golden","t_indexes":[],"type":"trace.transitions_selected"}

@@ -5,6 +5,67 @@ exit and entry sets are engine-ordered sequences, not canonically sorted
 sets; extended by ADR-0012 (2026-08-26): the `$`-prefixed reserved value
 set gains exactly one form, `{"$redacted": true}`, producible by the
 projection layer; format version stays 1
+Amendment status: **proposed** (2026-09-01, sui-qay: attribute-level
+entries in the identity tables) - see "Amendment proposed" below; the
+accepted text is unchanged and stays authoritative until the amendment is
+read and accepted.
+
+## Amendment proposed 2026-09-01 (sui-qay): attribute-level entries in the identity tables
+
+*Proposed, not accepted. Nothing outside this section has been edited, and
+no Status line elsewhere in this record has been changed.*
+
+The Decision specifies `session.start` as carrying "the identity tables the
+compiled Machine retains - state index to id and location, `t_index` and
+`c_index` to location", and its Consequences accept element-level
+granularity as the price of reading the Machine rather than the Document.
+That price is no longer being paid. statifier's `st-9i5r` (statifier-ex
+PR #185) carried the `attribute_locations` map from the Document node
+through to `Statifier.Machine.State` and `Statifier.Machine.Transition`
+verbatim, key-presence contract included, so the finer table is now
+readable at exactly the layer this format's producer already reads.
+
+**The amendment: a state row and a transition row each gain an
+`attribute_locations` object**, mapping an attribute's name to that
+attribute's own value span, alongside the element-level `location` they
+already carry. `docs/wire-format.md`'s `session.start` section states the
+field; this record states why it is a legitimate extension of the
+accepted decision rather than a departure from it.
+
+**Key presence is the contract, not the span.** An entry exists only for an
+attribute the author actually wrote, which is a question the lowered value
+cannot answer: a transition compiled `type: :external` was either written
+`type="external"` or written nothing at all, and only the presence of the
+`type` key separates the two. This is the same discipline the accepted
+"JSON discipline" section already applies to `_event.data` - absence and
+present-and-empty are different facts, and no carrier may collapse them -
+applied one level down, to attributes.
+
+**It is additive, so the format version stays `1`.** The accepted
+versioning rule is explicit that adding a field is not a version bump. A
+consumer that never looks at the key sees the format it already knows;
+every existing row keeps its element-level `location` unchanged, and a
+consumer that finds no entry for the attribute it wants falls back to that
+`location`, which is exactly the granularity this format offered before.
+The degrade path is the same one a producer reading an older Machine takes:
+the field is `{}` and nothing else changes.
+
+**It does not touch projection.** `attribute_locations` is an identity
+table and holds source spans, never datamodel values, so it falls under
+ADR-0012's existing "every `session.start` table and every `location`
+object in them" - a structural position that is never projected. No new
+value position is created, so the closed position set is unchanged.
+
+**Scope: `states` and `transitions` only.** `contents` and `data` rows do
+not gain the field. The compiled Machine retains the map on its content
+nodes too, but the `data` table is deliberately identity-only by the
+accepted text's own argument, and no consumer has asked for attribute
+granularity on either. Extending it later is additive on the same terms.
+
+**`cond_location` is retained, not superseded.** It carries a fallback the
+raw map does not - the transition's own `location` when a guard was written
+without a recorded span - so the two answer different questions and both
+stay. New work prefers `attribute_locations["cond"]`.
 
 ## Context
 
