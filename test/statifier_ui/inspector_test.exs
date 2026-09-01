@@ -61,6 +61,53 @@ defmodule StatifierUI.InspectorTest do
   </scxml>
   """
 
+  # The halting chart of sui-dc7: a run that ends by entering a top-level
+  # `<final>`, so its last macrostep never reaches quiescence and stamps
+  # `trace.done` instead of `trace.macrostep_stable`.
+  #
+  # Document-order indexes: 0 scxml, 1 pending, 2 authorized, 3 captured.
+  @halting """
+  <?xml version="1.0" encoding="UTF-8"?>
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="pending" version="1.0">
+      <state id="pending">
+          <transition event="authorize" target="authorized"/>
+      </state>
+      <state id="authorized">
+          <transition event="capture" target="captured"/>
+      </state>
+      <final id="captured"/>
+  </scxml>
+  """
+
+  # Drives the halting chart to its halt: 1 initialize, 2 "authorize",
+  # 3 "capture" (into the final, which halts the run).
+  defp halted_messages(session_id) do
+    machine = SessionCase.compile!(@halting)
+    {sub, session} = SessionCase.start_early!(machine, session_id)
+    Session.send_event(session, "authorize")
+    SessionCase.wait_for_macrostep(session, 2)
+    Session.send_event(session, "capture")
+    wait_for_final_macrostep(sub, 3)
+    {machine, Subscriber.messages(sub)}
+  end
+
+  # The halting macrostep never becomes quiescent, so the quiescence poll
+  # above would time out on it. Poll the same fold for the `final?` flag.
+  defp wait_for_final_macrostep(sub, target, timeout \\ 1000) do
+    points = Inspector.points(Subscriber.messages(sub))
+
+    cond do
+      Enum.any?(points, &(&1.macrostep == target and &1.final?)) -> :ok
+      timeout <= 0 -> flunk("macrostep #{target} never halted in the subscriber")
+      true -> sleep_then_retry_final(sub, target, timeout)
+    end
+  end
+
+  defp sleep_then_retry_final(sub, target, timeout) do
+    Process.sleep(10)
+    wait_for_final_macrostep(sub, target, timeout - 10)
+  end
+
   # Drives the nested chart through three macrosteps: 1 initialize,
   # 2 "start" (into the parallel), 3 "tick" (both regions move).
   defp nested_messages(session_id) do
@@ -114,6 +161,30 @@ defmodule StatifierUI.InspectorTest do
 
       assert Inspector.active_configuration([]) == []
     end
+
+    test "reads trace.done when the run halted in a top-level final (sui-dc7)" do
+      {_machine, messages} = halted_messages("sess_insp_halt_live")
+
+      # The final configuration the engine stamped at exit: the root and
+      # `captured`. Before sui-dc7 this read [0, 2] - `authorized`, the
+      # state the chart had already left.
+      assert Inspector.active_configuration(messages) == [0, 3]
+    end
+
+    test "a halted run still reads its stable stamps below the halt" do
+      {_machine, messages} = halted_messages("sess_insp_halt_below")
+
+      assert Inspector.active_configuration(messages, selection: {:macrostep, 1}) == [0, 1]
+      assert Inspector.active_configuration(messages, selection: {:macrostep, 2}) == [0, 2]
+      assert Inspector.active_configuration(messages, selection: {:macrostep, 3}) == [0, 3]
+    end
+
+    test "a macrostep above the halt carries the final configuration forward" do
+      {_machine, messages} = halted_messages("sess_insp_halt_above")
+
+      assert Inspector.resolution(messages, selection: {:macrostep, 9}) == {:carried, 9, 3}
+      assert Inspector.active_configuration(messages, selection: {:macrostep, 9}) == [0, 3]
+    end
   end
 
   describe "diagram/3" do
@@ -124,6 +195,18 @@ defmodule StatifierUI.InspectorTest do
       assert String.starts_with?(source, "stateDiagram-v2")
       assert source =~ "class s2 active"
       refute source =~ "class s1 active"
+    end
+
+    test "a halted chart highlights the final state it reached (sui-dc7)" do
+      {machine, messages} = halted_messages("sess_insp_halt_diag")
+
+      source = Inspector.diagram(machine, messages)
+
+      # `captured` (index 3), not `authorized` (index 2) - the pane's whole
+      # symptom in sui-dc7 was the highlight staying on the state the chart
+      # left.
+      assert source =~ "class s3 active"
+      refute source =~ "class s2 active"
     end
   end
 
@@ -154,6 +237,16 @@ defmodule StatifierUI.InspectorTest do
 
     test "an empty stream offers nothing to select" do
       assert Inspector.points([]) == []
+    end
+
+    test "the halting macrostep is final rather than quiescent (sui-dc7)" do
+      {_machine, messages} = halted_messages("sess_insp_halt_points")
+
+      assert [
+               %{macrostep: 1, event: nil, quiescent?: true, final?: false},
+               %{macrostep: 2, event: "authorize", quiescent?: true, final?: false},
+               %{macrostep: 3, event: "capture", quiescent?: false, final?: true}
+             ] = Inspector.points(messages)
     end
   end
 
@@ -315,6 +408,21 @@ defmodule StatifierUI.InspectorTest do
       note = Inspector.selection_note(messages, selection: {:macrostep, 9})
       assert note =~ "not quiescent"
       assert note =~ "macrostep 3's, carried forward"
+    end
+
+    test "the halting macrostep says the run halted there (sui-dc7)" do
+      {_machine, messages} = halted_messages("sess_insp_note_final")
+
+      note = Inspector.selection_note(messages, selection: {:macrostep, 3})
+      assert note =~ "macrostep 3"
+      assert note =~ "`capture`"
+      assert note =~ "final configuration the run halted in"
+
+      # The exit reading is labelled apart from the quiescent one, so a
+      # configuration the chart exited in is never presented as one it
+      # settled in.
+      refute note =~ "quiescent configuration"
+      assert Inspector.resolution(messages, selection: {:macrostep, 3}) == {:final, 3}
     end
 
     test "a macrostep below every stamp says the initial configuration is drawn" do

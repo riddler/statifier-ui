@@ -11,11 +11,32 @@ defmodule StatifierUI.Inspector do
   (`StatifierUI.Kino`) maps these strings into widgets and owns nothing
   else.
 
-  The active configuration is read from the newest
-  `trace.macrostep_stable` message - the quiescent configuration of the
-  last completed macrostep (`docs/wire-format.md`). Before any macrostep
-  has completed in view, the caller-supplied initial configuration
-  (typically `Statifier.Session.snapshot/1`'s) is used instead.
+  The active configuration is read from the newest message that stamped
+  one - a `trace.macrostep_stable`, the quiescent configuration of the
+  last completed macrostep, or a `trace.done`, the configuration a halted
+  run exited in (`docs/wire-format.md`). Before either has arrived in
+  view, the caller-supplied initial configuration (typically
+  `Statifier.Session.snapshot/1`'s) is used instead.
+
+  ## A halted chart's final configuration (sui-dc7)
+
+  A run that ends by entering a top-level `<final>` never stabilizes in
+  its last macrostep: quiescence is never reached, so no
+  `trace.macrostep_stable` is emitted for it and the engine stamps the
+  configuration on `trace.done` instead. Reading only
+  `macrostep_stable` therefore left the diagram highlighting the state the
+  chart *left*, while the datamodel pane showed the assignment that moved
+  it out.
+
+  Both stamps are read, and the wire format is what settles that they may
+  be: its `trace.done` row defines `configuration` as "the full
+  configuration as it stood at exit, a genuine set, sorted ascending" -
+  the same field, shape, and authority as a `macrostep_stable` payload.
+  Nothing here re-derives an exit configuration from the exit sets that
+  precede `trace.done`; that would be re-implementing Appendix D, which
+  this repo does not do (ADR-0002, `StatifierUI.EventLog`). The two
+  readings stay labelled apart, so a configuration the chart *exited* in
+  is never presented as one it *settled* in.
 
   ## Selecting a past macrostep (sui-3gg)
 
@@ -27,18 +48,19 @@ defmodule StatifierUI.Inspector do
   That is the whole of the link between the two panes.
 
   Nothing here re-derives a configuration. Every configuration this module
-  can show was stamped by the engine on a `trace.macrostep_stable`, and a
+  can show was stamped by the engine on a `trace.macrostep_stable` or a
+  `trace.done`, and a
   stream reconstructed by catch-up got there through statifier ADR-0034
   replay, which re-drives the core in a pure fold rather than rewinding a
   live session. Time travel is a read of replay output as data (ADR-0002's
   inherited clause), so selecting a macrostep neither touches the session
   nor asks the engine for anything new.
 
-  A selected macrostep that has not reached quiescence has no configuration
-  of its own. Rather than draw nothing, the newest configuration at or
-  below it is shown and `selection_note/2` says which macrostep it was
-  carried from - a carried configuration is never presented as a measured
-  one.
+  A selected macrostep that stamped no configuration of its own - in
+  flight, or its stamp dropped - has none to draw. Rather than draw
+  nothing, the newest configuration at or below it is shown and
+  `selection_note/2` says which macrostep it was carried from - a carried
+  configuration is never presented as a measured one.
 
   ## Linking out to a trace (sui-4w2)
 
@@ -64,11 +86,21 @@ defmodule StatifierUI.Inspector do
   """
   @type selection :: :live | {:macrostep, non_neg_integer()}
 
-  @typedoc "One selectable point, for a caller building a scrubber."
+  @typedoc """
+  One selectable point, for a caller building a scrubber.
+
+  `quiescent?` says the macrostep settled, `final?` that it halted the run
+  (sui-dc7). They are never both true, and a macrostep with a
+  configuration to draw is one where either is - which is why `final?` was
+  added beside `quiescent?` rather than widening it: a halting macrostep
+  is not quiescent, and a scrubber saying so is not the same as one saying
+  it has nothing to show.
+  """
   @type point :: %{
           macrostep: non_neg_integer(),
           event: String.t() | nil,
-          quiescent?: boolean()
+          quiescent?: boolean(),
+          final?: boolean()
         }
 
   @typedoc "Options shared by the fold functions."
@@ -80,13 +112,14 @@ defmodule StatifierUI.Inspector do
   @doc """
   The configuration `messages` and `opts[:selection]` imply.
 
-  On `:live` (the default): the newest `trace.macrostep_stable`'s
-  `configuration` payload, or `opts[:initial_configuration]` (default
-  `[]`) when no macrostep has stabilized in view.
+  On `:live` (the default): the `configuration` payload of the newest
+  `trace.macrostep_stable` or `trace.done`, whichever arrived last, or
+  `opts[:initial_configuration]` (default `[]`) when neither is in view.
 
-  On `{:macrostep, n}`: the configuration macrostep `n` settled in, per
-  `StatifierUI.EventLog.configuration_at/2` - falling back to the newest
-  one below it when `n` is not yet quiescent, and to
+  On `{:macrostep, n}`: the configuration macrostep `n` settled in - or,
+  for the macrostep that halted the run, exited in - per
+  `StatifierUI.EventLog.configuration_at/2`, falling back to the newest
+  one below it when `n` stamped neither, and to
   `opts[:initial_configuration]` when nothing at or below `n` stamped one.
   A message list the log refuses (mixed sessions) degrades to the live
   reading rather than raising, same policy as `event_log/2`.
@@ -101,14 +134,16 @@ defmodule StatifierUI.Inspector do
 
   @doc """
   How the selection resolved, for a caller that needs to say so: `:live`,
-  `{:quiescent, n}`, `{:carried, n, from}` (macrostep `n` is not
-  quiescent, so macrostep `from`'s configuration is shown), or
+  `{:quiescent, n}`, `{:final, n}` (macrostep `n` halted the run, so the
+  configuration it exited in is shown), `{:carried, n, from}` (macrostep
+  `n` stamped no configuration, so macrostep `from`'s is shown), or
   `{:before_first, n}` (nothing at or below `n` stamped a configuration,
   so the initial configuration is shown).
   """
   @spec resolution([Message.t()], [opt()]) ::
           :live
           | {:quiescent, non_neg_integer()}
+          | {:final, non_neg_integer()}
           | {:carried, non_neg_integer(), non_neg_integer()}
           | {:before_first, non_neg_integer()}
   def resolution(messages, opts \\ []) do
@@ -227,12 +262,21 @@ defmodule StatifierUI.Inspector do
     end
   end
 
+  # Newest-first over both stamping types, so a `trace.done` arriving after
+  # the last `trace.macrostep_stable` wins on order rather than on type -
+  # there is no precedence rule to get wrong. `effect.done` carries the same
+  # configuration at the same moment (`docs/wire-format.md`, the
+  # `trace.done`/`effect.done` note) and is deliberately not read here: one
+  # source per fact.
+  @stamps_configuration ["trace.macrostep_stable", "trace.done"]
+
   @spec live_configuration([Message.t()], [opt()]) :: [non_neg_integer()]
   defp live_configuration(messages, opts) do
     messages
     |> Enum.reverse()
     |> Enum.find_value(fn
-      %Message{type: "trace.macrostep_stable", payload: %{"configuration" => configuration}} ->
+      %Message{type: type, payload: %{"configuration" => configuration}}
+      when type in @stamps_configuration ->
         configuration
 
       _other ->
@@ -252,6 +296,7 @@ defmodule StatifierUI.Inspector do
       {:ok, log} ->
         case EventLog.configuration_at(log, n) do
           {:quiescent, configuration} -> configuration
+          {:final, configuration} -> configuration
           {:carried, _from, configuration} -> configuration
           :before_first -> initial_configuration(opts)
         end
@@ -264,6 +309,7 @@ defmodule StatifierUI.Inspector do
   @spec resolve_macrostep([Message.t()], non_neg_integer()) ::
           :live
           | {:quiescent, non_neg_integer()}
+          | {:final, non_neg_integer()}
           | {:carried, non_neg_integer(), non_neg_integer()}
           | {:before_first, non_neg_integer()}
   defp resolve_macrostep(messages, n) do
@@ -271,6 +317,7 @@ defmodule StatifierUI.Inspector do
       {:ok, log} ->
         case EventLog.configuration_at(log, n) do
           {:quiescent, _configuration} -> {:quiescent, n}
+          {:final, _configuration} -> {:final, n}
           {:carried, from, _configuration} -> {:carried, n, from}
           :before_first -> {:before_first, n}
         end
@@ -292,14 +339,15 @@ defmodule StatifierUI.Inspector do
     %{
       macrostep: macrostep.macrostep,
       event: event_name(macrostep.event),
-      quiescent?: macrostep.configuration != nil
+      quiescent?: macrostep.configuration != nil,
+      final?: macrostep.final_configuration != nil
     }
   end
 
-  # One fold, three readings: the note names the macrostep, its event, and
+  # One fold, four readings: the note names the macrostep, its event, and
   # how the drawn configuration was arrived at. The trace link, when the host
   # configured a template and the macrostep carries `otel`, is appended to
-  # all three without changing any of them.
+  # all four without changing any of them.
   @spec selected_note([Message.t()], non_neg_integer(), StatifierUI.Trace.DeepLink.t() | nil) ::
           String.t()
   defp selected_note(messages, n, deep_link) do
@@ -311,6 +359,10 @@ defmodule StatifierUI.Inspector do
           case EventLog.configuration_at(log, n) do
             {:quiescent, _configuration} ->
               "**Showing** macrostep #{n}#{suffix}, at its quiescent configuration."
+
+            {:final, _configuration} ->
+              "**Showing** macrostep #{n}#{suffix}, at the final configuration the " <>
+                "run halted in."
 
             {:carried, from, _configuration} ->
               "**Showing** macrostep #{n}#{suffix}, which is not quiescent; the " <>

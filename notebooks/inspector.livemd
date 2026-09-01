@@ -134,16 +134,12 @@ Do these in order, watching the panes after each click:
    `attached` - a halted chart's session process is alive, and the
    inspector keeps its whole trace readable.
 
-   **Expect the highlight to stay on `authorized`, not move to
-   `captured`.** That is today's real behavior, not a mistake in the
-   walk. Entering a top-level `<final>` halts the run, so the macrostep
-   ends in `trace.done` rather than `trace.macrostep_stable`, and
-   `StatifierUI.Inspector.active_configuration/2` reads only the newest
-   `macrostep_stable`. It therefore falls back to the previous quiescent
-   configuration. What the configuration pane should show for a halted
-   chart is an open question - `sui-dc7`. If you walk this notebook and
-   the highlight *does* reach `captured`, that bead has been answered
-   and this step needs updating.
+   **Expect the highlight to move to `captured`.** Entering a top-level
+   `<final>` halts the run, so this macrostep never reaches quiescence
+   and ends in `trace.done` rather than `trace.macrostep_stable`.
+   `trace.done` carries the configuration the run exited in, and
+   `StatifierUI.Inspector.active_configuration/2` reads it (`sui-dc7`) -
+   so the diagram shows where the chart ended, not the state it left.
 
 ## 6. Scrub back through the run
 
@@ -167,11 +163,11 @@ caught-up stream got there through statifier ADR-0034 replay.
    *pinned* - the same picture as the live tip, but no longer following
    it, and its log entry now carries the marker. **Live** clears both.
 5. Select the macrostep that entered `captured` - the halting one. Expect
-   the note to say **which is not quiescent; the configuration drawn is
-   macrostep N's, carried forward**. That is `sui-dc7` stated out loud
-   rather than silently: the halting macrostep ends in `trace.done`, so
-   it stamped no configuration of its own, and the scrubber says so
-   instead of presenting an earlier configuration as that macrostep's.
+   the note to say **at the final configuration the run halted in**, and
+   the diagram to highlight `captured`. The halting macrostep stamped its
+   configuration on `trace.done` rather than on a `trace.macrostep_stable`
+   (`sui-dc7`), and the note keeps the two readings apart: a configuration
+   the chart *exited* in is never worded as one it *settled* in.
 
 The datamodel explorer does **not** move with the scrubber - it always
 shows the current values. Time-travelling the datamodel needs a
@@ -201,7 +197,8 @@ cell evaluation (that is the clean detach - the session simply drops the
 dead subscriber), and the fresh widget shows the **entire** history
 again: every macrostep you drove above is in the log,
 `authorization_attempts` is `2`, `captured_cents` is `1999`, and the
-diagram highlights `authorized` for the reason step 5 gives (`sui-dc7`).
+diagram highlights `captured` - the halted run's final configuration,
+read from `trace.done` (`sui-dc7`).
 That round trip is catch-up doing its job: a fresh widget over the same
 recorded session reproduces the previous one exactly, halt included.
 

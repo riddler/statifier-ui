@@ -622,6 +622,60 @@ defmodule StatifierUI.EventLogTest do
       assert EventLog.configuration_at(log, 0) == :before_first
     end
 
+    test "a halting macrostep returns the configuration trace.done stamped" do
+      # sui-dc7: macrostep 3 enters a top-level final, so it never
+      # stabilizes and `trace.done` carries the exit configuration instead.
+      {:ok, log} = EventLog.build(@worked_example ++ halting_macrostep(3))
+
+      assert EventLog.configuration_at(log, 3) == {:final, [0, 3]}
+      assert EventLog.configuration_at(log, 9) == {:carried, 3, [0, 3]}
+
+      # The stamps below the halt still read as they did.
+      assert EventLog.configuration_at(log, 2) == {:quiescent, [0, 2]}
+    end
+
+    test "a trace.done payload with no configuration stamps nothing" do
+      # A projected or truncated stream is data this fold does not get to
+      # assume about: no key, no stamp - never `nil` read as a set.
+      done_without_configuration = [
+        %Message{
+          type: "trace.done",
+          session: "sess_golden",
+          seq: 100,
+          macrostep: 3,
+          microstep: 1,
+          round: 0,
+          payload: %{"donedata" => "(redacted)"}
+        }
+      ]
+
+      {:ok, log} = EventLog.build(@worked_example ++ done_without_configuration)
+
+      assert EventLog.configuration_at(log, 3) == {:carried, 2, [0, 2]}
+    end
+
+    test "an exit stamp wins over a stable one in the same macrostep" do
+      # Both in macrostep 3, `trace.done` later: the run ended where it
+      # says it ended.
+      both =
+        @worked_example ++
+          [
+            %Message{
+              type: "trace.macrostep_stable",
+              session: "sess_golden",
+              seq: 101,
+              macrostep: 3,
+              microstep: 1,
+              round: 0,
+              payload: %{"configuration" => [0, 2]}
+            }
+          ] ++ halting_macrostep(3)
+
+      {:ok, log} = EventLog.build(both)
+
+      assert EventLog.configuration_at(log, 3) == {:final, [0, 3]}
+    end
+
     test "a macrostep with no stamp of its own carries the one below it" do
       # Macrostep 3 opens but never stabilizes - the in-flight case.
       in_flight =
@@ -648,5 +702,55 @@ defmodule StatifierUI.EventLogTest do
       assert EventLog.configuration_at(log, 0) == :before_first
       assert EventLog.configuration_at(log, 5) == :before_first
     end
+  end
+
+  describe "Macrostep.stamped/1" do
+    test "prefers the exit reading, then the stable one, then nothing" do
+      assert Macrostep.stamped(%Macrostep{macrostep: 1}) == nil
+
+      assert Macrostep.stamped(%Macrostep{macrostep: 1, configuration: [0, 1]}) == [0, 1]
+
+      assert Macrostep.stamped(%Macrostep{
+               macrostep: 1,
+               configuration: [0, 2],
+               final_configuration: [0, 3]
+             }) == [0, 3]
+    end
+  end
+
+  # The tail sui-dc7 describes: the transition into a top-level `<final>`
+  # exits everything and `trace.done` stamps the configuration at exit.
+  # `trace.macrostep_stable` is deliberately absent - the halting macrostep
+  # never reaches quiescence, which is the whole bug.
+  defp halting_macrostep(macrostep) do
+    [
+      %Message{
+        type: "trace.entry_set",
+        session: "sess_golden",
+        seq: 200,
+        macrostep: macrostep,
+        microstep: 0,
+        round: 0,
+        payload: %{"indexes" => [3]}
+      },
+      %Message{
+        type: "trace.exit_set",
+        session: "sess_golden",
+        seq: 201,
+        macrostep: macrostep,
+        microstep: 1,
+        round: 1,
+        payload: %{"indexes" => [3, 0]}
+      },
+      %Message{
+        type: "trace.done",
+        session: "sess_golden",
+        seq: 202,
+        macrostep: macrostep,
+        microstep: 1,
+        round: 1,
+        payload: %{"configuration" => [0, 3]}
+      }
+    ]
   end
 end
