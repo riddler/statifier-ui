@@ -3,17 +3,17 @@ defmodule StatifierUI.DatamodelExplorerTest do
 
   alias StatifierUI.DatamodelExplorer
   alias StatifierUI.Fixtures
-  alias StatifierUI.Test.Support.Fixtures.PaymentSource
+  alias StatifierUI.Test.Support.Fixtures.AuthorizationSource
   alias StatifierUI.Test.Support.Trace.SessionCase
 
-  # One <data> declaration the "gold-tier-user" scenario names ("tier") and
-  # one it does not name ("count") - so promotion and pass-through both
+  # One <data> declaration the "within-budget-account" scenario names
+  # ("card_brand") and one it does not name ("count") - so promotion and pass-through both
   # exercise on the same chart. No `name` attribute, matching scope_test.exs.
   @chart """
   <?xml version="1.0" encoding="UTF-8"?>
   <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="a" version="1.0">
       <datamodel>
-          <data id="tier"/>
+          <data id="card_brand"/>
           <data id="count"/>
       </datamodel>
       <state id="a"/>
@@ -22,7 +22,7 @@ defmodule StatifierUI.DatamodelExplorerTest do
 
   setup do
     machine = SessionCase.compile!(@chart)
-    {:ok, fixtures} = Fixtures.from_source(PaymentSource)
+    {:ok, fixtures} = Fixtures.from_source(AuthorizationSource)
     {:ok, machine: machine, fixtures: fixtures}
   end
 
@@ -51,15 +51,16 @@ defmodule StatifierUI.DatamodelExplorerTest do
     } do
       assert {:ok, pane} = DatamodelExplorer.build_authoring(machine, fixtures)
 
-      [tier_entry] = Enum.filter(DatamodelExplorer.entries(pane, :data), &(&1.name == "tier"))
+      [brand_entry] =
+        Enum.filter(DatamodelExplorer.entries(pane, :data), &(&1.name == "card_brand"))
 
       assert %{
-               name: "tier",
+               name: "card_brand",
                tier: :data,
                d_index: 0,
-               value: "gold",
+               value: "visa",
                shape: :string
-             } = tier_entry
+             } = brand_entry
     end
 
     test "a tier-1 entry the scenario does not name stays :undefined", %{
@@ -76,11 +77,11 @@ defmodule StatifierUI.DatamodelExplorerTest do
   describe "build_authoring/3 - a scenario naming something the chart does not declare" do
     test "a :scenario entry appears", %{machine: machine} do
       {:ok, fixtures} =
-        Fixtures.new(scenarios: %{"gold-tier-user" => %{"user_id" => "u-1999"}})
+        Fixtures.new(scenarios: %{"within-budget-account" => %{"account_id" => "acct-1999"}})
 
       assert {:ok, pane} = DatamodelExplorer.build_authoring(machine, fixtures)
 
-      assert [%{name: "user_id", tier: :scenario, value: "u-1999", shape: :string}] =
+      assert [%{name: "account_id", tier: :scenario, value: "acct-1999", shape: :string}] =
                DatamodelExplorer.entries(pane, :scenario)
     end
   end
@@ -88,9 +89,11 @@ defmodule StatifierUI.DatamodelExplorerTest do
   describe "build_authoring/3 - scenario selection" do
     test "explicit :scenario selects that scenario", %{machine: machine, fixtures: fixtures} do
       assert {:ok, pane} =
-               DatamodelExplorer.build_authoring(machine, fixtures, scenario: "gold-tier-user")
+               DatamodelExplorer.build_authoring(machine, fixtures,
+                 scenario: "within-budget-account"
+               )
 
-      assert pane.scenario == "gold-tier-user"
+      assert pane.scenario == "within-budget-account"
     end
 
     test "an unknown :scenario name returns {:error, {:unknown_scenario, name}}", %{
@@ -115,8 +118,8 @@ defmodule StatifierUI.DatamodelExplorerTest do
       {:ok, fixtures} =
         Fixtures.new(
           scenarios: %{
-            "zeta-scenario" => %{"tier" => "zeta"},
-            "alpha-scenario" => %{"tier" => "alpha"}
+            "zeta-scenario" => %{"card_brand" => "zeta"},
+            "alpha-scenario" => %{"card_brand" => "alpha"}
           }
         )
 
@@ -125,7 +128,7 @@ defmodule StatifierUI.DatamodelExplorerTest do
       assert pane.scenario == "alpha-scenario"
 
       assert %{value: "alpha"} =
-               Enum.find(DatamodelExplorer.entries(pane, :data), &(&1.name == "tier"))
+               Enum.find(DatamodelExplorer.entries(pane, :data), &(&1.name == "card_brand"))
     end
   end
 
@@ -134,12 +137,12 @@ defmodule StatifierUI.DatamodelExplorerTest do
       machine: machine
     } do
       {:ok, fixtures} =
-        Fixtures.new(scenarios: %{"gold-tier-user" => %{"tier" => ~D[2026-08-22]}})
+        Fixtures.new(scenarios: %{"within-budget-account" => %{"card_brand" => ~D[2026-08-22]}})
 
       assert {:ok, pane} = DatamodelExplorer.build_authoring(machine, fixtures)
 
       assert %{value: ~D[2026-08-22], shape: :date} =
-               Enum.find(DatamodelExplorer.entries(pane, :data), &(&1.name == "tier"))
+               Enum.find(DatamodelExplorer.entries(pane, :data), &(&1.name == "card_brand"))
     end
   end
 
@@ -162,7 +165,7 @@ defmodule StatifierUI.DatamodelExplorerTest do
   describe "diagnostics/1" do
     test "bundle diagnostics are carried through ahead of the scope's own", %{machine: machine} do
       fixtures = %Fixtures{
-        scenarios: %{"gold-tier-user" => %{"tier" => "gold"}},
+        scenarios: %{"within-budget-account" => %{"card_brand" => "visa"}},
         diagnostics: [
           %{kind: :some_bundle_problem, message: "pre-existing", path: ["x"], source: nil}
         ]

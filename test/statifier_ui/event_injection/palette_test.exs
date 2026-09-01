@@ -4,7 +4,7 @@ defmodule StatifierUI.EventInjection.PaletteTest do
   alias StatifierUI.EventInjection.Entry
   alias StatifierUI.EventInjection.Palette
   alias StatifierUI.Fixtures
-  alias StatifierUI.Test.Support.Fixtures.PaymentSource
+  alias StatifierUI.Test.Support.Fixtures.AuthorizationSource
 
   describe "build/1 - degraded mode" do
     test "nil yields an empty palette with no diagnostics" do
@@ -22,7 +22,7 @@ defmodule StatifierUI.EventInjection.PaletteTest do
       assert {:ok, fixtures} =
                Fixtures.new(
                  events: %{
-                   "payment.success" => %{"amount" => 1999},
+                   "authorize.approved" => %{"amount_cents" => 1999},
                    "payment.nulled" => nil,
                    "payment.pending" => :undefined,
                    "payment.scheduled" => ~D[2026-08-22],
@@ -33,23 +33,24 @@ defmodule StatifierUI.EventInjection.PaletteTest do
       assert {:ok, %Palette{entries: entries, diagnostics: []}} = Palette.build(fixtures)
 
       assert [
+               %Entry{name: "authorize.approved"},
                %Entry{name: "payment.delayed"},
                %Entry{name: "payment.nulled", payload: nil, payload_text: "null"},
                %Entry{name: "payment.pending", payload: :undefined, payload_text: ""},
-               %Entry{name: "payment.scheduled"},
-               %Entry{name: "payment.success"}
+               %Entry{name: "payment.scheduled"}
              ] = entries
 
       assert Palette.names(%Palette{entries: entries}) == [
+               "authorize.approved",
                "payment.delayed",
                "payment.nulled",
                "payment.pending",
-               "payment.scheduled",
-               "payment.success"
+               "payment.scheduled"
              ]
 
-      assert {:ok, %Entry{payload: %{"amount" => 1999}, payload_text: ~s({"amount":1999})}} =
-               Palette.entry(%Palette{entries: entries}, "payment.success")
+      assert {:ok,
+              %Entry{payload: %{"amount_cents" => 1999}, payload_text: ~s({"amount_cents":1999})}} =
+               Palette.entry(%Palette{entries: entries}, "authorize.approved")
 
       assert {:ok, %Entry{payload: ~D[2026-08-22], payload_text: ~s({"$date":"2026-08-22"})}} =
                Palette.entry(%Palette{entries: entries}, "payment.scheduled")
@@ -64,25 +65,25 @@ defmodule StatifierUI.EventInjection.PaletteTest do
     test "payload_text has canonical (sorted) object keys regardless of input key order" do
       assert {:ok, fixtures} =
                Fixtures.new(
-                 events: %{"payment.success" => %{"currency" => "USD", "amount" => 1999}}
+                 events: %{"authorize.approved" => %{"currency" => "USD", "amount_cents" => 1999}}
                )
 
       assert {:ok, %Palette{entries: [entry]}} = Palette.build(fixtures)
-      assert entry.payload_text == ~s({"amount":1999,"currency":"USD"})
+      assert entry.payload_text == ~s({"amount_cents":1999,"currency":"USD"})
     end
 
     test "an unencodable payload becomes a diagnostic without taking the palette down" do
       assert {:ok, fixtures} =
                Fixtures.new(
                  events: %{
-                   "payment.success" => %{"amount" => 1999},
+                   "authorize.approved" => %{"amount_cents" => 1999},
                    "payment.broken" => {:not, :a, :value}
                  }
                )
 
       assert {:ok, %Palette{entries: entries, diagnostics: diagnostics}} = Palette.build(fixtures)
 
-      assert [%Entry{name: "payment.success"}] = entries
+      assert [%Entry{name: "authorize.approved"}] = entries
 
       assert [
                %{
@@ -95,11 +96,11 @@ defmodule StatifierUI.EventInjection.PaletteTest do
 
     test "atom-keyed payloads keep atoms in payload but round-trip to string keys in payload_text" do
       assert {:ok, fixtures} =
-               Fixtures.new(events: %{"payment.success" => %{amount: 1999}})
+               Fixtures.new(events: %{"authorize.approved" => %{amount_cents: 1999}})
 
       assert {:ok, %Palette{entries: [entry]}} = Palette.build(fixtures)
-      assert entry.payload == %{amount: 1999}
-      assert entry.payload_text == ~s({"amount":1999})
+      assert entry.payload == %{amount_cents: 1999}
+      assert entry.payload_text == ~s({"amount_cents":1999})
     end
   end
 
@@ -110,15 +111,15 @@ defmodule StatifierUI.EventInjection.PaletteTest do
   end
 
   describe "build/1 - from a behaviour source" do
-    test "builds a palette from test/support/fixtures/payment_source.ex" do
-      assert {:ok, fixtures} = Fixtures.from_source(PaymentSource)
+    test "builds a palette from test/support/fixtures/authorization_source.ex" do
+      assert {:ok, fixtures} = Fixtures.from_source(AuthorizationSource)
       assert {:ok, %Palette{entries: entries, diagnostics: []}} = Palette.build(fixtures)
 
       assert [
                %Entry{
-                 name: "payment.success",
-                 payload: %{"amount" => 1999, "currency" => "USD"},
-                 payload_text: ~s({"amount":1999,"currency":"USD"})
+                 name: "authorize.approved",
+                 payload: %{"amount_cents" => 1999, "currency" => "USD"},
+                 payload_text: ~s({"amount_cents":1999,"currency":"USD"})
                }
              ] = entries
     end

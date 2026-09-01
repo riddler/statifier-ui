@@ -21,12 +21,12 @@ defmodule StatifierUI.EventInjectionTest do
 
     test "a bundle with at least one encodable event yields free_form_only?: false" do
       assert {:ok, fixtures} =
-               Fixtures.new(events: %{"payment.success" => %{"amount" => 1999}})
+               Fixtures.new(events: %{"authorize.approved" => %{"amount_cents" => 1999}})
 
       assert {:ok, %EventInjection{free_form_only?: false} = pane} =
                EventInjection.build(fixtures)
 
-      assert [%Entry{name: "payment.success"}] = EventInjection.entries(pane)
+      assert [%Entry{name: "authorize.approved"}] = EventInjection.entries(pane)
     end
 
     test "a bundle whose only event payload is unencodable degrades to free_form_only?" do
@@ -50,7 +50,7 @@ defmodule StatifierUI.EventInjectionTest do
       assert {:ok, fixtures} =
                Fixtures.new(
                  events: %{
-                   "payment.success" => %{"amount" => 1999},
+                   "authorize.approved" => %{"amount_cents" => 1999},
                    "payment.broken" => {:not, :a, :value}
                  }
                )
@@ -62,7 +62,7 @@ defmodule StatifierUI.EventInjectionTest do
 
       assert EventInjection.entries(pane) == entries
       assert EventInjection.diagnostics(pane) == diagnostics
-      assert [%Entry{name: "payment.success"}] = entries
+      assert [%Entry{name: "authorize.approved"}] = entries
       assert [%{kind: :unencodable_event_payload}] = diagnostics
     end
   end
@@ -90,7 +90,7 @@ defmodule StatifierUI.EventInjectionTest do
 
     test "an invalid payload is also returned without sending", %{collector: collector} do
       assert {:error, {:invalid_json, _reason}} =
-               EventInjection.send_draft(collector, "payment.success", "{not json")
+               EventInjection.send_draft(collector, "authorize.approved", "{not json")
 
       assert {:messages, []} = Process.info(collector, :messages)
     end

@@ -128,7 +128,7 @@ defmodule StatifierUI.Fixtures.BundleTest do
       %{
         palette: %{
           "myapp.authorize" => Palette.Authorize,
-          "myapp.notify" => Palette.Notify,
+          "myapp.capture" => Palette.Capture,
           "myapp.plain" => Palette.Plain,
           "myapp.malformed" => Palette.Malformed,
           "myapp.exploding" => Palette.Exploding
@@ -139,7 +139,7 @@ defmodule StatifierUI.Fixtures.BundleTest do
     test "loads both spellings, sorted by name", %{palette: palette} do
       discovery = Bundle.discover(palette)
 
-      assert Enum.map(discovery.bundles, & &1.name) == ["myapp.authorize", "myapp.notify"]
+      assert Enum.map(discovery.bundles, & &1.name) == ["myapp.authorize", "myapp.capture"]
     end
 
     test "records the module each bundle came from", %{palette: palette} do
@@ -161,7 +161,7 @@ defmodule StatifierUI.Fixtures.BundleTest do
 
       assert {"myapp.malformed", {:unknown_bundle_key, "myapp.malformed", :datsets}} in discovery.errors
 
-      assert Enum.map(discovery.bundles, & &1.name) == ["myapp.authorize", "myapp.notify"]
+      assert Enum.map(discovery.bundles, & &1.name) == ["myapp.authorize", "myapp.capture"]
     end
 
     test "a raising callback is caught and reported against its own name", %{palette: palette} do
@@ -172,7 +172,7 @@ defmodule StatifierUI.Fixtures.BundleTest do
     end
 
     test "accepts a list of pairs as readily as a map" do
-      discovery = Bundle.discover([{"b", Palette.Notify}, {"a", Palette.Authorize}])
+      discovery = Bundle.discover([{"b", Palette.Capture}, {"a", Palette.Authorize}])
 
       assert Enum.map(discovery.bundles, & &1.name) == ["a", "b"]
     end
@@ -194,7 +194,7 @@ defmodule StatifierUI.Fixtures.BundleTest do
     test "names each bundle after its file and sorts them" do
       assert {:ok, discovery} = Bundle.discover_dir(@bundles_dir)
 
-      assert Enum.map(discovery.bundles, & &1.name) == ["authorize", "notify"]
+      assert Enum.map(discovery.bundles, & &1.name) == ["authorize", "capture"]
     end
 
     test "records the file as the origin" do
@@ -216,14 +216,14 @@ defmodule StatifierUI.Fixtures.BundleTest do
       assert {:ok, discovery} = Bundle.discover_dir(@bundles_dir)
 
       assert Enum.any?(discovery.errors, fn {name, _reason} -> name == "broken" end)
-      assert Enum.map(discovery.bundles, & &1.name) == ["authorize", "notify"]
+      assert Enum.map(discovery.bundles, & &1.name) == ["authorize", "capture"]
     end
 
     test "carries the sidecar's own diagnostics onto the bundle" do
       assert {:ok, discovery} = Bundle.discover_dir(@bundles_dir)
       bundles = Bundle.by_name(discovery)
 
-      assert Enum.any?(bundles["notify"].diagnostics, &(&1.kind == :unknown_key))
+      assert Enum.any?(bundles["capture"].diagnostics, &(&1.kind == :unknown_key))
     end
 
     test "a missing directory is an error, not an empty discovery" do
@@ -234,7 +234,8 @@ defmodule StatifierUI.Fixtures.BundleTest do
 
   describe "name_from_path/1 and empty?/1" do
     test "strips the sidecar suffix and the directory" do
-      assert Bundle.name_from_path("palette/core.wait.fixtures.json") == "core.wait"
+      assert Bundle.name_from_path("palette/myapp.assign_variant.fixtures.json") ==
+               "myapp.assign_variant"
     end
 
     test "empty? is false once the bundle carries anything to evaluate" do

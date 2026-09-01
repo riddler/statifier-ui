@@ -8,15 +8,16 @@ defmodule StatifierUI.Fixtures.SidecarTest do
 
   describe "sidecar_path/1" do
     test "replaces the final extension with .fixtures.json" do
-      assert Sidecar.sidecar_path("payment.scxml") == "payment.fixtures.json"
+      assert Sidecar.sidecar_path("authorization.scxml") == "authorization.fixtures.json"
     end
 
     test "replaces the final extension in a full path" do
-      assert Sidecar.sidecar_path("charts/payment.scxml") == "charts/payment.fixtures.json"
+      assert Sidecar.sidecar_path("charts/authorization.scxml") ==
+               "charts/authorization.fixtures.json"
     end
 
     test "appends .fixtures.json when the path has no extension" do
-      assert Sidecar.sidecar_path("payment") == "payment.fixtures.json"
+      assert Sidecar.sidecar_path("authorization") == "authorization.fixtures.json"
     end
   end
 
@@ -30,7 +31,7 @@ defmodule StatifierUI.Fixtures.SidecarTest do
 
     test "loads the sidecar derived from a chart path" do
       assert {:ok, %Fixtures{}} =
-               Sidecar.load_for_chart(Path.join(@fixtures_dir, "payment.scxml"))
+               Sidecar.load_for_chart(Path.join(@fixtures_dir, "authorization.scxml"))
     end
   end
 
@@ -220,14 +221,15 @@ defmodule StatifierUI.Fixtures.SidecarTest do
 
       File.write!(path, ~s({
         "version": 1,
-        "scenarios": {"gold-tier": {"trial_left": {"$duration": {"days": 14}}}}
+        "scenarios": {"within-budget-account": {"hold_expires_in": {"$duration": {"days": 14}}}}
       }))
 
       on_exit(fn -> File.rm(path) end)
 
       assert {:error,
               {:invalid_sidecar_contents, ^path,
-               {:duration_in_scenario, ["gold-tier", "trial_left"]}}} = Sidecar.load(path)
+               {:duration_in_scenario, ["within-budget-account", "hold_expires_in"]}}} =
+               Sidecar.load(path)
     end
 
     test "the same duration under events is accepted" do
@@ -252,14 +254,14 @@ defmodule StatifierUI.Fixtures.SidecarTest do
 
       File.write!(path, ~s({
         "version": 1,
-        "datasets": {"variant-a-early": {"trial_left": {"$duration": {"days": 14}}}}
+        "datasets": {"variant-a-early": {"hold_expires_in": {"$duration": {"days": 14}}}}
       }))
 
       on_exit(fn -> File.rm(path) end)
 
       assert {:error,
               {:invalid_sidecar_contents, ^path,
-               {:duration_in_dataset, ["variant-a-early", "trial_left"]}}} =
+               {:duration_in_dataset, ["variant-a-early", "hold_expires_in"]}}} =
                Sidecar.load(path)
     end
   end

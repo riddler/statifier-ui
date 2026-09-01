@@ -177,7 +177,7 @@ defmodule StatifierUI.KinoTest do
             }
           },
           expressions: %{
-            "needs_review" => %{
+            "exceeds-budget" => %{
               "source" => "transaction.amount > account.budget_remaining",
               "expect" => %{"within-budget" => false}
             }

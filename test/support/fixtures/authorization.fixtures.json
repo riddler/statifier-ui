@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "scenarios": {
+    "within-budget-account": {
+      "card_brand": "visa",
+      "account_id": "acct-1999"
+    }
+  },
+  "events": {
+    "authorize.approved": {
+      "amount_cents": 1999,
+      "currency": "USD"
+    }
+  }
+}

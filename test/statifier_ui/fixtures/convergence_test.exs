@@ -11,16 +11,18 @@ defmodule StatifierUI.Fixtures.ConvergenceTest do
 
   alias StatifierUI.Fixtures
   alias StatifierUI.Fixtures.Sidecar
+  alias StatifierUI.Test.Support.Fixtures.AuthorizationSource
   alias StatifierUI.Test.Support.Fixtures.ExpressionsSource
-  alias StatifierUI.Test.Support.Fixtures.PaymentSource
   alias StatifierUI.Test.Support.Fixtures.TaggedSource
 
   @fixtures_dir "test/support/fixtures"
 
   describe "the plain-scalar bundle" do
     test "the behaviour and sidecar paths agree on scenarios, events, datasets, and expressions" do
-      assert {:ok, source} = Fixtures.from_source(PaymentSource)
-      assert {:ok, sidecar} = Sidecar.load(Path.join(@fixtures_dir, "payment.fixtures.json"))
+      assert {:ok, source} = Fixtures.from_source(AuthorizationSource)
+
+      assert {:ok, sidecar} =
+               Sidecar.load(Path.join(@fixtures_dir, "authorization.fixtures.json"))
 
       assert source.scenarios == sidecar.scenarios
       assert source.events == sidecar.events

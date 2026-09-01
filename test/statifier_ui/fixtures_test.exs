@@ -2,20 +2,20 @@ defmodule StatifierUI.FixturesTest do
   use ExUnit.Case, async: true
 
   alias StatifierUI.Fixtures
+  alias StatifierUI.Test.Support.Fixtures.AuthorizationSource
   alias StatifierUI.Test.Support.Fixtures.BehaviourOnlySource
   alias StatifierUI.Test.Support.Fixtures.EventsOnlySource
-  alias StatifierUI.Test.Support.Fixtures.PaymentSource
 
   describe "new/1" do
     test "builds a valid bundle" do
       assert {:ok, %Fixtures{} = fixtures} =
                Fixtures.new(
-                 scenarios: %{"gold-tier-user" => %{"tier" => "gold"}},
-                 events: %{"payment.success" => %{"amount" => 1999}}
+                 scenarios: %{"within-budget-account" => %{"tier" => "gold"}},
+                 events: %{"authorize.approved" => %{"amount_cents" => 1999}}
                )
 
-      assert fixtures.scenarios == %{"gold-tier-user" => %{"tier" => "gold"}}
-      assert fixtures.events == %{"payment.success" => %{"amount" => 1999}}
+      assert fixtures.scenarios == %{"within-budget-account" => %{"tier" => "gold"}}
+      assert fixtures.events == %{"authorize.approved" => %{"amount_cents" => 1999}}
       assert fixtures.diagnostics == []
     end
 
@@ -263,13 +263,13 @@ defmodule StatifierUI.FixturesTest do
 
   describe "from_source/1" do
     test "builds a bundle from a full source" do
-      assert {:ok, fixtures} = Fixtures.from_source(PaymentSource)
+      assert {:ok, fixtures} = Fixtures.from_source(AuthorizationSource)
 
-      assert Fixtures.scenario(fixtures, "gold-tier-user") ==
-               {:ok, PaymentSource.scenarios()["gold-tier-user"]}
+      assert Fixtures.scenario(fixtures, "within-budget-account") ==
+               {:ok, AuthorizationSource.scenarios()["within-budget-account"]}
 
-      assert Fixtures.event(fixtures, "payment.success") ==
-               {:ok, %{"amount" => 1999, "currency" => "USD"}}
+      assert Fixtures.event(fixtures, "authorize.approved") ==
+               {:ok, %{"amount_cents" => 1999, "currency" => "USD"}}
     end
 
     test "builds a bundle from an events-only source, defaulting scenarios, datasets, and expressions to %{}" do

@@ -29,7 +29,7 @@ defmodule StatifierUI.Test.Support.Fixtures.Palette do
           }
         },
         expressions: %{
-          "needs_review" => %{
+          "exceeds-budget" => %{
             "source" => "transaction.amount > account.budget_remaining",
             "expect" => %{"within-budget" => false, "over-budget" => true}
           }
@@ -38,7 +38,7 @@ defmodule StatifierUI.Test.Support.Fixtures.Palette do
     end
   end
 
-  defmodule Notify do
+  defmodule Capture do
     @moduledoc "A fragment supplying its bundle in the JSON (sidecar) spelling."
 
     @doc "Executable examples for this fragment."
@@ -46,11 +46,11 @@ defmodule StatifierUI.Test.Support.Fixtures.Palette do
     def fixtures do
       %{
         "version" => 1,
-        "datasets" => %{"opted-in" => %{"user" => %{"opted_in" => true}}},
+        "datasets" => %{"approved" => %{"authorization" => %{"approved" => true}}},
         "expressions" => %{
-          "may_notify" => %{
-            "source" => "user.opted_in",
-            "expect" => %{"opted-in" => true}
+          "may-capture" => %{
+            "source" => "authorization.approved",
+            "expect" => %{"approved" => true}
           }
         }
       }
