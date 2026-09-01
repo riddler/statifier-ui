@@ -95,14 +95,26 @@ defmodule StatifierUI.Shape do
   atoms drawn from the eight duration units and whose values are all
   integers.
 
-  A **subset** of the units is enough, deliberately. `Predicator.Duration`'s
-  own builder returns all eight, but predicator's expression parser returns
-  seven - `Predicator.evaluate("3d")` omits `:milliseconds` - so requiring
-  the full set misses every duration produced by evaluating an expression,
-  which is the common case. Nothing else in the value domain can collide:
-  atom keys reach a fixture only from Elixir, and a datamodel forbids them
-  outright (`StatifierUI.Fixtures`), so the only atom-keyed maps that arrive
-  here are durations.
+  A **subset** of the units is enough, deliberately, and that is a statement
+  about this repository rather than about predicator. Predicator's contract is
+  eight keys: `Predicator.Duration.new/1` fills every unit it was not given,
+  and since predicator 9.0 the expression evaluator seeds all eight too, so
+  `Predicator.evaluate("3d")` carries `milliseconds: 0` like the rest
+  (px-69c). Nothing here is working around that.
+
+  The rule is wider than the contract because this is a viewer. It renders a
+  value stream it did not produce - a fixture written by hand, a decoded wire
+  message, a datamodel from an older engine or another interpreter - and the
+  right response to a duration missing a unit is to render it as a duration,
+  not to fall back to a seven-field map and make the reader work out what
+  they are looking at. Tightening to exactly eight would trade that tolerance
+  for nothing: no caller gains a guarantee, because callers that need the
+  full eight keys go through `StatifierUI.Value.encode/1`, which canonicalizes
+  to all of them on the way out.
+
+  Nothing else in the value domain can collide: atom keys reach a fixture only
+  from Elixir, and a datamodel forbids them outright (`StatifierUI.Fixtures`),
+  so the only atom-keyed maps that arrive here are durations.
 
   Public because `StatifierUI.Fixtures` and `StatifierUI.Value` need the same
   rule, and three copies of it are what let the seven-versus-eight gap go
