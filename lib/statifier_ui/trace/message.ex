@@ -3,9 +3,11 @@ defmodule StatifierUI.Trace.Message do
   One message of the trace wire format (`docs/wire-format.md`), held as a
   struct in process and rendered to the documented JSON object by `to_map/1`.
 
-  The envelope fields (`type`, `session`, `seq`, and the counters
+  The envelope fields (`type`, `session`, `seq`, the counters
   `macrostep`/`microstep`/`round`, carried by `trace.*` and `effect.*`
-  messages and by no `session.*` message) live on the struct directly; everything
+  messages and by no `session.*` message, and the optional `otel`
+  correlation object legal in exactly the same places) live on the struct
+  directly; everything
   type-specific lives in `payload`, already in wire shape - a string-keyed
   map ready to merge over the envelope. This is decision 1 of the plan: one
   envelope struct rather than one struct per message type, so the spec stays
@@ -36,13 +38,14 @@ defmodule StatifierUI.Trace.Message do
           macrostep: non_neg_integer() | nil,
           microstep: non_neg_integer() | nil,
           round: non_neg_integer() | nil,
+          otel: %{optional(String.t()) => String.t()} | nil,
           payload: %{optional(String.t()) => json()}
         }
 
   @enforce_keys [:type, :session, :seq]
-  defstruct [:type, :session, :seq, :macrostep, :microstep, :round, payload: %{}]
+  defstruct [:type, :session, :seq, :macrostep, :microstep, :round, :otel, payload: %{}]
 
-  @reserved_keys ~w(type session seq macrostep microstep round)
+  @reserved_keys ~w(type session seq macrostep microstep round otel)
 
   @doc """
   Checks that `message`'s payload carries no key reserved for the envelope.
@@ -73,11 +76,13 @@ defmodule StatifierUI.Trace.Message do
   the payload.
 
   `"type"`, `"session"`, and `"seq"` are always present; `"macrostep"`,
-  `"microstep"`, and `"round"` are present only when non-`nil` (decisions 3
-  and 5, amended by sui-67d - `trace.*` and `effect.*` messages carry all
-  three, `session.*` messages carry
-  none of the three). Specced for a valid message: call `validate/1` first,
-  or construct through `StatifierUI.Trace.Normalizer`, which always does.
+  `"microstep"`, `"round"`, and `"otel"` are present only when non-`nil`
+  (decisions 3 and 5, amended by sui-67d - `trace.*` and `effect.*` messages
+  carry all three counters, `session.*` messages carry
+  none of the three; `otel` is stamped only where a counter is legal and
+  only when a host attached a resolver, ADR-0013). Specced for a valid
+  message: call `validate/1` first, or construct through
+  `StatifierUI.Trace.Normalizer`, which always does.
   """
   @spec to_map(t()) :: %{optional(String.t()) => json()}
   def to_map(%__MODULE__{} = message) do
@@ -86,6 +91,7 @@ defmodule StatifierUI.Trace.Message do
       |> put_present("macrostep", message.macrostep)
       |> put_present("microstep", message.microstep)
       |> put_present("round", message.round)
+      |> put_present("otel", message.otel)
 
     Map.merge(message.payload, envelope)
   end

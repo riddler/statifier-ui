@@ -7,6 +7,7 @@ defmodule StatifierUI.Trace.SubscriberTest do
   alias Statifier.Session
   alias StatifierUI.Test.Support.Trace.SessionCase
   alias StatifierUI.Trace.Normalizer
+  alias StatifierUI.Trace.Projection
   alias StatifierUI.Trace.Subscriber
 
   # Two states, one external transition - the same chart the golden trace
@@ -459,7 +460,117 @@ defmodule StatifierUI.Trace.SubscriberTest do
     end
   end
 
+  describe ":otel_context (ADR-0013)" do
+    test "stamps trace.* and effect.* messages and no session.* message, end to end" do
+      machine = SessionCase.compile!(@two_state)
+
+      {sub, session} =
+        SessionCase.start_early!(machine, "sess_otel", otel_context: macrostep_resolver())
+
+      drive_and_wait(sub, session)
+
+      {lifecycle, stepped} =
+        Enum.split_with(Subscriber.messages(sub), &String.starts_with?(&1.type, "session."))
+
+      assert lifecycle != []
+      assert Enum.all?(lifecycle, &(&1.otel == nil))
+
+      assert stepped != []
+
+      assert Enum.all?(stepped, fn message ->
+               match?(%{"trace_id" => _, "span_id" => _}, message.otel)
+             end)
+    end
+
+    test "one macrostep's messages all carry the same value, and a later one differs" do
+      machine = SessionCase.compile!(@two_state)
+
+      {sub, session} =
+        SessionCase.start_early!(machine, "sess_otel_repeat", otel_context: macrostep_resolver())
+
+      drive_and_wait(sub, session)
+
+      by_macrostep =
+        sub
+        |> Subscriber.messages()
+        |> Enum.reject(&String.starts_with?(&1.type, "session."))
+        |> Enum.group_by(& &1.macrostep, & &1.otel)
+
+      assert map_size(by_macrostep) >= 2
+
+      for {_macrostep, values} <- by_macrostep do
+        assert length(Enum.uniq(values)) == 1
+      end
+
+      assert by_macrostep |> Map.values() |> Enum.map(&hd/1) |> Enum.uniq() |> length() ==
+               map_size(by_macrostep)
+    end
+
+    test "the key survives projection unchanged (ADR-0013's never-projected rule)" do
+      machine = SessionCase.compile!(@two_state)
+
+      {sub, session} =
+        SessionCase.start_early!(machine, "sess_otel_projected",
+          otel_context: macrostep_resolver(),
+          projection: Projection.profile!("end_user_run_history")
+        )
+
+      drive_and_wait(sub, session)
+
+      stepped =
+        sub
+        |> Subscriber.messages()
+        |> Enum.reject(&String.starts_with?(&1.type, "session."))
+
+      assert stepped != []
+      assert Enum.all?(stepped, &match?(%{"trace_id" => _, "span_id" => _}, &1.otel))
+    end
+
+    test "without the option no message carries the key" do
+      machine = SessionCase.compile!(@two_state)
+      {sub, session} = SessionCase.start_early!(machine, "sess_no_otel")
+      drive_and_wait(sub, session)
+
+      assert Enum.all?(Subscriber.messages(sub), &(&1.otel == nil))
+    end
+
+    test "a resolver that is not a 2-arity function is refused at start_link/1" do
+      machine = SessionCase.compile!(@two_state)
+
+      assert_raise ArgumentError, ~r/:otel_context must be a 2-arity function/, fn ->
+        Subscriber.start_link(machine: machine, otel_context: fn -> :none end)
+      end
+    end
+
+    test "a resolver that raises leaves the key absent and does not disturb the stream" do
+      machine = SessionCase.compile!(@two_state)
+
+      {sub, session} =
+        SessionCase.start_early!(machine, "sess_otel_raises",
+          otel_context: fn _session_id, _macrostep -> raise "resolver exploded" end
+        )
+
+      drive_and_wait(sub, session)
+
+      assert Subscriber.stats(sub).seq == @full_seq
+      assert Subscriber.stats(sub).status == :attached
+      assert Subscriber.stats(sub).errors == 0
+      assert Enum.all?(Subscriber.messages(sub), &(&1.otel == nil))
+    end
+  end
+
   # -- helpers ----------------------------------------------------------
+
+  # A resolver whose ids are derived from the macrostep rather than random, so
+  # ADR-0013's per-macrostep repetition rule is assertable: every message of
+  # one macrostep gets one value, and a different macrostep gets another.
+  defp macrostep_resolver do
+    fn _session_id, macrostep ->
+      digit = macrostep |> Integer.to_string(16) |> String.downcase() |> String.last()
+
+      {:ok, %{trace_id: String.duplicate(digit, 32), span_id: String.duplicate(digit, 16)}}
+    end
+  end
 
   defp collect_listener_messages(session_id, count) do
     for _ <- 1..count do

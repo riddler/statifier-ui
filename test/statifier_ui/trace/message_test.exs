@@ -36,6 +36,42 @@ defmodule StatifierUI.Trace.MessageTest do
              }
     end
 
+    test "includes otel when set, beside the counters" do
+      message = %Message{
+        type: "trace.entry_set",
+        session: "sess_1",
+        seq: 7,
+        macrostep: 2,
+        microstep: 1,
+        round: 0,
+        otel: %{
+          "span_id" => "00f067aa0ba902b7",
+          "trace_id" => "4bf92f3577b34da6a3ce929d0e0e4736"
+        },
+        payload: %{"indexes" => [3, 4]}
+      }
+
+      assert Message.to_map(message) == %{
+               "type" => "trace.entry_set",
+               "session" => "sess_1",
+               "seq" => 7,
+               "macrostep" => 2,
+               "microstep" => 1,
+               "round" => 0,
+               "otel" => %{
+                 "span_id" => "00f067aa0ba902b7",
+                 "trace_id" => "4bf92f3577b34da6a3ce929d0e0e4736"
+               },
+               "indexes" => [3, 4]
+             }
+    end
+
+    test "omits otel when nil - never null, never an empty object" do
+      message = %Message{type: "trace.entry_set", session: "sess_1", seq: 7, macrostep: 2}
+
+      refute Map.has_key?(Message.to_map(message), "otel")
+    end
+
     test "omits macrostep, microstep, and round when nil" do
       message = %Message{
         type: "session.halted",
@@ -110,8 +146,8 @@ defmodule StatifierUI.Trace.MessageTest do
       assert Message.validate(message) == {:error, {:reserved_payload_key, "seq"}}
     end
 
-    test "rejects a payload key colliding with macrostep, microstep, or round" do
-      for key <- ~w(macrostep microstep round) do
+    test "rejects a payload key colliding with macrostep, microstep, round, or otel" do
+      for key <- ~w(macrostep microstep round otel) do
         message = %Message{type: "effect.log", session: "sess_1", seq: 0, payload: %{key => 1}}
 
         assert Message.validate(message) == {:error, {:reserved_payload_key, key}}
