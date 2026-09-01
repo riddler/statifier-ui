@@ -211,6 +211,18 @@ StatifierUI.Kino.inspect(session, fixtures, source: xml)
 before the cell was evaluated (statifier ADR-0049); without it the panes are
 labeled **Live-only** rather than presenting a partial stream as whole.
 
+A scrubber above the diagram - **|< First**, **< Prev**, **Next >**, **Live** -
+moves the diagram from the live tip to any macrostep in the event log and back.
+Selecting a macrostep draws the configuration that macrostep settled in, opens
+its entry in the log and marks it *shown in the diagram*, and prints a line
+saying which point is on screen. Nothing is recomputed to do it: every
+configuration shown was stamped by the engine on a `trace.macrostep_stable`,
+and a caught-up stream got there through replay, which re-drives the core
+rather than rewinding a live session (statifier ADR-0034). The decisions are
+`StatifierUI.Inspector`'s - `active_configuration/2`, `points/1`, `step/3`,
+`selection_note/2` - so a LiveView or other host gets the same behaviour
+without Kino.
+
 [`notebooks/inspector.livemd`](https://github.com/riddler/statifier-ui/blob/main/notebooks/inspector.livemd)
 walks the whole widget end to end and doubles as its manual acceptance test.
 

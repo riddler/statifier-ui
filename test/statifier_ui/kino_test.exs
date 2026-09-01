@@ -8,6 +8,7 @@ defmodule StatifierUI.KinoTest do
   alias Statifier.Session
   alias StatifierUI.Fixtures
   alias StatifierUI.Fixtures.Bundle
+  alias StatifierUI.Kino.Updater
   alias StatifierUI.Test.Support.Trace.SessionCase
   alias StatifierUI.Trace.Subscriber
 
@@ -62,6 +63,61 @@ defmodule StatifierUI.KinoTest do
     {:ok, session} = Session.start_link(machine, trace: true, session_id: "sess_kino_lo")
 
     assert %Kino.Layout{} = StatifierUI.Kino.inspect(session)
+  end
+
+  describe "the scrubber's updater (sui-3gg)" do
+    setup do
+      machine = SessionCase.compile!(@two_state)
+      {sub, session} = SessionCase.start_early!(machine, "sess_kino_scrub")
+      Session.send_event(session, "go")
+      SessionCase.wait_for_seq(sub, 15)
+
+      frames =
+        Map.new([:status, :note, :diagram, :datamodel, :log], fn key ->
+          {key, Kino.Frame.new(placeholder: false)}
+        end)
+
+      {:ok, updater} =
+        Updater.start_link(
+          sub: sub,
+          machine: machine,
+          frames: frames,
+          initial_configuration: [0, 1]
+        )
+
+      %{updater: updater}
+    end
+
+    test "starts live and pins the newest macrostep on prev", %{updater: updater} do
+      assert :sys.get_state(updater).selection == :live
+
+      :ok = Updater.scrub(updater, :prev)
+      assert :sys.get_state(updater).selection == {:macrostep, 2}
+    end
+
+    test "first, prev, next and live walk the log and come back", %{updater: updater} do
+      :ok = Updater.scrub(updater, :first)
+      assert :sys.get_state(updater).selection == {:macrostep, 1}
+
+      :ok = Updater.scrub(updater, :next)
+      assert :sys.get_state(updater).selection == {:macrostep, 2}
+
+      # Past the newest macrostep the scrubber follows the tip again.
+      :ok = Updater.scrub(updater, :next)
+      assert :sys.get_state(updater).selection == :live
+
+      :ok = Updater.scrub(updater, :first)
+      :ok = Updater.scrub(updater, :live)
+      assert :sys.get_state(updater).selection == :live
+    end
+
+    test "a scrubbed updater keeps rendering on later messages", %{updater: updater} do
+      :ok = Updater.scrub(updater, :first)
+      :ok = Updater.refresh(updater)
+
+      assert Process.alive?(updater)
+      assert :sys.get_state(updater).selection == {:macrostep, 1}
+    end
   end
 
   describe "truth_table/2" do

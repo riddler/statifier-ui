@@ -10,6 +10,22 @@ if Code.ensure_loaded?(Kino) do
     (ADR-0004); a host without it gets a stub whose `inspect/3` raises
     with instructions. Nothing else in this package touches Kino.
 
+    ## The scrubber (sui-3gg)
+
+    Four buttons above the diagram - **First**, **Prev**, **Next**,
+    **Live** - move the diagram from the live tip to any macrostep in the
+    log and back. Selecting a macrostep draws the configuration that
+    macrostep settled in, opens its entry in the event log, and marks that
+    entry `- shown in the diagram`; the note above the diagram says which
+    point is on screen. `StatifierUI.Inspector` decides all of it, so the
+    whole behaviour is testable without Kino - this module only wires
+    buttons to `Updater.scrub/2`.
+
+    Buttons rather than a click target on the log entry itself: the log
+    pane is `Kino.Markdown`, which renders text and cannot carry a click
+    handler back to the runtime. A directly clickable entry is the
+    ADR-0008 renderer's to give, not Mermaid-and-Markdown's.
+
     ## Lifecycle
 
     Every process this module starts - the subscriber and the updater -
@@ -108,6 +124,7 @@ if Code.ensure_loaded?(Kino) do
 
       frames = %{
         status: Kino.Frame.new(placeholder: false),
+        note: Kino.Frame.new(placeholder: false),
         diagram: Kino.Frame.new(placeholder: false),
         datamodel: Kino.Frame.new(placeholder: false),
         log: Kino.Frame.new(placeholder: false)
@@ -138,12 +155,34 @@ if Code.ensure_loaded?(Kino) do
       Kino.Layout.grid(
         [
           frames.status,
+          scrubber_ui(updater),
+          frames.note,
           Kino.Layout.grid([frames.diagram, frames.datamodel], columns: 2),
           injection_ui(session, fixtures),
           frames.log
         ],
         columns: 1
       )
+    end
+
+    # -- scrubber pane -------------------------------------------------------
+
+    # Four static buttons, built once: a control rebuilt per render would
+    # leak a listener per rebuild, and the moves are relative anyway, so
+    # nothing here has to know how many macrosteps exist. The Updater asks
+    # Inspector.step/3 where each move lands.
+    @scrubber_moves [{:first, "|< First"}, {:prev, "< Prev"}, {:next, "Next >"}, {:live, "Live"}]
+
+    @spec scrubber_ui(pid()) :: Kino.Layout.t()
+    defp scrubber_ui(updater) do
+      buttons =
+        Enum.map(@scrubber_moves, fn {move, label} ->
+          button = Kino.Control.button(label)
+          Kino.listen(button, fn _event -> Updater.scrub(updater, move) end)
+          button
+        end)
+
+      Kino.Layout.grid(buttons, columns: length(buttons))
     end
 
     # -- injection pane ------------------------------------------------------
@@ -239,6 +278,14 @@ if Code.ensure_loaded?(Kino) do
     @spec refresh(GenServer.server()) :: :ok
     def refresh(server), do: GenServer.cast(server, :refresh)
 
+    @doc """
+    Moves the scrubber one step (`:first`, `:prev`, `:next`, `:live`) and
+    re-renders immediately - a click waiting out the coalescing delay would
+    read as a dropped click.
+    """
+    @spec scrub(GenServer.server(), :live | :first | :prev | :next) :: :ok
+    def scrub(server, move), do: GenServer.cast(server, {:scrub, move})
+
     @doc false
     @spec start_link(keyword()) :: GenServer.on_start()
     def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
@@ -250,6 +297,7 @@ if Code.ensure_loaded?(Kino) do
         machine: Keyword.fetch!(opts, :machine),
         frames: Keyword.fetch!(opts, :frames),
         initial_configuration: Keyword.fetch!(opts, :initial_configuration),
+        selection: :live,
         timer: nil
       }
 
@@ -258,6 +306,12 @@ if Code.ensure_loaded?(Kino) do
 
     @impl GenServer
     def handle_cast(:refresh, state), do: {:noreply, render_panes(state)}
+
+    def handle_cast({:scrub, move}, state) do
+      points = Inspector.points(Subscriber.messages(state.sub))
+      selection = Inspector.step(state.selection, points, move)
+      {:noreply, render_panes(%{state | selection: selection})}
+    end
 
     @impl GenServer
     def handle_info({:statifier_ui, _session_id, _message}, %{timer: nil} = state) do
@@ -276,9 +330,18 @@ if Code.ensure_loaded?(Kino) do
 
       messages = Subscriber.messages(state.sub)
       stats = Subscriber.stats(state.sub)
-      opts = [initial_configuration: state.initial_configuration]
+
+      opts = [
+        initial_configuration: state.initial_configuration,
+        selection: state.selection
+      ]
 
       Kino.Frame.render(state.frames.status, Kino.Markdown.new(Inspector.status(stats)))
+
+      Kino.Frame.render(
+        state.frames.note,
+        Kino.Markdown.new(Inspector.selection_note(messages, opts))
+      )
 
       Kino.Frame.render(
         state.frames.diagram,
@@ -290,7 +353,7 @@ if Code.ensure_loaded?(Kino) do
         Kino.Markdown.new(Inspector.datamodel(messages))
       )
 
-      Kino.Frame.render(state.frames.log, Kino.Markdown.new(Inspector.event_log(messages)))
+      Kino.Frame.render(state.frames.log, Kino.Markdown.new(Inspector.event_log(messages, opts)))
 
       %{state | timer: nil}
     end

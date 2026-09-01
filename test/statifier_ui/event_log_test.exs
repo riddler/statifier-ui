@@ -602,4 +602,51 @@ defmodule StatifierUI.EventLogTest do
                EventLog.build([])
     end
   end
+
+  describe "configuration_at/2" do
+    setup do
+      {:ok, log} = EventLog.build(@worked_example)
+      %{log: log}
+    end
+
+    test "a quiescent macrostep returns its own stamp", %{log: log} do
+      assert EventLog.configuration_at(log, 1) == {:quiescent, [0, 1]}
+      assert EventLog.configuration_at(log, 2) == {:quiescent, [0, 2]}
+    end
+
+    test "a macrostep above every stamp carries the newest one forward", %{log: log} do
+      assert EventLog.configuration_at(log, 7) == {:carried, 2, [0, 2]}
+    end
+
+    test "a macrostep below every stamp is before_first", %{log: log} do
+      assert EventLog.configuration_at(log, 0) == :before_first
+    end
+
+    test "a macrostep with no stamp of its own carries the one below it" do
+      # Macrostep 3 opens but never stabilizes - the in-flight case.
+      in_flight =
+        @worked_example ++
+          [
+            %Message{
+              type: "trace.event_dequeued",
+              session: "sess_golden",
+              seq: 99,
+              macrostep: 3,
+              microstep: 0,
+              round: 0,
+              payload: %{"event" => %{"name" => "again"}, "from" => "external"}
+            }
+          ]
+
+      {:ok, log} = EventLog.build(in_flight)
+
+      assert EventLog.configuration_at(log, 3) == {:carried, 2, [0, 2]}
+    end
+
+    test "an empty log has nothing at any macrostep" do
+      {:ok, log} = EventLog.build([])
+      assert EventLog.configuration_at(log, 0) == :before_first
+      assert EventLog.configuration_at(log, 5) == :before_first
+    end
+  end
 end

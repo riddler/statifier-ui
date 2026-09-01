@@ -223,6 +223,41 @@ defmodule StatifierUI.EventLog.MarkdownTest do
     end
   end
 
+  describe "render/2 - selected (sui-3gg)" do
+    test "marks only the selected macrostep's summary", %{log: log} do
+      lines = rendered_lines(log, selected: 1)
+
+      marked = Enum.filter(lines, &(&1 =~ "shown in the diagram"))
+
+      assert length(marked) == 1
+      assert hd(marked) =~ "Macrostep 1:"
+    end
+
+    test "the marker is a suffix on the existing summary, not a replacement", %{log: log} do
+      [plain] = Enum.filter(rendered_lines(log), &(&1 =~ "Macrostep 2:"))
+      [marked] = Enum.filter(rendered_lines(log, selected: 2), &(&1 =~ "Macrostep 2:"))
+
+      assert marked ==
+               String.replace_suffix(plain, "</summary>", "") <>
+                 " - shown in the diagram</summary>"
+    end
+
+    test "no selection marks nothing", %{log: log} do
+      refute Enum.any?(rendered_lines(log), &(&1 =~ "shown in the diagram"))
+      refute Enum.any?(rendered_lines(log, selected: nil), &(&1 =~ "shown in the diagram"))
+    end
+
+    test "a selection naming no macrostep in the log marks nothing", %{log: log} do
+      refute Enum.any?(rendered_lines(log, selected: 99), &(&1 =~ "shown in the diagram"))
+    end
+
+    test "the marker survives collapsible: false", %{log: log} do
+      lines = rendered_lines(log, collapsible: false, selected: 2)
+
+      assert Enum.any?(lines, &(&1 =~ "Macrostep 2:" and &1 =~ "shown in the diagram"))
+    end
+  end
+
   describe "render/2 - collapsible: false" do
     test "emits no <details> anywhere, and a plain heading instead", %{log: log} do
       lines = rendered_lines(log, collapsible: false)
