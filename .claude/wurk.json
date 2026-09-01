@@ -31,7 +31,7 @@
     "attest": ["mix", "quality.verify"],
     "report": ["mix", "quality", "--report", "-"],
     "build_paths": ["lib/", "test/", "config/", "mix.exs", "mix.lock"],
-    "also_gated_paths": ["assets/"],
+    "also_gated_paths": ["assets/", "docs/wire-format.md"],
     "moving_files": [".quality.exs", "coveralls.json", ".doctor.exs"],
     "project_level_skips": [],
     "not_applicable_skips": [
