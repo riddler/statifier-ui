@@ -63,10 +63,16 @@ being reversible. A commit on a per-bead branch is undone with
 `git reset --soft HEAD~1`; a push, a request, a merge, and a closed bead are
 visible to other people and other machines, so those keep their gate.
 
-**There is no CI and no second reviewer.** One contributor means the local gate
-is the only thing standing between a mistake and `origin/main`, which is why
-the `git commit` row above spends its whole trigger on a full green rather than
-a scoped one. A profiled or scoped run is not evidence for that row.
+**CI replays the gate afterwards, and there is no second reviewer.**
+`.github/workflows/ci.yml` runs one job - the full gate, read out of
+`.claude/wurk.json`'s `gate.full` so CI and the local bar are one definition -
+on pushes to `main`, on pull requests, and on demand. It checks nothing about
+commit messages, and one contributor means nobody else reads the diff. It also
+runs *after* a push, so the local gate is still the only thing standing between
+a mistake and `origin/main`, which is why the `git commit` row above spends its
+whole trigger on a full green rather than a scoped one. A profiled or scoped run
+is not evidence for that row, and neither is a CI run that has not happened yet.
+`.claude/wurk/commit.md` and `.claude/wurk/mr.md` carry the same reading.
 
 Two rules override every row above. A current "do not commit", "do not push",
 or equivalent instruction from the user wins outright. And authority belongs to
