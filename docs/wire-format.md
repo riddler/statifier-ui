@@ -46,6 +46,7 @@ Every message is a JSON object. Every message carries:
 | macrostep | integer | `trace.*` and `effect.*` |
 | microstep | integer | `trace.*` and `effect.*` |
 | round | integer | `trace.*` and `effect.*` |
+| otel | object | optional, and only on `trace.*` and `effect.*` - see "OTel correlation" below |
 
 `type` is a dotted-namespace string identifying the message shape; the
 remaining sections of this document define every value it may take.
@@ -74,7 +75,8 @@ a field a newer producer would have written is not an error).
 Beyond the fields in the table, every message carries a **payload**: the
 type-specific fields, documented below one type at a time. A payload key
 never collides with an envelope key - `type`, `session`, `seq`, `macrostep`,
-`microstep`, and `round` are reserved words in every message's JSON object.
+`microstep`, `round`, and `otel` are reserved words in every message's JSON
+object.
 This is why `effect.invoke` and `effect.send`/`effect.send_delayed` name
 their own `<invoke>`/`<send>` `type`/`typeexpr` attribute `invoke_type` and
 `send_type` rather than the engine's own field name `type` - the element
@@ -128,6 +130,68 @@ A chart that never uses `<invoke>` or an internal `<send>` was never
 exposed to the old seam, and its trace remains byte-comparable run to run,
 which is what makes the worked example and the golden test at the end of
 this document possible.
+
+## OTel correlation: the `otel` key
+
+A `trace.*` or `effect.*` message may carry an `otel` object identifying the
+OpenTelemetry span that covers its macrostep, so a consumer can deep-link a
+rendered step to the matching trace in an APM backend. ADR-0013 is the
+record; this section is the normative shape.
+
+```json
+{"type": "trace.entry_set", "session": "sess_1", "seq": 7,
+ "macrostep": 2, "microstep": 1, "round": 0,
+ "otel": {"span_id": "00f067aa0ba902b7",
+          "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736"},
+ "indexes": [3, 4]}
+```
+
+| Field | Type | Presence |
+|---|---|---|
+| trace_id | string | always, within the object |
+| span_id | string | always, within the object |
+
+Both are W3C Trace Context hex encodings: `trace_id` is exactly 32
+lowercase hex digits, `span_id` exactly 16, with no `0x` prefix, no dashes,
+and no uppercase. They name the `statifier.macrostep` span the upstream
+bridge opens for this message's macrostep, and the trace that span roots
+(statifier `docs/opentelemetry.md`, "A macrostep is a span" and "One trace
+per macrostep"). The object is never partial - a producer that can name one
+id but not the other omits the key entirely, because half the pair cannot
+be looked up in any backend.
+
+**Where it is legal.** Exactly where `macrostep` is legal: on `trace.*` and
+`effect.*` messages, and on no others. No `session.*` message ever carries
+it. Upstream has no session-lifetime span and no session-lifetime trace, so
+a session-scoped message stamped with whichever macrostep span happened to
+be open would assert a containment the engine's own bridge declines to
+claim. A consumer wanting the trace a session ended inside reads the last
+`trace.*` or `effect.*` message before the lifecycle message.
+
+**The value is per macrostep and it repeats.** Every message of one
+macrostep in one session carries the same `otel` value, because one span
+covers the whole macrostep. Carrying it once per macrostep would be smaller
+and is rejected for the reason the `$redacted` sentinel is kept alongside
+the `projection` header: a consumer that joined mid-stream, or a single
+message pulled out of a log, still has to be able to say what it is.
+
+**Absence.** The key is absent whenever no correlation context is attached -
+no bridge in the host, no resolvable span, or a producer predating this
+section. It is never `null` and never `{}`; the absence rule above already
+spends both of those on other meanings, and neither means "there is no
+span".
+
+**Versioning decision.** Adding `otel` is an additive field change, exactly
+what the conformance section's MUST-ignore rule makes safe, so **the format
+version stays 1** - the same reasoning `round` on the `effect.*` envelopes
+and the `projection` header each record. No existing stream changes a byte,
+and nothing a v1 consumer previously read correctly is now read incorrectly.
+
+**Golden traces carry no `otel`.** Span and trace ids are random per run, so
+a stream carrying them is not byte-comparable run to run. Golden captures
+attach no correlation context, exactly as they carry no `projection` header,
+and the full-fidelity default is unchanged. A test asserting this key's
+shape does so against fixed stub ids, never against a golden.
 
 ## JSON discipline
 
@@ -917,8 +981,8 @@ bundle.
 
 ### What is never projected
 
-`type`, `session`, `seq`, `macrostep`, `microstep`, `round`; state indexes,
-`t_index`, `c_index`, `d_index`, `invokeid`, `send_id`, `state_index`,
+`type`, `session`, `seq`, `macrostep`, `microstep`, `round`, `otel`; state
+indexes, `t_index`, `c_index`, `d_index`, `invokeid`, `send_id`, `state_index`,
 `invoke_index`; every `session.start` table (`states`, `transitions`,
 `contents`, `data`) and every `location` and `value_location` object in
 them; configurations; exit and entry sequences in their engine order;
@@ -932,6 +996,15 @@ set); and `effect.done`'s `configuration`.
 That list is what leaves a projected stream worth rendering at all: the
 timeline, the diagram highlighting, the click-through to source, and the
 run's outcome are built entirely from fields in it.
+
+`otel` is in that list because a trace id and a span id are randomly
+generated identifiers carrying no chart vocabulary, no datamodel value, and
+no source text - the same category as `seq` and `macrostep`. The residual
+is real and stated rather than waved at: a trace id is a join key into a
+backend that may hold what this stream withheld. The control for that is
+attaching no correlation context to a subscription a projected audience
+reads, which makes the key absent; there is no projection knob for it, and
+ADR-0013 records why not.
 
 `session.start`'s `data` table is already deliberately identity-only - it
 carries `d_index`, `id`, `location`, and `value_location`, and no
@@ -1145,6 +1218,13 @@ that test rather than drifting silently.
   envelope, the nine `trace.*` type names, the `session.start` role, the
   JSON discipline this document restates by reference, versioning, and the
   clause naming this document as the format's normative home.
+- ADR-0013 (`docs/adr/0013-otel-correlation-in-the-wire-format.md`) - the
+  `otel` key: its name, its shape, the messages that may carry it, its
+  projection rule, and the host-supplied seam that fills it in.
+- statifier `docs/opentelemetry.md` and statifier ADR-0062 - the span
+  topology the `otel` key points into, and the separate bridge package that
+  produces it. This document depends on neither at runtime; it points at
+  their identifiers.
 - ADR-0003 (`docs/adr/0003-fixtures-as-the-example-data-contract.md`) - the
   fixtures sidecar object `session.start`'s `fixtures` field carries
   verbatim.

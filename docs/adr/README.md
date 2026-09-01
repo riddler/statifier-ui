@@ -14,6 +14,7 @@
 | [0010](0010-cross-repo-tracker-authority-and-mirrors.md) | Cross-repo tracker authority and mirrors | accepted |
 | [0011](0011-exit-and-entry-sets-are-sequences.md) | Exit and entry sets are sequences, not sets | accepted |
 | [0012](0012-trace-projection-and-redaction.md) | Trace projection and redaction | accepted |
+| [0013](0013-otel-correlation-in-the-wire-format.md) | OTel correlation in the trace wire format | proposed |
 
 New ADRs: next number, same three-section format (Context, Decision,
 Consequences), indexed here in the same commit.
