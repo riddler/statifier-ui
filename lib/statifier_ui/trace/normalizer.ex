@@ -21,6 +21,12 @@ defmodule StatifierUI.Trace.Normalizer do
   handing it a raw tuple or a bare atom would produce a wrong error
   (`:unsupported_value` instead of a normalizer-specific one) rather than
   the structural, purpose-built handling this module gives those shapes.
+  A `%Statifier.Evaluator.Error{}` in `Event.data` gets the same
+  structural treatment, one step further: it never reaches
+  `StatifierUI.Value.encode/1` at all, because it is not a predicator
+  value - it is reduced by `StatifierUI.Trace.Diagnostic.object/4` into
+  the wire `error` object and lands on the event's `"error"` key instead
+  of `"data"`. The two keys are alternatives, never siblings.
 
   ## Absence
 
@@ -51,13 +57,32 @@ defmodule StatifierUI.Trace.Normalizer do
   alias Statifier.Effect.Send
   alias Statifier.Effect.SendDelayed
   alias Statifier.Effect.Trace
+  alias Statifier.Evaluator
   alias Statifier.Event
   alias Statifier.Event.Cause
+  alias StatifierUI.Trace.Diagnostic
   alias StatifierUI.Trace.Message
   alias StatifierUI.Value
 
-  @typedoc "What `normalize/2` needs beyond the effect itself: the emitting session and the `seq` to stamp."
-  @type ctx :: %{session: String.t(), seq: non_neg_integer()}
+  @typedoc """
+  What `normalize/2` needs beyond the effect itself: the emitting session
+  and the `seq` to stamp, always required. `:machine` and `:source` are
+  optional - present only when the caller (`StatifierUI.Trace.Subscriber`)
+  can supply the compiled machine and the chart text, which is what lets
+  `StatifierUI.Trace.Diagnostic.object/4` resolve an absolute `location`
+  for an `%Evaluator.Error{}` event. Without them the `error` object still
+  carries `kind`/`expression`/`span`; only `location`/`location_kind` are
+  omitted. Optional rather than required on purpose: every existing test
+  in this module constructs `ctx` as a two-key struct literal, and the
+  moduledoc's "no process, no session, no `%Statifier.Machine{}`" claim
+  stays true for the rest of the vocabulary.
+  """
+  @type ctx :: %{
+          :session => String.t(),
+          :seq => non_neg_integer(),
+          optional(:machine) => Statifier.Machine.t(),
+          optional(:source) => String.t()
+        }
 
   @typedoc """
   Everything `normalize/2` accepts: a bare effect, the `{:effect, _}`
@@ -129,7 +154,7 @@ defmodule StatifierUI.Trace.Normalizer do
   end
 
   def normalize({:unroutable, effect}, ctx) do
-    with {:ok, {type, macrostep, microstep, round, payload}} <- decompose(effect) do
+    with {:ok, {type, macrostep, microstep, round, payload}} <- decompose(effect, ctx) do
       wrapped =
         payload
         |> Map.put("kind", type)
@@ -142,7 +167,7 @@ defmodule StatifierUI.Trace.Normalizer do
   end
 
   def normalize(effect, ctx) do
-    with {:ok, {type, macrostep, microstep, round, payload}} <- decompose(effect) do
+    with {:ok, {type, macrostep, microstep, round, payload}} <- decompose(effect, ctx) do
       build(ctx, type, macrostep, microstep, round, payload)
     end
   end
@@ -174,63 +199,63 @@ defmodule StatifierUI.Trace.Normalizer do
            {String.t(), non_neg_integer() | nil, non_neg_integer() | nil, non_neg_integer() | nil,
             map()}
 
-  @spec decompose(Statifier.Effect.t()) :: {:ok, decomposed()} | {:error, term()}
-  defp decompose({:trace, payload}), do: trace_message(payload)
-  defp decompose({:log, payload}), do: core_message(payload)
-  defp decompose({:done, payload}), do: core_message(payload)
-  defp decompose({:budget_exhausted, payload}), do: core_message(payload)
-  defp decompose({:invoke, payload}), do: core_message(payload)
-  defp decompose({:cancel_invoke, payload}), do: core_message(payload)
-  defp decompose({:autoforward, payload}), do: core_message(payload)
-  defp decompose({:send, payload}), do: core_message(payload)
-  defp decompose({:send_delayed, payload}), do: core_message(payload)
-  defp decompose({:cancel, payload}), do: core_message(payload)
-  defp decompose({:datamodel_change, payload}), do: core_message(payload)
-  defp decompose({:datamodel_init, payload}), do: datamodel_message(payload)
-  defp decompose({tag, _payload}), do: {:error, {:unknown_effect, tag}}
-  defp decompose(other), do: {:error, {:unknown_effect, other}}
+  @spec decompose(Statifier.Effect.t(), ctx()) :: {:ok, decomposed()} | {:error, term()}
+  defp decompose({:trace, payload}, ctx), do: trace_message(payload, ctx)
+  defp decompose({:log, payload}, ctx), do: core_message(payload, ctx)
+  defp decompose({:done, payload}, ctx), do: core_message(payload, ctx)
+  defp decompose({:budget_exhausted, payload}, ctx), do: core_message(payload, ctx)
+  defp decompose({:invoke, payload}, ctx), do: core_message(payload, ctx)
+  defp decompose({:cancel_invoke, payload}, ctx), do: core_message(payload, ctx)
+  defp decompose({:autoforward, payload}, ctx), do: core_message(payload, ctx)
+  defp decompose({:send, payload}, ctx), do: core_message(payload, ctx)
+  defp decompose({:send_delayed, payload}, ctx), do: core_message(payload, ctx)
+  defp decompose({:cancel, payload}, ctx), do: core_message(payload, ctx)
+  defp decompose({:datamodel_change, payload}, ctx), do: core_message(payload, ctx)
+  defp decompose({:datamodel_init, payload}, _ctx), do: datamodel_message(payload)
+  defp decompose({tag, _payload}, _ctx), do: {:error, {:unknown_effect, tag}}
+  defp decompose(other, _ctx), do: {:error, {:unknown_effect, other}}
 
   # -- The nine trace.* payloads ---------------------------------------------
 
-  @spec trace_message(struct()) :: {:ok, decomposed()} | {:error, term()}
-  defp trace_message(%Trace.EventDequeued{} = p) do
-    with {:ok, event_obj} <- event(p.event) do
+  @spec trace_message(struct(), ctx()) :: {:ok, decomposed()} | {:error, term()}
+  defp trace_message(%Trace.EventDequeued{} = p, ctx) do
+    with {:ok, event_obj} <- event(p.event, ctx) do
       payload = %{"event" => event_obj, "from" => Atom.to_string(p.from)}
       {:ok, {"trace.event_dequeued", p.macrostep, p.microstep, p.round, payload}}
     end
   end
 
-  defp trace_message(%Trace.TransitionsSelected{} = p) do
+  defp trace_message(%Trace.TransitionsSelected{} = p, ctx) do
     base = %{"t_indexes" => indexes(p.t_indexes)}
 
-    with {:ok, payload} <- put_event(base, p.event) do
+    with {:ok, payload} <- put_event(base, p.event, ctx) do
       {:ok, {"trace.transitions_selected", p.macrostep, p.microstep, p.round, payload}}
     end
   end
 
-  defp trace_message(%Trace.ExitSet{} = p) do
+  defp trace_message(%Trace.ExitSet{} = p, _ctx) do
     payload = %{"indexes" => indexes(p.indexes)}
     {:ok, {"trace.exit_set", p.macrostep, p.microstep, p.round, payload}}
   end
 
-  defp trace_message(%Trace.ContentExecuted{} = p) do
+  defp trace_message(%Trace.ContentExecuted{} = p, _ctx) do
     with {:ok, owner_obj} <- owner(p.owner) do
       payload = %{"owner" => owner_obj, "c_indexes" => indexes(p.c_indexes)}
       {:ok, {"trace.content_executed", p.macrostep, p.microstep, p.round, payload}}
     end
   end
 
-  defp trace_message(%Trace.EntrySet{} = p) do
+  defp trace_message(%Trace.EntrySet{} = p, _ctx) do
     payload = %{"indexes" => indexes(p.indexes)}
     {:ok, {"trace.entry_set", p.macrostep, p.microstep, p.round, payload}}
   end
 
-  defp trace_message(%Trace.MacrostepStable{} = p) do
+  defp trace_message(%Trace.MacrostepStable{} = p, _ctx) do
     payload = %{"configuration" => configuration(p.configuration)}
     {:ok, {"trace.macrostep_stable", p.macrostep, p.microstep, p.round, payload}}
   end
 
-  defp trace_message(%Trace.Done{} = p) do
+  defp trace_message(%Trace.Done{} = p, _ctx) do
     base = %{"configuration" => configuration(p.configuration)}
 
     with {:ok, payload} <- put_value(base, "donedata", p.donedata) do
@@ -238,24 +263,25 @@ defmodule StatifierUI.Trace.Normalizer do
     end
   end
 
-  defp trace_message(%Trace.InvokePass{} = p) do
+  defp trace_message(%Trace.InvokePass{} = p, _ctx) do
     payload = %{"state_indexes" => indexes(p.state_indexes), "invoke_ids" => p.invoke_ids}
     {:ok, {"trace.invoke_pass", p.macrostep, p.microstep, p.round, payload}}
   end
 
-  defp trace_message(%Trace.FinalizeAutoforward{} = p) do
-    with {:ok, event_obj} <- event(p.event) do
+  defp trace_message(%Trace.FinalizeAutoforward{} = p, ctx) do
+    with {:ok, event_obj} <- event(p.event, ctx) do
       payload = %{"event" => event_obj, "finalized" => p.finalized, "forwarded" => p.forwarded}
       {:ok, {"trace.finalize_autoforward", p.macrostep, p.microstep, p.round, payload}}
     end
   end
 
-  defp trace_message(payload), do: {:error, {:unknown_effect, {:trace, payload.__struct__}}}
+  defp trace_message(payload, _ctx),
+    do: {:error, {:unknown_effect, {:trace, payload.__struct__}}}
 
   # -- The ten effect.* payloads ----------------------------------------------
 
-  @spec core_message(struct()) :: {:ok, decomposed()} | {:error, term()}
-  defp core_message(%DatamodelChange{} = p) do
+  @spec core_message(struct(), ctx()) :: {:ok, decomposed()} | {:error, term()}
+  defp core_message(%DatamodelChange{} = p, _ctx) do
     # `location_path` is emitted structurally, not through
     # `StatifierUI.Value.encode/1`: its segments are only strings (object
     # keys) and integers (array indexes), both JSON-native, and the path is
@@ -272,7 +298,7 @@ defmodule StatifierUI.Trace.Normalizer do
     end
   end
 
-  defp core_message(%Log{} = p) do
+  defp core_message(%Log{} = p, _ctx) do
     base = put_present(%{}, "label", p.label)
 
     with {:ok, base} <- put_owner(base, p.owner),
@@ -282,7 +308,7 @@ defmodule StatifierUI.Trace.Normalizer do
     end
   end
 
-  defp core_message(%Done{} = p) do
+  defp core_message(%Done{} = p, _ctx) do
     base = %{"configuration" => configuration(p.configuration)}
 
     with {:ok, payload} <- put_value(base, "donedata", p.donedata) do
@@ -290,8 +316,8 @@ defmodule StatifierUI.Trace.Normalizer do
     end
   end
 
-  defp core_message(%BudgetExhausted{} = p) do
-    with {:ok, pending} <- event_list(p.pending_internal_events) do
+  defp core_message(%BudgetExhausted{} = p, ctx) do
+    with {:ok, pending} <- event_list(p.pending_internal_events, ctx) do
       payload = %{
         "configuration" => configuration(p.configuration),
         "budget" => budget(p.budget),
@@ -302,7 +328,7 @@ defmodule StatifierUI.Trace.Normalizer do
     end
   end
 
-  defp core_message(%Invoke{} = p) do
+  defp core_message(%Invoke{} = p, _ctx) do
     base =
       %{
         "invoke_id" => p.invoke_id,
@@ -319,13 +345,13 @@ defmodule StatifierUI.Trace.Normalizer do
     end
   end
 
-  defp core_message(%CancelInvoke{} = p) do
+  defp core_message(%CancelInvoke{} = p, _ctx) do
     payload = %{"invoke_id" => p.invoke_id, "state_index" => p.state_index}
     {:ok, {"effect.cancel_invoke", p.macrostep, p.microstep, p.round, payload}}
   end
 
-  defp core_message(%Autoforward{} = p) do
-    with {:ok, event_obj} <- event(p.event) do
+  defp core_message(%Autoforward{} = p, ctx) do
+    with {:ok, event_obj} <- event(p.event, ctx) do
       payload = %{
         "invoke_id" => p.invoke_id,
         "state_index" => p.state_index,
@@ -336,7 +362,7 @@ defmodule StatifierUI.Trace.Normalizer do
     end
   end
 
-  defp core_message(%Send{} = p) do
+  defp core_message(%Send{} = p, _ctx) do
     base =
       %{"event" => p.event, "send_id" => p.send_id, "id_from_author" => p.id_from_author?}
       |> put_present("target", p.target)
@@ -349,7 +375,7 @@ defmodule StatifierUI.Trace.Normalizer do
     end
   end
 
-  defp core_message(%SendDelayed{} = p) do
+  defp core_message(%SendDelayed{} = p, _ctx) do
     base =
       %{
         "event" => p.event,
@@ -367,7 +393,7 @@ defmodule StatifierUI.Trace.Normalizer do
     end
   end
 
-  defp core_message(%Cancel{} = p) do
+  defp core_message(%Cancel{} = p, _ctx) do
     base = put_present(%{"send_id" => p.send_id}, "c_index", p.c_index)
 
     with {:ok, base} <- put_owner(base, p.owner) do
@@ -394,11 +420,11 @@ defmodule StatifierUI.Trace.Normalizer do
   defp budget(:infinity), do: "infinity"
   defp budget(n) when is_integer(n), do: n
 
-  @spec event_list([Event.t()]) :: {:ok, [map()]} | {:error, term()}
-  defp event_list(events) do
+  @spec event_list([Event.t()], ctx()) :: {:ok, [map()]} | {:error, term()}
+  defp event_list(events, ctx) do
     events
     |> Enum.reduce_while({:ok, []}, fn ev, {:ok, acc} ->
-      case event(ev) do
+      case event(ev, ctx) do
         {:ok, obj} -> {:cont, {:ok, [obj | acc]}}
         {:error, _reason} = error -> {:halt, error}
       end
@@ -411,11 +437,11 @@ defmodule StatifierUI.Trace.Normalizer do
 
   # -- Shared object builders -------------------------------------------------
 
-  @spec event(Event.t()) :: {:ok, map()} | {:error, term()}
-  defp event(%Event{} = ev) do
+  @spec event(Event.t(), ctx()) :: {:ok, map()} | {:error, term()}
+  defp event(%Event{} = ev, ctx) do
     base = %{"name" => ev.name, "type" => Atom.to_string(ev.type)}
 
-    with {:ok, base} <- put_defined(base, "data", ev.data),
+    with {:ok, base} <- put_event_data(base, ev, ctx),
          {:ok, base} <- put_cause(base, ev.cause) do
       base =
         base
@@ -428,11 +454,41 @@ defmodule StatifierUI.Trace.Normalizer do
     end
   end
 
-  @spec put_event(map(), Event.t() | nil) :: {:ok, map()} | {:error, term()}
-  defp put_event(map, nil), do: {:ok, map}
+  # A `%Statifier.Evaluator.Error{}` is not a predicator value, so it never
+  # goes through `StatifierUI.Value.encode/1` - which rejects it with
+  # `{:error, {:unsupported_value, _}}` and fails the whole message, as it
+  # does today. It is reduced structurally instead, the same move `origin/1`
+  # and `owner/1` make for atoms and tuples, and it lands on its own
+  # `"error"` key rather than in the `"data"` value position: the two are
+  # alternatives, so this clause never calls `put_defined/3` at all.
+  @spec put_event_data(map(), Event.t(), ctx()) :: {:ok, map()} | {:error, term()}
+  defp put_event_data(base, %Event{data: %Evaluator.Error{} = error} = ev, ctx) do
+    object =
+      Diagnostic.object(
+        error,
+        origin_of(ev.cause),
+        Map.get(ctx, :machine),
+        Map.get(ctx, :source)
+      )
 
-  defp put_event(map, %Event{} = ev) do
-    with {:ok, event_obj} <- event(ev) do
+    {:ok, Map.put(base, "error", object)}
+  end
+
+  defp put_event_data(base, %Event{} = ev, _ctx), do: put_defined(base, "data", ev.data)
+
+  # `cause` is nil on an external event, and an event the platform raised
+  # always has one - but an `%Evaluator.Error{}` arriving without a cause is
+  # not a reason to fail the message, so the origin is simply absent and
+  # `Diagnostic.object/4` falls back to emitting no `location`.
+  @spec origin_of(Cause.t() | nil) :: Cause.origin() | nil
+  defp origin_of(%Cause{origin: origin}), do: origin
+  defp origin_of(nil), do: nil
+
+  @spec put_event(map(), Event.t() | nil, ctx()) :: {:ok, map()} | {:error, term()}
+  defp put_event(map, nil, _ctx), do: {:ok, map}
+
+  defp put_event(map, %Event{} = ev, ctx) do
+    with {:ok, event_obj} <- event(ev, ctx) do
       {:ok, Map.put(map, "event", event_obj)}
     end
   end

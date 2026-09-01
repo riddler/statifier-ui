@@ -559,6 +559,66 @@ defmodule StatifierUI.Trace.SubscriberTest do
     end
   end
 
+  describe "%Evaluator.Error{} regression (sui-czr Phase 2)" do
+    # A less-than guard written with a character reference: `&lt;` is four
+    # raw characters standing for one expanded character, so naive column
+    # arithmetic over the raw source would land three columns short of the
+    # failing subexpression. `amount` is bound and `limit` is not, so the
+    # engine's own UndefinedVariableError attributes to "limit" - matching
+    # `test/statifier_ui/trace/diagnostic_test.exs`'s `@entity_guard`.
+    @entity_guard """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="idle" version="1.0" datamodel="elixir">
+        <datamodel><data id="amount" expr="100"/></datamodel>
+        <state id="idle">
+            <transition event="myapp:authorize" cond="amount &lt; limit" target="approved"/>
+        </state>
+        <state id="approved"/>
+    </scxml>
+    """
+
+    test "an error.execution message reaches Subscriber.messages/1 (today it is silently dropped)" do
+      machine = SessionCase.compile!(@entity_guard)
+
+      {sub, session} =
+        SessionCase.start_early!(machine, "sess_evaluator_error", source: @entity_guard)
+
+      logs =
+        capture_log(fn ->
+          Session.send_event(session, "myapp:authorize")
+          SessionCase.wait_for_seq(sub, 12)
+        end)
+
+      # The direct regression: before Phase 2, the normalizer rejected the
+      # %Evaluator.Error{} payload with {:unsupported_value, _} and the
+      # whole trace.event_dequeued message was dropped with a warning -
+      # never reaching this buffer at all.
+      messages = Subscriber.messages(sub)
+
+      error_message =
+        Enum.find(messages, fn message ->
+          message.type == "trace.event_dequeued" and
+            match?(%{"error" => _}, message.payload["event"])
+        end)
+
+      assert error_message, "expected a trace.event_dequeued message carrying an error object"
+      assert Subscriber.stats(sub).errors == 0
+      refute logs =~ "normalize error"
+
+      error_obj = error_message.payload["event"]["error"]
+      assert error_obj["kind"] == "undefined_variable"
+      assert error_obj["expression"] == "amount < limit"
+      assert error_obj["location_kind"] == "resolved"
+
+      assert %{"start_offset" => start_offset, "end_offset" => end_offset} = error_obj["location"]
+
+      # The absolute location slices back out of the source as exactly the
+      # failing subexpression - the naive `value_location.start_column +
+      # span_column - 1` composition would slice "t; li" instead (three
+      # columns short, one per raw &lt; character beyond its expanded <).
+      assert String.slice(@entity_guard, start_offset, end_offset - start_offset) == "limit"
+    end
+  end
+
   # -- helpers ----------------------------------------------------------
 
   # A resolver whose ids are derived from the macrostep rather than random, so

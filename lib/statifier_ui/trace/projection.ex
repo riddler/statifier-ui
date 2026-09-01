@@ -96,6 +96,13 @@ defmodule StatifierUI.Trace.Projection do
   records that as an accepted residual: a consumer that cannot see the path
   cannot fold the write at all.
 
+  An event's `error` object (`StatifierUI.Trace.Diagnostic.object/4`) adds
+  four more never-projected fields: `kind`, `span`, `location`, and
+  `location_kind`. Only `error.expression` is chart text and is redacted with
+  `session.start`'s `source` under `allow_source: false` - it is not a new
+  entry in `positions/0`, since the existing `allow_source` knob already
+  governs chart text.
+
   ## Not anonymization, not access control
 
   Structure leaks. Which branch a run took, how many rounds a macrostep
@@ -398,10 +405,22 @@ defmodule StatifierUI.Trace.Projection do
 
   @spec project_event(map(), Profile.t()) :: map()
   defp project_event(event, profile) when is_map(event) do
-    replace_present(event, "data", &project_position(&1, :event_data, profile))
+    event
+    |> replace_present("data", &project_position(&1, :event_data, profile))
+    |> replace_present("error", &project_error(&1, profile))
   end
 
   defp project_event(event, _profile), do: event
+
+  # `error.expression` is chart text - the entity-expanded string the
+  # expression engine counted columns in - so it is governed by the
+  # existing `allow_source` knob rather than a new `positions/0` entry.
+  # `kind`, `span`, `location`, and `location_kind` are never touched here:
+  # `kind` is a closed discriminator and the other three are location data,
+  # the category the moduledoc's "What is never projected" section already
+  # covers.
+  @spec project_error(map(), Profile.t()) :: map()
+  defp project_error(error, profile), do: project_source_field(error, "expression", profile)
 
   @spec project_position(term(), Profile.position(), Profile.t()) :: term()
   defp project_position(value, position, %Profile{allow_positions: allowed}) do
@@ -409,10 +428,16 @@ defmodule StatifierUI.Trace.Projection do
   end
 
   @spec project_source(map(), Profile.t()) :: map()
-  defp project_source(payload, %Profile{allow_source: true}), do: payload
+  defp project_source(payload, profile), do: project_source_field(payload, "source", profile)
 
-  defp project_source(payload, %Profile{allow_source: false}) do
-    replace_present(payload, "source", fn _source -> @redacted end)
+  # Shared by `session.start`'s `source` and an event's `error.expression`:
+  # both are chart text, so both are governed by the same `allow_source`
+  # knob rather than either growing its own projection position.
+  @spec project_source_field(map(), String.t(), Profile.t()) :: map()
+  defp project_source_field(payload, _key, %Profile{allow_source: true}), do: payload
+
+  defp project_source_field(payload, key, %Profile{allow_source: false}) do
+    replace_present(payload, key, fn _value -> @redacted end)
   end
 
   @spec project_datamodel_snapshot(term(), Profile.t()) :: term()

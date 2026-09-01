@@ -1069,4 +1069,126 @@ defmodule StatifierUI.Trace.NormalizerTest do
     do: MapSet.new(~w(event target send_type data send_id id_from_author c_index owner delay_ms))
 
   defp expected_keys(:cancel, Cancel), do: MapSet.new(~w(send_id c_index owner))
+
+  # -- Phase 2: %Evaluator.Error{} in Event.data --------------------------
+
+  describe "normalize/2 - %Evaluator.Error{} in Event.data" do
+    alias Statifier.Evaluator
+
+    @evaluator_error %Evaluator.Error{
+      source: "amount < limit",
+      error: %Predicator.Errors.UndefinedVariableError{
+        message: "Undefined variable: limit",
+        variable: "limit"
+      },
+      span: {{1, 10}, {1, 15}}
+    }
+
+    test "produces an error key and no data key, with ctx carrying no machine/source" do
+      event = %Event{name: "myapp:authorize", type: :internal, data: @evaluator_error}
+
+      payload = %Trace.EventDequeued{
+        event: event,
+        from: :internal,
+        macrostep: 1,
+        microstep: 0,
+        round: 0
+      }
+
+      assert {:ok, %Message{} = message} = Normalizer.normalize({:trace, payload}, @ctx)
+
+      event_obj = message.payload["event"]
+      assert event_obj["error"]["kind"] == "undefined_variable"
+      assert event_obj["error"]["expression"] == "amount < limit"
+
+      assert event_obj["error"]["span"] == %{
+               "start_line" => 1,
+               "start_column" => 10,
+               "end_line" => 1,
+               "end_column" => 15
+             }
+
+      refute Map.has_key?(event_obj, "data")
+      refute Map.has_key?(event_obj["error"], "location")
+      refute Map.has_key?(event_obj["error"], "location_kind")
+    end
+
+    test "resolves an absolute location when ctx carries machine and source" do
+      source = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="idle" version="1.0" datamodel="elixir">
+          <datamodel><data id="amount" expr="100"/></datamodel>
+          <state id="idle">
+              <transition event="myapp:authorize" cond="amount &lt; limit" target="approved"/>
+          </state>
+          <state id="approved"/>
+      </scxml>
+      """
+
+      {:ok, machine} = Statifier.compile(source)
+      transition = Statifier.Machine.transition(machine, 0)
+
+      context = Predicator.Context.new(%{"amount" => 100}, on_unbound: :error)
+      {:error, %Evaluator.Error{} = error} = Evaluator.evaluate(context, transition.cond)
+
+      cause = %Cause{origin: {:transition, 0}, macrostep: 1, microstep: 0, round: 0}
+      event = %Event{name: "myapp:authorize", type: :internal, data: error, cause: cause}
+
+      payload = %Trace.EventDequeued{
+        event: event,
+        from: :internal,
+        macrostep: 1,
+        microstep: 0,
+        round: 0
+      }
+
+      ctx = Map.merge(@ctx, %{machine: machine, source: source})
+
+      assert {:ok, %Message{} = message} = Normalizer.normalize({:trace, payload}, ctx)
+
+      event_obj = message.payload["event"]
+      assert event_obj["error"]["location_kind"] == "resolved"
+
+      assert %{"start_offset" => start_offset, "end_offset" => end_offset} =
+               event_obj["error"]["location"]
+
+      assert String.slice(source, start_offset, end_offset - start_offset) == "limit"
+    end
+
+    test "a nil span omits span and yields location_kind: node" do
+      error = %Evaluator.Error{
+        source: "boom",
+        error: %Predicator.Errors.EvaluationError{message: "boom", reason: :boom},
+        span: nil
+      }
+
+      source = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="idle" version="1.0" datamodel="elixir">
+          <state id="idle">
+              <transition event="myapp:authorize" cond="true" target="approved"/>
+          </state>
+          <state id="approved"/>
+      </scxml>
+      """
+
+      {:ok, machine} = Statifier.compile(source)
+      cause = %Cause{origin: {:transition, 0}, macrostep: 1, microstep: 0, round: 0}
+      event = %Event{name: "myapp:authorize", type: :internal, data: error, cause: cause}
+
+      payload = %Trace.EventDequeued{
+        event: event,
+        from: :internal,
+        macrostep: 1,
+        microstep: 0,
+        round: 0
+      }
+
+      ctx = Map.merge(@ctx, %{machine: machine, source: source})
+
+      assert {:ok, %Message{} = message} = Normalizer.normalize({:trace, payload}, ctx)
+
+      event_obj = message.payload["event"]
+      refute Map.has_key?(event_obj["error"], "span")
+      assert event_obj["error"]["location_kind"] == "node"
+    end
+  end
 end
