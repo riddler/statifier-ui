@@ -1294,5 +1294,8 @@ that test rather than drifting silently.
   behind `effect.datamodel_change` - a per-write value change, distinct
   from `session.datamodel`'s one-time starting snapshot; serialized here
   by `sui-h92`.
-- `sui-qay` - the gap behind `session.start`'s location tables carrying no
-  attribute-level spans.
+- `sui-qay` - `attribute_locations` on `session.start`'s `states` and
+  `transitions` rows, above. Closes the gap this entry used to name: the
+  location tables carried no attribute-level spans until statifier's
+  `st-9i5r` carried the map onto the compiled Machine, which is the layer
+  this document's producer reads.
