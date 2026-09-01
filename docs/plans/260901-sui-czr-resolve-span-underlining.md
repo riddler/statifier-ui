@@ -890,11 +890,36 @@ before considering the plan fully landed.
       sabotage check; it is manual because it is a deliberate temporary
       regression, and it is the only thing that proves the fixture earns its
       place.
+
+      **Machine-checked (unattended, 2026-09-01):** re-run independently of the
+      implementing session. `object/4`'s `resolve_span/4` call was replaced
+      with the naive column arithmetic and `mix test
+      test/statifier_ui/trace/diagnostic_test.exs` went red - exactly one
+      failure, the character-reference regression, `left: "t; li"` against
+      `right: "limit"`. Restored via `git checkout --`; 25/25 green again,
+      tree clean. The companion "not a regression" test stayed green under
+      sabotage, as its comment predicts.
 - [ ] Read the `anchor/3` table against
       `deps/statifier/lib/statifier/machine/content/*.ex` and confirm no kind
       was given a `*_location` field it does not have, and that `Content.Assign`
       is not anchored on its `:location` string.
+
+      **Machine-checked (unattended, 2026-09-01):** every field read against the
+      structs in `deps/statifier/lib/statifier/machine/content/`.
+      `Log.expr_location`, `Assign.expr_location`, `Foreach.array_location`
+      and `If.Branch.cond_location` all exist; `Foreach` does carry
+      `item_location` and `index_location` (both real, both spanning
+      location paths rather than expressions, as the code comment states);
+      `Script` has `node_location` and no `:location`; `Assign` is anchored
+      on `node_location`, never on its `:location` string. No kind was given
+      a field it does not have.
 - [ ] No regressions in related features.
+
+      **Machine-checked (unattended, 2026-09-01):** full `mix quality` green and
+      **attested** (`attested: true`, no profile, scope all) on the branch
+      HEAD: Format, Compile (warnings-as-errors), Credo, Dialyzer, Doctor
+      and Dependencies all clean; 758/758 tests passing at 92.7% coverage.
+      Only the two permanently not-applicable skips (Gettext, Sobelow).
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 full `mix quality` as the phase gate. In interactive execution, pause here for
@@ -910,11 +935,33 @@ items are deferred and surfaced once at the end instead of blocking here.
 - [ ] Run the Phase 1 chart through a live session and read the emitted JSON:
       the `error` object is legible without an Elixir term in it, and the
       `location` slices back out of `source` as the failing subexpression.
+
+      **Machine-checked (unattended, 2026-09-01):** a real `Statifier.Session` over
+      the Phase 1 chart, with a live `Subscriber`, emitted 16 messages, 2 of
+      them carrying `event.error`. The JSON encodes cleanly through
+      `Jason.encode!/2` with no Elixir term in it:
+      `kind: "undefined_variable"`, `expression: "amount < limit"`, `span`
+      `(1, 10)-(1, 15)`, `location` line 4 columns 63-68 / offsets 238-243,
+      `location_kind: "resolved"`. Slicing `source` at that location returns
+      `"limit"` - the failing subexpression exactly.
 - [ ] Confirm the `error` object contains no predicator struct field that
       embeds a datamodel value (no `message`, no `values`, no `got`), so the
       "no new projection position" claim holds by inspection as well as by
       test.
+
+      **Machine-checked (unattended, 2026-09-01):** `object/4` builds exactly five
+      keys - `kind`, `expression`, `span`, `location`, `location_kind`.
+      `kind` is derived from the error struct's *module name* only
+      (`Module.split |> List.last |> Macro.underscore`), so no `message`,
+      `values`, or `got` field is read at all. The claim holds by
+      inspection.
 - [ ] No regressions in related features.
+
+      **Machine-checked (unattended, 2026-09-01):** full `mix quality` green and
+      **attested** (`attested: true`, no profile, scope all) on the branch
+      HEAD: Format, Compile (warnings-as-errors), Credo, Dialyzer, Doctor
+      and Dependencies all clean; 758/758 tests passing at 92.7% coverage.
+      Only the two permanently not-applicable skips (Gettext, Sobelow).
 
 **Implementation Note**: Use `mix quality --profile loop` between edits; run
 full `mix quality` as the phase gate. In interactive execution, pause here for
@@ -931,13 +978,42 @@ items are deferred and surfaced once at the end instead of blocking here.
       distinction between `span` (over `expression`) and `location` (over
       `source`) unambiguous, and is it clear that only `location` is used for
       underlining?
+
+      **Still deferred to the operator (2026-09-01):** a readability judgment about
+      how the prose lands on a first read, which an agent cannot stand in
+      for. Not machine-checked, not confirmed. The structural facts it
+      depends on *were* checked: `span`'s columns are documented as offsets
+      into `expression`, `location` as absolute against `source`, and the
+      "location is absolute and already resolved" bullet names `location` as
+      the field a consumer underlines.
 - [ ] Confirm the doc nowhere implies the producer detects the helper's
       internal degradation - `"resolved"`'s caveat must read as a limitation,
       not as a promise.
+
+      **Machine-checked (unattended, 2026-09-01):** `docs/wire-format.md`'s
+      `location_kind` note states it outright - "**`"resolved"` may still
+      span the whole attribute value**" and "Treat this as a documented
+      limitation, not a promise that `"resolved"` always narrows to the
+      failing subexpression." No other passage in the document claims the
+      producer inspects the helper's result. Reads as a limitation.
 - [ ] Terminology scan: nothing in the doc, the fragment, the fixture, or the
       tests contains employer or product terminology; example domains are
       `myapp:`-style throughout.
+
+      **Machine-checked (unattended, 2026-09-01):** the umbrella's pre-push scan
+      (`docs/terminology-firewall.md`) run over the whole worktree
+      (excluding `.git`, `deps`, `_build`) returned **zero hits**. Pipeline
+      confirmed working with a positive control in the diff (236 matches for
+      an in-diff term) and a negative control against the firewall document
+      itself (4 matches). Example domains in the new fixtures are
+      `myapp:authorize` and `myapp:signup`.
 - [ ] No regressions in related features.
+
+      **Machine-checked (unattended, 2026-09-01):** full `mix quality` green and
+      **attested** (`attested: true`, no profile, scope all) on the branch
+      HEAD: Format, Compile (warnings-as-errors), Credo, Dialyzer, Doctor
+      and Dependencies all clean; 758/758 tests passing at 92.7% coverage.
+      Only the two permanently not-applicable skips (Gettext, Sobelow).
 
 **Implementation Note**: This phase touches no Elixir under `lib/`, so per
 CLAUDE.md's commit row the diff review carries it - but `mix quality` still runs
