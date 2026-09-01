@@ -36,14 +36,59 @@ defmodule StatifierUI.Diagram do
   - `<final>` states carry a `(final)` label suffix; history states carry
     `(H)` (shallow) or `(H*)` (deep) - Mermaid has no native pseudo-state
     notation for either.
+  - Every compound state carries a `[*] --> sN` marker per resolved initial
+    state, including one written without an `initial` attribute (the
+    compiler resolves it to the first child). A parallel state carries
+    none, because entering it enters every region at once.
   - Transitions are labeled with their event descriptors; a guarded
     transition carries a `[cond]` marker (the Machine retains the compiled
     expression, not its source text).
+  - A **targetless** transition - spec-legal, and the way a chart runs
+    executable content without changing configuration - is drawn as a
+    self-edge marked `[internal]`. UML puts one inside the state's box;
+    Mermaid has no in-box notation, and dropping the transition entirely
+    is worse: it renders a state that handles an event as one that
+    ignores it.
+  - A transition written `type="internal"` also carries `[internal]`.
+    SCXML's `external` default is left unmarked, so the marker means "this
+    edge does not exit and re-enter its source".
+  - A **history** state's default transition (`State.history_default`) is
+    drawn with a `[default]` marker. It is not selectable, so it is not in
+    `State.transitions`; without this the `(H)` / `(H*)` label would name a
+    pseudo-state whose fallback target is invisible.
   - Active states - every index in the configuration, ancestors included,
     per the full-configuration convention of statifier-ui ADR-0005 - are
     assigned the `active` Mermaid class. Out-of-range indexes and the root
     are ignored, so a stale or empty configuration degrades to an
     unhighlighted chart rather than an error.
+
+  ## Known limits of this projection
+
+  These are accepted, not defects to file. Each is a thing the Mermaid
+  backend cannot express; the destination elkjs renderer (ADR-0008) is
+  where they get fixed, and none of them makes the source *silently*
+  wrong - every one is either marked in the output or listed here.
+
+  - **Lifted edges lose their real endpoints in the picture.** A lifted
+    edge is drawn composite-to-composite and the true endpoints survive
+    only in the `[lifted: ...]` label text, not in the geometry. This also
+    covers an edge between two regions of the same parallel state: it is
+    lifted to the two regions, which reads as leaving one lane for
+    another when the semantics are an exit and re-entry within them.
+  - **Internal transitions are drawn as self-edges.** The arrow implies a
+    round trip through exit and entry that an internal transition does not
+    make; only the `[internal]` marker says otherwise.
+  - **Pseudo-states are ordinary nodes.** History and final states are
+    drawn as boxes with a label suffix, so a chart with many of them reads
+    as having more real states than it has.
+  - **Shallow and deep history differ only in the label.** `(H)` versus
+    `(H*)` is the whole distinction; what each restores is not drawable.
+  - **Executable content is not drawn at all.** `onentry`, `onexit`,
+    transition content, `<invoke>` and `donedata` have no notation here.
+    An edge label says which event fires a transition, never what it does.
+  - **Nothing is laid out by this module.** Mermaid decides geometry, so
+    region order within a parallel is document order and nothing keeps a
+    deeply nested chart from rendering wider than it is readable.
   """
 
   alias Statifier.Machine
@@ -149,12 +194,31 @@ defmodule StatifierUI.Diagram do
     skip = initial_transition_indexes(machine)
 
     for index <- 1..(tuple_size(machine.states) - 1)//1,
-        t_index <- Machine.at(machine, index).transitions,
+        state = Machine.at(machine, index),
+        line <- selectable_lines(machine, state, skip) ++ history_default_lines(machine, state) do
+      line
+    end
+  end
+
+  @spec selectable_lines(Machine.t(), State.t(), MapSet.t(non_neg_integer())) :: [String.t()]
+  defp selectable_lines(machine, %State{transitions: transitions}, skip) do
+    for t_index <- transitions,
         not MapSet.member?(skip, t_index),
         transition = Machine.transition(machine, t_index),
-        target <- transition.targets do
-      edge_line(machine, transition, target)
+        line <- edge_lines(machine, transition, nil) do
+      line
     end
+  end
+
+  # A history state's default transition is not selectable, so it does not
+  # live in `State.transitions` - it lives in `history_default`. Drawing it
+  # is what makes the `(H)` / `(H*)` label mean something: without it the
+  # marker names a pseudo-state whose fallback target is invisible.
+  @spec history_default_lines(Machine.t(), State.t()) :: [String.t()]
+  defp history_default_lines(_machine, %State{history_default: nil}), do: []
+
+  defp history_default_lines(machine, %State{history_default: t_index}) do
+    edge_lines(machine, Machine.transition(machine, t_index), "[default]")
   end
 
   @spec initial_transition_indexes(Machine.t()) :: MapSet.t(non_neg_integer())
@@ -166,23 +230,44 @@ defmodule StatifierUI.Diagram do
     end
   end
 
-  @spec edge_line(Machine.t(), Transition.t(), non_neg_integer()) :: String.t()
-  defp edge_line(machine, transition, target) do
-    {source, drawn_target, lifted?} = lift(machine, transition.source, target)
-
-    marker =
-      if lifted? do
-        "[lifted: #{name(machine, transition.source)} -> #{name(machine, target)}]"
-      end
-
-    edge_label =
-      [events_label(transition), cond_label(transition), marker]
-      |> Enum.reject(&is_nil/1)
-      |> Enum.join(" ")
-
-    line = "#{@indent}s#{source} --> s#{drawn_target}"
-    if edge_label == "", do: line, else: "#{line} : #{edge_label}"
+  # One line per target, or a single self-edge for a targetless transition.
+  @spec edge_lines(Machine.t(), Transition.t(), String.t() | nil) :: [String.t()]
+  defp edge_lines(_machine, %Transition{targets: []} = transition, extra) do
+    source = transition.source
+    [draw(source, source, edge_label(transition, ["[internal]", extra]))]
   end
+
+  defp edge_lines(machine, %Transition{} = transition, extra) do
+    Enum.map(transition.targets, fn target ->
+      {source, drawn_target, lifted?} = lift(machine, transition.source, target)
+
+      lifted_marker =
+        if lifted? do
+          "[lifted: #{name(machine, transition.source)} -> #{name(machine, target)}]"
+        end
+
+      edge = edge_label(transition, [type_marker(transition), lifted_marker, extra])
+      draw(source, drawn_target, edge)
+    end)
+  end
+
+  @spec draw(non_neg_integer(), non_neg_integer(), String.t()) :: String.t()
+  defp draw(source, target, ""), do: "#{@indent}s#{source} --> s#{target}"
+  defp draw(source, target, label), do: "#{@indent}s#{source} --> s#{target} : #{label}"
+
+  @spec edge_label(Transition.t(), [String.t() | nil]) :: String.t()
+  defp edge_label(transition, markers) do
+    [events_label(transition), cond_label(transition) | markers]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join(" ")
+  end
+
+  # An `internal` transition to a descendant neither exits nor re-enters the
+  # source, which the arrow alone cannot say; SCXML's `external` default is
+  # left unmarked so the marker means "this one is unusual".
+  @spec type_marker(Transition.t()) :: String.t() | nil
+  defp type_marker(%Transition{type: :internal}), do: "[internal]"
+  defp type_marker(%Transition{}), do: nil
 
   @spec events_label(Transition.t()) :: String.t() | nil
   defp events_label(%Transition{events: []}), do: nil
