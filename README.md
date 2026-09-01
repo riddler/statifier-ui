@@ -241,6 +241,9 @@ Published guides on [hexdocs](https://hexdocs.pm/statifier_ui/):
   layout, the sidecar file format, and how bundles are discovered.
 - [Trace wire format](docs/wire-format.md) - the normative specification of
   the language-neutral JSON trace stream a UI consumes.
+- [Telemetry and the OTel bridge half](docs/telemetry.md) - what this package
+  emits about its own work, what it will never emit, and how a host hands it
+  OpenTelemetry correlation ids without this package calling an OTel API.
 
 ## Development
 

@@ -79,7 +79,9 @@ defmodule StatifierUI.Trace.Projection do
   ## What is never projected
 
   Every identity, counter, and structural field: `type`, `session`, `seq`,
-  `macrostep`, `microstep`, `round`, state indexes, `t_index`, `c_index`,
+  `macrostep`, `microstep`, `round`, `otel` (a trace id and a span id are
+  random identifiers carrying no chart vocabulary and nothing derived from a
+  datamodel value - ADR-0013), state indexes, `t_index`, `c_index`,
   `d_index`, `invokeid`, `send_id`, `state_index`, `invoke_index`, every
   `session.start` table and every `location` object in them, configurations,
   exit and entry sequences, `kind` and `type` discriminators, owner and

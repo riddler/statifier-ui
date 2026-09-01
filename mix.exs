@@ -51,7 +51,8 @@ defmodule StatifierUI.MixProject do
         "CHANGELOG.md",
         "docs/architecture.md",
         "docs/fixture-bundles.md",
-        "docs/wire-format.md"
+        "docs/wire-format.md",
+        "docs/telemetry.md"
       ],
       groups_for_extras: [
         Guides: ~r{docs/}

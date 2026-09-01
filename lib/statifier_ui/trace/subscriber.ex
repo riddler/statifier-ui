@@ -97,6 +97,22 @@ defmodule StatifierUI.Trace.Subscriber do
 
   Without the option nothing changes: no `projection` header, no sentinels,
   full values, identical bytes.
+
+  ## OTel correlation
+
+  When started with an `:otel_context` resolver this subscriber stamps the
+  `otel` envelope key (ADR-0013) in the same `buffer_and_fanout/2` chokepoint,
+  immediately before projection - so a projected stream carries the key
+  unchanged, which is what ADR-0013 requires of it. The stamp is applied only
+  to `trace.*` and `effect.*` messages carrying a `macrostep`; the manifest,
+  the `session.*` lifecycle messages, and the hand-built `session.terminated`
+  never carry it.
+
+  The resolver is host code and this package reads no OTel API: see
+  `StatifierUI.Trace.Otel` for its contract, the well-formedness rules the
+  ids must satisfy, and why a resolver that raises is treated as "no
+  context" rather than as a failure. Without the option nothing changes and
+  golden captures stay byte-comparable, which is why they attach none.
   """
 
   use GenServer
@@ -109,6 +125,7 @@ defmodule StatifierUI.Trace.Subscriber do
   alias StatifierUI.Trace.Manifest
   alias StatifierUI.Trace.Message
   alias StatifierUI.Trace.Normalizer
+  alias StatifierUI.Trace.Otel
   alias StatifierUI.Trace.Projection
 
   @type server :: GenServer.server()
@@ -149,6 +166,7 @@ defmodule StatifierUI.Trace.Subscriber do
             session_pid: pid() | nil,
             monitor_ref: reference() | nil,
             projection: Projection.Profile.t() | nil,
+            otel_context: StatifierUI.Trace.Otel.resolver() | nil,
             error_reasons: MapSet.t(),
             errors: non_neg_integer(),
             foreign: non_neg_integer(),
@@ -170,6 +188,7 @@ defmodule StatifierUI.Trace.Subscriber do
               session_pid: nil,
               monitor_ref: nil,
               projection: nil,
+              otel_context: nil,
               error_reasons: MapSet.new(),
               errors: 0,
               foreign: 0,
@@ -198,11 +217,20 @@ defmodule StatifierUI.Trace.Subscriber do
       given, every message is projected before it is buffered or fanned out
       and `session.start` carries the `projection` header (ADR-0012).
       Default `nil`, which is full fidelity and byte-unchanged.
+    - `:otel_context` - a `t:StatifierUI.Trace.Otel.resolver/0`, i.e. a
+      2-arity function `(session_id, macrostep -> {:ok, %{trace_id: binary,
+      span_id: binary}} | :none)`, used to stamp the `otel` envelope key on
+      `trace.*` and `effect.*` messages (ADR-0013). Default `nil`, which
+      omits the key everywhere and leaves the stream byte-unchanged - which
+      is what golden captures rely on. A value that is not a 2-arity
+      function raises `ArgumentError` at `start_link/1`, rather than
+      silently producing an uncorrelated stream.
     - `:name` - passed to `GenServer.start_link/3` unchanged.
   """
   @spec start_link(keyword()) :: GenServer.on_start()
   def start_link(opts) do
     machine = Keyword.fetch!(opts, :machine)
+    _ = validate_otel_context!(Keyword.get(opts, :otel_context))
     {gen_opts, opts} = Keyword.split(opts, [:name])
     GenServer.start_link(__MODULE__, {machine, opts}, gen_opts)
   end
@@ -278,10 +306,25 @@ defmodule StatifierUI.Trace.Subscriber do
       capacity: capacity,
       listeners: Keyword.get(opts, :listeners, []),
       projection: Keyword.get(opts, :projection),
+      otel_context: validate_otel_context!(Keyword.get(opts, :otel_context)),
       buffer: Buffer.new(capacity)
     }
 
     {:ok, state}
+  end
+
+  # A misconfigured resolver is caught once, here, rather than silently
+  # dropping the `otel` key on every message for the life of the stream: an
+  # absent key means "no context" to every consumer (ADR-0013), so a bad
+  # option would be indistinguishable from a correct one that found nothing.
+  @spec validate_otel_context!(term()) :: Otel.resolver() | nil
+  defp validate_otel_context!(nil), do: nil
+  defp validate_otel_context!(resolver) when is_function(resolver, 2), do: resolver
+
+  defp validate_otel_context!(other) do
+    raise ArgumentError,
+          ":otel_context must be a 2-arity function (session_id, macrostep), got: " <>
+            inspect(other)
   end
 
   @impl GenServer
@@ -508,14 +551,23 @@ defmodule StatifierUI.Trace.Subscriber do
   end
 
   # The single point every message passes through, and therefore the only
-  # place projection has to be applied: the manifest, every normalized
-  # effect, the replayed catch-up prefix, and the hand-built
-  # session.terminated all arrive here. Projection runs before the buffer
-  # push and before the fan-out, so nothing downstream ever holds a value the
-  # profile withheld.
+  # place projection and OTel stamping have to be applied: the manifest,
+  # every normalized effect, the replayed catch-up prefix, and the
+  # hand-built session.terminated all arrive here. Both run before the
+  # buffer push and before the fan-out, so nothing downstream ever holds a
+  # value the profile withheld, and nothing downstream has to re-derive the
+  # correlation ids.
+  #
+  # The stamp precedes the projection because ADR-0013 puts `otel` in the
+  # never-projected set: running it first is what proves a projected stream
+  # carries the key unchanged rather than leaving that a property of
+  # Projection.project/2 happening not to touch the envelope.
   @spec buffer_and_fanout(State.t(), Message.t()) :: State.t()
   defp buffer_and_fanout(state, %Message{} = message) do
-    message = project(state.projection, message)
+    message =
+      message
+      |> Otel.stamp(state.otel_context)
+      |> then(&project(state.projection, &1))
 
     Enum.each(state.listeners, fn pid -> send(pid, {:statifier_ui, state.session, message}) end)
 
