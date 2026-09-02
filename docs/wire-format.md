@@ -395,7 +395,7 @@ block):
 | d_index | integer | always |
 | id | string | always - SCXML requires `id` on `<data>` |
 | location | location object | always - the `<data>` element's own span |
-| value_location | location object | present only when the compiler recorded a span for the element's value |
+| value_location | location object | always - the written value's span when the element wrote `expr` or `src`, the element's own span otherwise; see below |
 
 This table is deliberately **identity only**: it resolves a `d_index` to
 an id and a source span, and carries no representation of the element's
