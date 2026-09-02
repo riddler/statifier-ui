@@ -1281,6 +1281,55 @@ always a member); `macrostep` `2` is the driven `"go"` transition into
 this run never halts through a `<final>` state - a chart reaching one
 would show it in the shape its schema above describes.
 
+## Persistence and the v1 round-trip
+
+A trace is written to storage as **JSON Lines**: one message object per
+line, UTF-8, each line newline-terminated, with no enclosing array and no
+header line. The worked example above is exactly that format, and
+`test/support/trace/two_state.jsonl` is a file in it. Nothing else about
+the file is specified - a `.jsonl` extension is convention, not
+conformance, and a stream may be split across files or held in a database
+column as long as message order is preserved.
+
+Ordering in a file is `seq` order, which is the order the producer emitted
+(see "Ordering"). A reader may rely on that; it does not have to sort.
+
+**The round-trip law.** For any conformant v1 stream, decoding a message
+to its envelope and payload and re-encoding it reproduces the bytes it was
+read from. Two properties make that hold, and both are deliberate:
+
+- **Encoding is canonical.** Object keys are emitted in lexicographic
+  order at every nesting level and arrays in producer order (see "Canonical
+  order"), so re-encoding cannot permute anything.
+- **Decoding is structural only.** The seven reserved envelope keys are
+  lifted out and everything else is the payload, kept in wire shape. In
+  particular a decoder does **not** interpret `$`-tagged values (see "Value
+  encoding"); those are decoded by whichever consumer needs Elixir-side, or
+  language-side, terms, at the point it needs them. A decoder that eagerly
+  decoded values could not round-trip, because more than one wire form can
+  decode to the same in-memory value.
+
+The law matters because it is what lets a capture be compared: a golden
+trace, a regression fixture, and a bug report attached to a ticket are all
+the same bytes reproduced, so a diff between two runs is a diff of
+behavior rather than of formatting.
+
+**A self-describing capture.** A stream whose `session.start` carries
+`source` needs no other artefact to be reopened: the chart it ran against
+is recompiled from the message itself. A stream captured without `source`
+is equally conformant, and a reader must be given the chart another way.
+A projected stream may withhold `source` deliberately (see
+"`allow_source`"), which is the case where the reader always has to supply
+it.
+
+In this implementation the three legs are
+`StatifierUI.Trace.Capture.record/3`, `save/2`, and `load/1`, over
+`StatifierUI.Trace.Json`'s `encode_lines/1` and `decode_lines/1`. The law
+above is executable: `test/statifier_ui/trace/round_trip_test.exs` decodes
+the checked-in golden and asserts the re-encoded bytes are identical to
+the file, and the golden test proves a live session produces those bytes
+in the first place.
+
 ## Type index
 
 One row per type this document defines - 24 rows: 9 `trace.*`, 10

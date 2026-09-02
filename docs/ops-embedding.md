@@ -99,8 +99,10 @@ Three details in `mount/3` earn their place:
 ## A persisted stream
 
 Drop the subscriber and the `handle_info/2` clause. Decode the stored
-messages - `StatifierUI.Trace.Json.decode/1`, an ops table, a recording -
-and hand them to `new/2`:
+messages - `StatifierUI.Trace.Json.decode/1` for one message,
+`decode_lines/1` for a JSON Lines document, or
+`StatifierUI.Trace.Capture.load/1` when the run is a file on disk - and
+hand them to `new/2`:
 
 ```elixir
 def mount(%{"run_id" => run_id}, _session, socket) do
@@ -114,6 +116,18 @@ The two `handle_event/3` clauses and `render/1` are unchanged: the scrubber
 works the same over a finished run as over a live one, because both are the
 same message list. With no subscriber there are no stats, and the status
 pane says `persisted` rather than inventing a status.
+
+A run captured with `StatifierUI.Trace.Capture` needs no unpacking of its
+own, because the list it saved is the list `new/2` wants back:
+
+```elixir
+{:ok, messages} = StatifierUI.Trace.Capture.load("runs/#{run_id}.jsonl")
+State.new(machine, messages: messages)
+```
+
+The bytes are stable across runs and the decode is exact
+(`docs/wire-format.md`, "Persistence and the v1 round-trip"), so a stored
+run diffs against another one as behavior rather than as formatting.
 
 If the stream starts before any macrostep has stabilized - a very early
 attach, or a run captured at its first instant - pass the session's own

@@ -69,6 +69,58 @@ defmodule StatifierUI.Trace.Json do
     |> IO.iodata_to_binary()
   end
 
+  @doc """
+  Reads one JSON object - a single JSON Lines line - back into a
+  `%Message{}`.
+
+  The inverse of `encode_message/1`, and the function
+  `docs/ops-embedding.md` tells a host to call over a persisted stream.
+  Decoding is structural only: `StatifierUI.Trace.Message.from_map/1`
+  splits the envelope from the payload and leaves payload values in wire
+  shape, so `encode_message/1` over the result reproduces the input bytes
+  exactly (`encode/1` is canonical, so key order cannot drift).
+
+  A line that is not JSON is `{:error, {:json, reason}}`; valid JSON that
+  is not a well-formed envelope is the tagged error
+  `StatifierUI.Trace.Message.from_map/1` returned.
+  """
+  @spec decode(String.t()) :: {:ok, Message.t()} | {:error, term()}
+  def decode(line) when is_binary(line) do
+    case JSON.decode(line) do
+      {:ok, map} -> Message.from_map(map)
+      {:error, reason} -> {:error, {:json, reason}}
+    end
+  end
+
+  @doc """
+  Reads a JSON Lines document back into a message list - the inverse of
+  `encode_lines/1`.
+
+  Blank lines are skipped, so the trailing newline `encode_lines/1` writes
+  round-trips cleanly and a hand-edited file with a stray blank line still
+  loads. The first line that fails stops the read and is reported as
+  `{:error, {:line, number, reason}}`, one-based, because "which line"
+  is the first thing anyone debugging a truncated capture needs.
+  """
+  @spec decode_lines(String.t()) ::
+          {:ok, [Message.t()]} | {:error, {:line, pos_integer(), term()}}
+  def decode_lines(document) when is_binary(document) do
+    document
+    |> String.split("\n")
+    |> Enum.with_index(1)
+    |> Enum.reject(fn {line, _number} -> String.trim(line) == "" end)
+    |> Enum.reduce_while({:ok, []}, fn {line, number}, {:ok, acc} ->
+      case decode(line) do
+        {:ok, message} -> {:cont, {:ok, [message | acc]}}
+        {:error, reason} -> {:halt, {:error, {:line, number, reason}}}
+      end
+    end)
+    |> case do
+      {:ok, reversed} -> {:ok, Enum.reverse(reversed)}
+      {:error, _reason} = error -> error
+    end
+  end
+
   @spec encode_key(String.t()) :: iodata()
   defp encode_key(key), do: JSON.encode_to_iodata!(key)
 end

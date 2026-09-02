@@ -50,7 +50,10 @@ if Code.ensure_loaded?(Kino) do
     alias StatifierUI.EventInjection
     alias StatifierUI.Fixtures
     alias StatifierUI.Fixtures.Bundle
+    alias StatifierUI.Inspector
     alias StatifierUI.Kino.Updater
+    alias StatifierUI.Trace.Capture
+    alias StatifierUI.Trace.Message
     alias StatifierUI.Trace.Subscriber
     alias StatifierUI.TruthTable
 
@@ -163,6 +166,109 @@ if Code.ensure_loaded?(Kino) do
         ],
         columns: 1
       )
+    end
+
+    @doc """
+    Reopens a saved trace: the third leg of
+    `StatifierUI.Trace.Capture`'s record / save / reload.
+
+        StatifierUI.Kino.inspect_trace("run.jsonl")
+
+    `trace` is a file path (read through
+    `StatifierUI.Trace.Capture.load/1`) or an already-loaded
+    `t:StatifierUI.Trace.Message.t/0` list. `fixtures` is accepted for
+    symmetry with `inspect/3` and is currently unused - the palette it
+    feeds is an injection affordance, and there is nothing to inject into.
+
+    `opts`:
+
+      * `:machine` - the compiled `%Statifier.Machine{}` to draw against.
+        Optional: without it the machine is recompiled from the SCXML the
+        trace carries in its own `session.start` message, which is what
+        `StatifierUI.Trace.Capture.record/3`'s `:source` option puts
+        there. A trace captured without `:source` and reopened without
+        `:machine` has no chart to draw and returns a
+        `Kino.Markdown` saying so rather than a diagram it cannot draw.
+
+    ## What this is not
+
+    **Static, at the trace's live tip.** There are no scrubber buttons and
+    no injection form: both drive a session, and a file has none. Stepping
+    through a persisted trace - and the datamodel diff between adjacent
+    steps that makes stepping worth having - is `sui-2uz`, deliberately
+    left to decide its own contract.
+    """
+    @spec inspect_trace(Path.t() | [Message.t()], Fixtures.t() | nil, keyword()) ::
+            Kino.Layout.t() | Kino.Markdown.t()
+    def inspect_trace(trace, fixtures \\ nil, opts \\ [])
+
+    def inspect_trace(path, fixtures, opts) when is_binary(path) do
+      case Capture.load(path) do
+        {:ok, messages} -> inspect_trace(messages, fixtures, opts)
+        {:error, reason} -> Kino.Markdown.new(load_failure(path, reason))
+      end
+    end
+
+    def inspect_trace(messages, _fixtures, opts) when is_list(messages) do
+      case trace_machine(messages, opts) do
+        {:ok, machine} -> trace_layout(machine, messages)
+        {:error, reason} -> Kino.Markdown.new(reason)
+      end
+    end
+
+    @spec trace_layout(Statifier.Machine.t(), [Message.t()]) :: Kino.Layout.t()
+    defp trace_layout(machine, messages) do
+      Kino.Layout.grid(
+        [
+          Kino.Markdown.new(Inspector.persisted_status(messages)),
+          Kino.Layout.grid(
+            [
+              Kino.Mermaid.new(Inspector.diagram(machine, messages)),
+              Kino.Markdown.new(Inspector.datamodel(messages))
+            ],
+            columns: 2
+          ),
+          Kino.Markdown.new(Inspector.event_log(messages))
+        ],
+        columns: 1
+      )
+    end
+
+    # The machine is the one thing a message list cannot always supply.
+    # Preferring an explicit :machine over the embedded source matters for
+    # a projected capture, where `allow_source: false` withholds the chart
+    # text (ADR-0012) and the caller has to bring it.
+    @spec trace_machine([Message.t()], keyword()) ::
+            {:ok, Statifier.Machine.t()} | {:error, String.t()}
+    defp trace_machine(messages, opts) do
+      case {Keyword.get(opts, :machine), Capture.source(messages)} do
+        {%Statifier.Machine{} = machine, _source} ->
+          {:ok, machine}
+
+        {nil, nil} ->
+          {:error,
+           "**No chart to draw.** This trace carries no `source` in its " <>
+             "`session.start` message, so there is nothing to recompile. Pass " <>
+             "`machine:` to `inspect_trace/3`, or re-capture with " <>
+             "`StatifierUI.Trace.Capture.record/3`'s `:source` option."}
+
+        {nil, source} ->
+          case Statifier.compile(source) do
+            {:ok, machine} ->
+              {:ok, machine}
+
+            {:error, reason} ->
+              {:error,
+               "**The chart this trace carries no longer compiles.** " <>
+                 "`Statifier.compile/1` said: `#{Kernel.inspect(reason)}`."}
+          end
+      end
+    end
+
+    @spec load_failure(Path.t(), term()) :: String.t()
+    defp load_failure(path, reason) do
+      "**Could not read `#{path}`.** `StatifierUI.Trace.Capture.load/1` said: " <>
+        "`#{Kernel.inspect(reason)}`."
     end
 
     # -- scrubber pane -------------------------------------------------------
@@ -372,6 +478,22 @@ else
       raise RuntimeError,
             "StatifierUI.Kino.inspect/3 needs the optional :kino dependency - " <>
               "add {:kino, \"~> 0.14\"} to your deps and restart"
+    end
+
+    @doc """
+    Raises: the widget needs the optional `:kino` dependency.
+
+    Reading the trace does not - `StatifierUI.Trace.Capture.load/1` and
+    every `StatifierUI.Inspector` fold are pure and always compiled, so a
+    host without Kino still gets the diagram source, the datamodel, and
+    the event log to render its own way.
+    """
+    @spec inspect_trace(term(), term(), keyword()) :: no_return()
+    def inspect_trace(_trace, _fixtures \\ nil, _opts \\ []) do
+      raise RuntimeError,
+            "StatifierUI.Kino.inspect_trace/3 needs the optional :kino dependency - " <>
+              "add {:kino, \"~> 0.14\"} to your deps and restart, or call " <>
+              "StatifierUI.Trace.Capture.load/1 and StatifierUI.Inspector directly"
     end
 
     @doc """

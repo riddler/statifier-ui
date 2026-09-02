@@ -4,6 +4,7 @@ defmodule StatifierUI.InspectorTest do
   alias Statifier.Session
   alias StatifierUI.Inspector
   alias StatifierUI.Test.Support.Trace.SessionCase
+  alias StatifierUI.Trace.Message
   alias StatifierUI.Trace.Subscriber
 
   @two_state """
@@ -567,6 +568,49 @@ defmodule StatifierUI.InspectorTest do
     test "a stats snapshot before any message names no session" do
       {:ok, sub} = Subscriber.start_link(machine: SessionCase.compile!(@two_state))
       assert Inspector.status(Subscriber.stats(sub)) =~ "(awaiting first message)"
+    end
+  end
+
+  describe "persisted_status/1" do
+    test "names the session and message count, and does not invent a status" do
+      {_machine, messages, _stats} = driven_messages(@two_state, "sess_insp_persisted")
+
+      markdown = Inspector.persisted_status(messages)
+
+      assert markdown =~ "`sess_insp_persisted`"
+      assert markdown =~ "persisted"
+      assert markdown =~ "#{length(messages)} messages"
+      refute markdown =~ "attached"
+      refute markdown =~ "buffered"
+    end
+
+    test "a stream with no session.start says so rather than guessing" do
+      assert Inspector.persisted_status([]) =~ "(no session.start)"
+    end
+
+    test "carries the projection header through from the reloaded stream" do
+      messages = [
+        %Message{
+          type: "session.start",
+          session: "sess_insp_projected",
+          seq: 0,
+          payload: %{
+            "version" => 1,
+            "projection" => %{"mode" => "projected", "profile" => "end_user_run_history"}
+          }
+        }
+      ]
+
+      markdown = Inspector.persisted_status(messages)
+
+      assert markdown =~ "**Projected:**"
+      assert markdown =~ "`end_user_run_history`"
+    end
+
+    test "an unprojected stream says nothing extra" do
+      {_machine, messages, _stats} = driven_messages(@two_state, "sess_insp_full")
+
+      refute Inspector.persisted_status(messages) =~ "Projected"
     end
   end
 end

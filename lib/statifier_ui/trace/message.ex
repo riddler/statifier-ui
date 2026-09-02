@@ -96,6 +96,82 @@ defmodule StatifierUI.Trace.Message do
     Map.merge(message.payload, envelope)
   end
 
+  @doc """
+  Reads a decoded JSON object back into a `%Message{}` - the inverse of
+  `to_map/1`.
+
+  The seven reserved keys become envelope fields and everything else
+  becomes `payload`, which is the whole of the transform: **payload values
+  are not decoded**. `payload` holds wire-shape terms by definition (see
+  the moduledoc), and the consumers that want Elixir terms call
+  `StatifierUI.Value.decode/1` themselves at read time -
+  `StatifierUI.DatamodelExplorer` documents at its own decode site why
+  decoding a second time would re-read an already-decoded `Date` as a
+  `$`-tagged map. Staying structural is also what makes the round trip
+  exact: re-encoding the result of `from_map/1` reproduces the bytes it was
+  read from.
+
+  Absent optional keys stay `nil`, mirroring `to_map/1` omitting them.
+  A missing `type`, `session`, or `seq` is
+  `{:error, {:missing_envelope_key, key}}`; a present one of the wrong
+  shape is `{:error, {:invalid_envelope_value, key, value}}`. Both are
+  malformed input rather than producer bugs, so they are values and not
+  raises.
+
+  ## Examples
+
+      iex> StatifierUI.Trace.Message.from_map(%{"type" => "effect.log", "session" => "s", "seq" => 0})
+      {:ok, %StatifierUI.Trace.Message{type: "effect.log", session: "s", seq: 0}}
+
+      iex> StatifierUI.Trace.Message.from_map(%{"type" => "effect.log", "session" => "s"})
+      {:error, {:missing_envelope_key, "seq"}}
+
+  """
+  @spec from_map(map()) :: {:ok, t()} | {:error, from_map_error()}
+  def from_map(map) when is_map(map) do
+    with {:ok, type} <- fetch_string(map, "type"),
+         {:ok, session} <- fetch_string(map, "session"),
+         {:ok, seq} <- fetch_seq(map) do
+      {:ok,
+       %__MODULE__{
+         type: type,
+         session: session,
+         seq: seq,
+         macrostep: Map.get(map, "macrostep"),
+         microstep: Map.get(map, "microstep"),
+         round: Map.get(map, "round"),
+         otel: Map.get(map, "otel"),
+         payload: Map.drop(map, @reserved_keys)
+       }}
+    end
+  end
+
+  def from_map(other), do: {:error, {:not_an_object, other}}
+
+  @typedoc "Why `from_map/1` refused a term."
+  @type from_map_error ::
+          {:not_an_object, term()}
+          | {:missing_envelope_key, String.t()}
+          | {:invalid_envelope_value, String.t(), term()}
+
+  @spec fetch_string(map(), String.t()) :: {:ok, String.t()} | {:error, from_map_error()}
+  defp fetch_string(map, key) do
+    case Map.fetch(map, key) do
+      {:ok, value} when is_binary(value) -> {:ok, value}
+      {:ok, value} -> {:error, {:invalid_envelope_value, key, value}}
+      :error -> {:error, {:missing_envelope_key, key}}
+    end
+  end
+
+  @spec fetch_seq(map()) :: {:ok, non_neg_integer()} | {:error, from_map_error()}
+  defp fetch_seq(map) do
+    case Map.fetch(map, "seq") do
+      {:ok, value} when is_integer(value) and value >= 0 -> {:ok, value}
+      {:ok, value} -> {:error, {:invalid_envelope_value, "seq", value}}
+      :error -> {:error, {:missing_envelope_key, "seq"}}
+    end
+  end
+
   @spec put_present(map(), String.t(), json() | nil) :: map()
   defp put_present(map, _key, nil), do: map
   defp put_present(map, key, value), do: Map.put(map, key, value)
