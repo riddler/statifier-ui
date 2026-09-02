@@ -17,13 +17,23 @@ no Status line elsewhere in this record has been changed.*
 
 The Decision specifies `session.start` as carrying "the identity tables the
 compiled Machine retains - state index to id and location, `t_index` and
-`c_index` to location", and its Consequences accept element-level
-granularity as the price of reading the Machine rather than the Document.
-That price is no longer being paid. statifier's `st-9i5r` (statifier-ex
-PR #185) carried the `attribute_locations` map from the Document node
-through to `Statifier.Machine.State` and `Statifier.Machine.Transition`
-verbatim, key-presence contract included, so the finer table is now
-readable at exactly the layer this format's producer already reads.
+`c_index` to location". It names the layer and stops there; it says nothing
+about how fine those locations are, and this record's Consequences do not
+take the question up either. The element-level limit was never a decision
+of this record at all - it was a property of what that layer happened to
+retain, written down elsewhere: in ADR-0007's Consequences bullet
+("Attribute-level hover locations live one layer higher than the identities
+on the wire") and in `docs/wire-format.md`'s caveat on location
+granularity, both of which record it as a constraint to be lifted upstream
+rather than a price this format chose to pay.
+
+It has been lifted. statifier's `st-9i5r` (statifier-ex PR #185) carried
+the `attribute_locations` map from the Document node through to
+`Statifier.Machine.State` and `Statifier.Machine.Transition` verbatim,
+key-presence contract included, so the finer table is now readable at
+exactly the layer the Decision already names. Nothing in the accepted
+Decision has to bend to admit it: the tables still carry what the compiled
+Machine retains, and the Machine now retains more.
 
 **The amendment: a state row and a transition row each gain an
 `attribute_locations` object**, mapping an attribute's name to that
@@ -58,9 +68,13 @@ value position is created, so the closed position set is unchanged.
 
 **Scope: `states` and `transitions` only.** `contents` and `data` rows do
 not gain the field. The compiled Machine retains the map on its content
-nodes too, but the `data` table is deliberately identity-only by the
-accepted text's own argument, and no consumer has asked for attribute
-granularity on either. Extending it later is additive on the same terms.
+nodes too, but the `data` table is deliberately identity-only - an
+argument this record's accepted text does not make, since it names no
+`data` table at all; it is made in `docs/wire-format.md`'s note on that
+table ("This table is deliberately **identity only**"), and reinforced by
+ADR-0012's projection rule, which leans on exactly that property. No
+consumer has asked for attribute granularity on either table. Extending
+it later is additive on the same terms.
 
 **`cond_location` is retained, not superseded.** It carries a fallback the
 raw map does not - the transition's own `location` when a guard was written
