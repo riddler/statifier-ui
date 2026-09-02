@@ -81,7 +81,13 @@ defmodule StatifierUI.MixProject do
   defp deps do
     [
       statifier_dep(),
-      predicator_dep(),
+
+      # Declared directly, not left to arrive through statifier, because lib/
+      # calls Predicator.* itself: the expectations runner and
+      # `StatifierUI.Expression`'s completion source. 9.1 is the floor because
+      # `Predicator.Vocabulary` (px-15q) landed there and the completion source
+      # reads it.
+      {:predicator, "~> 9.1"},
 
       # Both integrations are optional: the package is a component library, and
       # a Livebook host has no reason to pull LiveView, or the reverse. Anything
@@ -103,26 +109,6 @@ defmodule StatifierUI.MixProject do
   # Export STATIFIER_PATH to point at a local checkout while co-developing a
   # change that spans both repos. It is an env var rather than a mix.exs edit
   # so the override never lands in a commit by accident.
-  # INTERIM GIT PIN (campaign 027, sui-wqr).
-  #
-  # Declared directly because lib/ calls Predicator.* - the expectations runner
-  # and, now, `StatifierUI.Expression`'s completion source. predicator also
-  # arrives transitively through statifier, so `override: true` is what lets a
-  # git ref stand in for the hex release both requirements name.
-  #
-  # The ref is `Predicator.Vocabulary` (px-15q), which is on predicator-ex main
-  # and not yet on Hex; `StatifierUI.Expression` degrades to declared paths
-  # alone without it, so this pin buys the grammar half rather than the
-  # package's ability to compile. It is replaced by a `~> 9.1` hex requirement
-  # the moment predicator publishes - the FINAL re-pin bead in the operator's
-  # queue owns that swap.
-  defp predicator_dep do
-    {:predicator,
-     github: "riddler/predicator-ex",
-     ref: "780e4319d9b9458cd99d2e4212296cab54ffcc7f",
-     override: true}
-  end
-
   defp statifier_dep do
     case System.get_env("STATIFIER_PATH") do
       nil -> {:statifier, "~> 2.0"}
