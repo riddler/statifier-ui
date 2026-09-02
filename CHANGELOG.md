@@ -10,6 +10,299 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into a version section at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [0.3.0] 2026-09-02
+
+The ops surface arrives. `StatifierUI.Live` ships read-only LiveView
+components a host mounts over one trace stream, live or persisted; the
+Livebook inspector gains a scrubber that moves the diagram to any macrostep
+in the run; and `StatifierUI.Live.ExpressionInput` offers predicator's own
+grammar as completion, dropping into statifier_blocks' editor seam - which
+makes this the first release to ship JavaScript. Around them the trace wire
+format reserves `otel` for W3C Trace Context correlation, with a producer
+and an APM deep-link consumer on either side of it, gains per-attribute
+source spans on the identity tables, and `StatifierUI.Trace.Projection`
+redacts values out of a stream so a capture can travel without carrying
+any.
+
+### Added
+
+- The Livebook inspector's diagram can be moved to any macrostep in the
+  event log and back, pairing the two panes into a comprehension surface
+  for one point in a run rather than only the live tip (sui-3gg). Four
+  buttons above the diagram - **|< First**, **< Prev**, **Next >**,
+  **Live** - drive it; the selected macrostep's entry in the log is
+  opened and marked `- shown in the diagram`, and a note above the
+  diagram names the point on screen.
+- `StatifierUI.EventLog.configuration_at/2` returns the configuration in
+  force at a macrostep, distinguishing `{:quiescent, configuration}` from
+  `{:carried, from, configuration}` (the macrostep never settled, so an
+  earlier one's configuration is shown) and `:before_first`. A carried
+  configuration is never presented as a measured one - which is what
+  surfaces `sui-dc7`'s halting macrostep out loud instead of silently.
+- `StatifierUI.Inspector` gained the `:selection` option (`:live` or
+  `{:macrostep, n}`), plus `points/1`, `step/3`, `resolution/2`, and
+  `selection_note/2`. Every decision the scrubber makes lives here, so a
+  LiveView or other host gets the same behaviour without Kino.
+- `StatifierUI.EventLog.Markdown.render/2` gained `:selected`, which
+  suffixes one macrostep's summary with `- shown in the diagram`.
+
+Nothing here re-derives a configuration: every one it can show was
+stamped by the engine on a `trace.macrostep_stable`, and a caught-up
+stream got there through statifier ADR-0034 replay. Time travel is a read
+of replay output as data (ADR-0002's inherited clause), so selecting a
+macrostep neither touches the session nor needs anything new from the
+engine.
+
+- `StatifierUI.Trace.DeepLink` builds a URL into a host's APM backend from
+  the wire format's `otel` correlation key (ADR-0013), the consuming half of
+  the producer shipped with `sui-6e4`. The URL template is host
+  configuration - `"https://apm.example.com/trace/{trace_id}?span={span_id}"`,
+  with `{trace_id}`, `{span_id}`, `{session}`, and `{macrostep}` available
+  and substituted values percent-encoded - because only the host knows which
+  backend its spans went to.
+- `StatifierUI.EventLog.DeepLink`, the rendering seam over an
+  `StatifierUI.EventLog.t()`: `from_opts/1` reads a renderer's `:deep_link`
+  option, `for_macrostep/2` and `for_log/2` answer per macrostep, and
+  `markdown/3` renders the inline Markdown link.
+- `StatifierUI.EventLog.Markdown.render/2` and every `StatifierUI.Inspector`
+  fold take the same `:deep_link` option. A macrostep whose messages carry
+  `otel` gets a `[trace](...)` link at the end of its event-log summary
+  line, and `Inspector.selection_note/2` gains an `[open trace](...)` link
+  for the macrostep on screen.
+- `docs/telemetry.md` gains a section on the consuming end of the `otel`
+  key.
+
+A malformed template raises where the option is read, so a typo cannot
+quietly produce URLs that resolve nowhere. A step with no correlation - no
+template configured, no `otel` key on the stream, or ids that are not W3C
+Trace Context hex - renders no link and no error, which is the normal case
+for every stream captured with no bridge attached, and every pane then
+renders exactly what it rendered before. This package still calls
+no OpenTelemetry API and gains no dependency.
+
+- `StatifierUI.Trace.Subscriber` accepts an `:otel_context` resolver -
+  `(session_id, macrostep -> {:ok, %{trace_id: binary, span_id: binary}} |
+  :none)` - and stamps the wire format's `otel` envelope key from it on
+  `trace.*` and `effect.*` messages, the producer half of ADR-0013. The ids
+  come from the host; this package still calls no OpenTelemetry API and
+  gains no dependency. A resolver answering `:none`, returning a malformed
+  or half pair, or raising leaves the key absent rather than failing the
+  trace, and a projected stream carries the key unchanged.
+- `StatifierUI.Trace.Otel`, the pure module deciding which messages may
+  carry `otel` and whether an answer is well-formed W3C Trace Context hex.
+- `docs/telemetry.md` is published with the other guides on hexdocs.
+
+Without an `:otel_context` resolver nothing changes: the key is absent
+everywhere and golden traces stay byte-comparable.
+
+- `StatifierUI.DatamodelExplorer` carries `session.start`'s `projection`
+  header on the pane struct and exposes it as `projected?/1` and
+  `projection_profile/1`, so a host can surface the profile name alongside
+  the mode (ADR-0012).
+- `StatifierUI.DatamodelExplorer.edit_disabled_reason/1` and `/2`, with the
+  boolean forms `editable?/1` and `editable?/2`: ADR-0012's rule that no
+  value-editing affordance may be offered over a projected stream, or over a
+  redacted slot, as a function a write path can consult. The reason is a
+  sentence written to be shown, naming the profile or the slot. The pane
+  still has no write path of its own; this is the guard whatever builds one
+  asks first.
+- `StatifierUI.DatamodelExplorer.Markdown` renders that reason under a live
+  pane's header when the stream is projected, instead of leaving the reader
+  to guess why every value reads `(redacted)`.
+
+`StatifierUI.EventInjection` is explicitly **excluded** from the same rule
+and its moduledoc records why: its palette is composed from a fixtures
+bundle the operator already holds in full, never from observed values, so
+projection cannot reach it.
+
+- Such an event now carries an `error` object naming the failure kind, the
+  expression, the span within it, and the absolute, pre-resolved document
+  location of the failing subexpression - so a consumer underlines it
+  directly with no span composition of its own. `docs/wire-format.md` now
+  states the end-exclusive convention for spans and locations explicitly.
+- `StatifierUI.EventLog.configuration_at/2` gained a fourth outcome,
+  `{:final, configuration}` - macrostep `n` halted the run, and this is
+  the configuration it exited in. It is kept distinct from
+  `{:quiescent, configuration}` for the same reason `{:carried, ...}` is:
+  a configuration the chart *exited* in is not one it *settled* in, and
+  `StatifierUI.Inspector.selection_note/2` words the two differently
+  ("at the final configuration the run halted in").
+- `StatifierUI.EventLog.Macrostep` gained `final_configuration` and
+  `stamped/1`, and `StatifierUI.Inspector.points/1` gained `final?`
+  beside `quiescent?` - a halting macrostep is not quiescent, and a
+  scrubber saying so is not the same as one saying it has nothing to
+  show.
+- `StatifierUI.Trace.Projection` projects a trace stream down to structure,
+  transitions, outcomes and ordering, replacing datamodel and payload values
+  with the reserved `{"$redacted": true}` sentinel (ADR-0012). Build a
+  profile with `profile/2` and pass it to
+  `StatifierUI.Trace.Subscriber.start_link/1` as `:projection`; every message
+  is projected before it is buffered or fanned out, so a projected stream can
+  be rendered, encoded or persisted without any of those having held a value.
+- A profile allows values back by path prefix (`allow_paths`, matching
+  `effect.datamodel_change`'s `location_path` encoding) or by naming an
+  unlocated position (`allow_positions`). A prefix longer than a write's own
+  path descends into the written value, so an allowed leaf passes while its
+  withheld siblings are redacted. `allow_source: false` additionally redacts
+  `session.start`'s chart source.
+- `session.start` carries a `projection` header naming the mode and profile
+  whenever the stream is projected, so a projected capture is always
+  distinguishable from a full one.
+- `StatifierUI.Value` decodes `{"$redacted": true}` to the new `:redacted`
+  atom and encodes it back; `StatifierUI.Shape` gains a matching `:redacted`
+  shape that renders as `redacted`.
+- `StatifierUI.Live` - read-only LiveView function components for a host
+  application's ops views: `ops_view/1` composing `status/1`, `scrubber/1`,
+  `diagram/1`, and `event_log/1` over one trace stream in wire format v1,
+  live or persisted. Compiled only when the optional `:phoenix_live_view`
+  dependency is present (ADR-0004); without it every component raises with
+  instructions. `docs/ops-embedding.md` is the embedding guide.
+- `StatifierUI.Live.State` - the pure read model a host keeps in its socket:
+  `new/2` over a persisted message list, `push/2` for a live subscriber's
+  fan-out (dropping any message whose `seq` is not newer than the newest one
+  held, so the `add_listener` then `sync/2` overlap costs nothing),
+  `sync/2` to pull a subscriber's buffer and stats in one call, and
+  `scrub/2` / `select/2` over `StatifierUI.Inspector`'s selection.
+- The event log renders as HTML rather than Markdown in a LiveView host, so
+  clicking a macrostep entry moves the diagram to it - the link the Livebook
+  pane cannot have, because a Markdown document has no click target.
+- `docs/ops-embedding.md` - embedding the ops view in a host LiveView, live
+  and persisted, with the styling hooks and the Mermaid client the diagram
+  pane expects a host to supply.
+- `StatifierUI.Trace.Capture` makes recording, saving, and reloading a trace
+  one call each: `record/3` off a live `Statifier.Session`, `save/2` to a
+  JSON Lines file, `load/1` back into a message list.
+- `StatifierUI.Trace.Json.decode/1` and `decode_lines/1` read the wire format
+  back into `StatifierUI.Trace.Message` structs, over the new
+  `StatifierUI.Trace.Message.from_map/1`. `docs/ops-embedding.md` has cited
+  `decode/1` since it was written; it now exists.
+- `StatifierUI.Kino.inspect_trace/3` reopens a saved trace in the Livebook
+  inspector, recompiling the chart from the SCXML the trace carries when the
+  caller does not supply a machine.
+- `StatifierUI.Inspector.persisted_status/1` renders the status header for a
+  stream read from storage, which has no subscriber counts to report.
+- `docs/wire-format.md` specifies JSON Lines as the file framing and states
+  the v1 round-trip law: decoding and re-encoding a conformant stream
+  reproduces its bytes.
+- `session.start`'s `states` and `transitions` identity tables now carry an
+  `attribute_locations` object per row, mapping an attribute's name to that
+  attribute's own value span. Key presence is the contract: an entry exists
+  only for an attribute the author actually wrote, so
+  `attribute_locations["type"]` being absent is how a consumer tells a
+  transition that defaulted to external from one written `type="external"` -
+  a question the lowered `type` value cannot answer. A consumer wanting
+  hover precision on a transition's `event` or `target`, or a state's `id`
+  or `initial`, now has it from `session.start` alone; reading the
+  `%Statifier.Document{}` tree for it is no longer necessary. Requires a
+  statifier that carries `attribute_locations` on the compiled Machine
+  (statifier 2.0.0 and later).
+- `StatifierUI.Live.ExpressionInput` - an expression field with completion,
+  offering predicator's own grammar (operators, keywords, literal words,
+  duration units, and every function the host's providers resolve) alongside
+  the datamodel paths the host declares. It is the affordance
+  statifier_blocks ADR-0005 defers to this package, and it drops into that
+  editor's `expression_component` seam as
+  `&StatifierUI.Live.ExpressionInput.expression_input/1` (sui-wqr). The field
+  carries no event of its own: it renders an `<input>` with the `name` it was
+  given, so edits - typed or completed - arrive through the host form's
+  existing `phx-change`.
+- `StatifierUI.Expression` - the completion source behind it, pure and
+  without LiveView: `completions/2` returns `{label, insert, kind, detail}`
+  entries read from `Predicator.Vocabulary` and the supplied paths, so a host
+  can render its own control over the same list.
+- **This package now ships JavaScript**, as source under `assets/`, per
+  ADR-0009. A host adds `"statifier_ui": "file:../deps/statifier_ui/assets"`
+  to its `assets/package.json` and spreads `StatifierUIHooks` from
+  `js/index.js` into its `LiveSocket` hooks. The one hook,
+  `StatifierUIExpressionInput`, upgrades the field from a native `<datalist>`
+  to a caret-aware completion list; it imports nothing, and a host that
+  registers no hook keeps a working field. Hook names and export names are
+  public API. See the ADR-0009 note of 2026-09-02 for the layout.
+
+### Changed
+
+- `StatifierUI.Inspector.event_log/1` is now `event_log/2`, taking the
+  same options as the other fold functions. The one-argument call is
+  unchanged in behaviour.
+- A transition written `type="internal"` now carries an `[internal]`
+  marker in the diagram. SCXML's `external` default stays unmarked, so the
+  two no longer render identically.
+- `StatifierUI.Diagram`'s moduledoc gained a "Known limits of this
+  projection" section: lifted-edge geometry (including edges between two
+  regions of one parallel state), self-edge notation for internal
+  transitions, pseudo-states drawn as ordinary nodes, shallow-versus-deep
+  history distinguishable only by label, executable content not drawn, and
+  layout left entirely to Mermaid. These are the accepted limits of the
+  Mermaid backend rather than defects; ADR-0008's elkjs renderer is where
+  they are addressed.
+- The trace wire format reserves `otel` as an envelope key: an optional
+  object carrying the W3C Trace Context `trace_id` and `span_id` of the
+  OpenTelemetry span covering a message's macrostep, legal on `trace.*` and
+  `effect.*` messages only (ADR-0013). No producer emits it yet, the format
+  version stays `1`, and a stream with no correlation context attached is
+  byte-unchanged - but a payload may no longer use `otel` as a key.
+- The wire format's reserved one-key `$`-prefixed shape admits `$redacted`,
+  making five reserved forms rather than four. The format version stays `1`:
+  no existing stream changes, and full fidelity remains the default and is
+  byte-unchanged.
+- Nothing existing moves. Every row keeps its element-level `location`
+  unchanged, and `attribute_locations` is `{}` for an element that wrote no
+  attributes, for the synthesized initial transition, and for a Machine
+  compiled by an older engine - in each case a consumer falls back to
+  `location`, the granularity this format offered before. The format
+  version stays `1`; the addition is additive per ADR-0005.
+- `cond_location` is retained rather than superseded. It falls back to the
+  transition's own `location` when a guard was written without a recorded
+  span, where `attribute_locations` simply omits the key, so the two answer
+  different questions. Prefer `attribute_locations["cond"]` for new work.
+- `contents` and `data` rows are unchanged and carry no
+  `attribute_locations`.
+- `predicator` is now a direct dependency at `~> 9.1`, the release that
+  carries `Predicator.Vocabulary`. It arrived only through `statifier`
+  before; the completion source reads the vocabulary itself, and a host on a
+  predicator without it gets its declared paths and no grammar entries
+  rather than an error (sui-vsx).
+
+### Fixed
+
+- `StatifierUI.Diagram.render/2` no longer drops transitions the Mermaid
+  projection has no obvious notation for. A targetless transition - the
+  spec-legal way to run executable content without changing configuration -
+  was rendered as nothing at all, so a state that handles an event read as
+  one that ignores it; it is now drawn as a self-edge marked `[internal]`.
+  A history state's default transition, which lives in `history_default`
+  rather than in the selectable `transitions` list, was dropped the same
+  way, leaving the `(H)` / `(H*)` label naming a pseudo-state whose
+  fallback target was invisible; it is now drawn with a `[default]` marker.
+- An event whose data is an expression-evaluation failure no longer fails to
+  normalize. Previously `StatifierUI.Value.encode/1` rejected the failure
+  payload and the whole trace message was dropped, so the diagnostic a
+  consumer most needs never reached the wire.
+- The configuration pane now shows a halted chart's final configuration
+  (sui-dc7). A run that ends by entering a top-level `<final>` never
+  reaches quiescence in its last macrostep, so it emits no
+  `trace.macrostep_stable` for it; `StatifierUI.Inspector` read only that
+  message type and therefore kept highlighting the state the chart had
+  *left*, while the datamodel pane showed the assignment that moved it
+  out. Both stamping messages are read now, newest wins.
+
+  The wire format is what settles that `trace.done` may be read this way:
+  its `configuration` field is defined as "the full configuration as it
+  stood at exit, a genuine set, sorted ascending" - the same shape and the
+  same authority as a `trace.macrostep_stable` payload. Nothing here
+  re-derives an exit configuration from the exit sets that precede
+  `trace.done`; the format version is unchanged and the engine is
+  untouched.
+- `StatifierUI.EventLog.Markdown` no longer raises `Protocol.UndefinedError`
+  when a `session.terminated` message carries a non-string `reason`. It and
+  the datamodel explorer now render a withheld value as `(redacted)` rather
+  than as unbound or as a literal one-key map.
+- `docs/wire-format.md` no longer says `session.start`'s `data.value_location`
+  is present only when the compiler recorded a value span. A conformant
+  producer always emits it, falling back to the element's own span, exactly as
+  the surrounding prose already said - so a consumer need not handle its
+  absence.
+
 ## [0.2.0] 2026-08-27
 
 Fixtures become executable. ADR-0006 adds named datasets and free-standing
