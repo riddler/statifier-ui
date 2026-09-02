@@ -190,10 +190,13 @@ dependency against the directory holding `package.json`, and this package's
 root already has a `mix.exs` and a hex `files:` list. Putting `package.json`
 at the root would mean publishing a second manifest at the top of an Elixir
 package and adding the root's non-JavaScript neighbours to npm's view of it.
-`live_toast` points hosts at its `assets/` for the same reason, and it is one
-of the three packages this record named as the pattern being adopted. The
-decision's own commitment - source, `file:`, host bundler - is unchanged; only
-the segment the path ends on is now stated.
+This is a deliberate departure from the four packages this record named as
+the pattern being adopted, not a precedent borrowed from them: `live_toast`,
+`Backpex`, `live_svelte`, and `live_vue` all keep their `package.json` at the
+repository root and are installed as `file:../deps/<package>`. The mechanical
+reason above is why this package does not follow them. The decision's own
+commitment - source, `file:`, host bundler - is unchanged; only the segment
+the path ends on is now stated.
 
 **`assets/js/index.js` is the entry point, and the export names are the API.**
 `StatifierUIExpressionInput` is exported by name; `StatifierUIHooks` is every
