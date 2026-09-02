@@ -82,5 +82,9 @@
     "dir": "changelog.d"
   },
 
-  "release": null
+  "release": {
+    "kind": "hex",
+    "version_file": "mix.exs",
+    "readme_pin": true
+  }
 }
