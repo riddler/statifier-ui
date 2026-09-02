@@ -70,6 +70,8 @@ so the renderer is built against it rather than retrofitted - the same
 reason the accepted text wrote down `data-state-index` before there was an
 SVG to put it on.
 
+## Context
+
 Every authoring tool for statecharts has to answer one question first: what
 does the author actually edit? The candidates here are the SCXML text, a
 diagram canvas that generates SCXML, or both at once with synchronization

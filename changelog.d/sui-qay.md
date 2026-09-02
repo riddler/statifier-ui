@@ -11,7 +11,7 @@
   or `initial`, now has it from `session.start` alone; reading the
   `%Statifier.Document{}` tree for it is no longer necessary. Requires a
   statifier that carries `attribute_locations` on the compiled Machine
-  (statifier 9.0 and later).
+  (statifier 2.0.0 and later).
 
 ### Changed
 

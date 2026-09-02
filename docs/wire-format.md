@@ -515,9 +515,9 @@ the guard text" without ever silently widening to the whole element - and
 read `cond_location` when that fallback is the wanted behaviour.
 
 `contents` and `data` rows carry no `attribute_locations`. The compiled
-Machine retains the map on its content nodes, but this table is
-deliberately identity-only (see the `data` note above) and no consumer has
-asked for attribute granularity there yet; adding it later is an additive
+Machine retains the map on its content nodes, but the `data` table is
+deliberately identity-only (see its note above) and no consumer has asked
+for attribute granularity on either yet; adding it later is an additive
 change and therefore not a version bump.
 
 Being an identity table, `attribute_locations` is never projected - it
