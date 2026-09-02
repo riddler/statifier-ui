@@ -25,8 +25,8 @@
 
 ### Changed
 
-- `predicator` is pinned to a git ref rather than `~> 9.0` while
-  `Predicator.Vocabulary` is unreleased. Completion degrades to the declared
-  paths alone on a predicator without it, so the pin buys the grammar half
-  rather than the package's ability to compile, and it reverts to a hex
-  requirement at predicator's next release.
+- `predicator` is now a direct dependency at `~> 9.1`, the release that
+  carries `Predicator.Vocabulary`. It arrived only through `statifier`
+  before; the completion source reads the vocabulary itself, and a host on a
+  predicator without it gets its declared paths and no grammar entries
+  rather than an error (sui-vsx).
