@@ -269,6 +269,12 @@ rendered input stamps `data-vocabulary` so the two cases are told apart.
 `StatifierUI.Expression.completions/2` is the same list without any of the
 markup, for a host that would rather render its own control.
 
+The field ships no CSS either. It stamps `data-hook` once the hook has
+upgraded it and `data-vocabulary` for the case above, and the hook builds the
+completion popup at runtime under its own classes;
+[the embedding guide](docs/ops-embedding.md) lists every selector, including
+the ones no template renders.
+
 ## The Livebook inspector
 
 `StatifierUI.Kino.inspect/3` composes the four panes above - configuration
@@ -325,6 +331,10 @@ Published guides on [hexdocs](https://hexdocs.pm/statifier_ui/):
 
 - [Architecture](docs/architecture.md) - the layers of statifier-ui, what
   each piece is for, and the boundary with the engine it visualizes.
+- [Embedding](docs/ops-embedding.md) - putting the components on a host's
+  own page: the asset pipeline that compiles the hooks, the classes and
+  data-attributes a host's stylesheet themes them with, and the contract
+  for rendering your own surfaces off the wire format instead.
 - [Fixture bundles](docs/fixture-bundles.md) - the per-fragment fixture
   layout, the sidecar file format, and how bundles are discovered.
 - [Trace wire format](docs/wire-format.md) - the normative specification of
