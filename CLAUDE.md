@@ -55,15 +55,16 @@ irreversible step, and report.
 | `git commit` | the claimed bead's work is complete **and** full `mix quality` is green; a change touching no Elixir code has no gate to run and may commit on review of the diff alone | on a red gate, on a `--profile loop` or otherwise scoped run, or with unrelated changes in the tree |
 | `git push` | the user asks for it in their own words | inferred from "the work is done"; finishing a bead is not a request to publish it |
 | merging a campaign PR | a campaign consent the operator adopted verbatim that names automatic merges, with every named condition met (full gate green, CI green, firewall scan clean with a positive control, any named review gate passed) | outside such a consent; any named condition unmet; any PR the consent's carve-outs hold for the operator |
-| `bd close <id>` | never for a mirrored bead; otherwise the work is on `origin/main`, verified against the remote | always for a bead whose description carries a `mirrors:` line, campaign consent included; and otherwise at commit time, or on a local commit that has not been pushed |
+| `bd close <id>` | never for a mirrored bead whose other half is not merged to its own repo's `origin/main`; a mirrored bead whose other half has ALSO landed may be closed by the campaign conductor under a consent naming this exception, both halves together, each verified against its remote; otherwise the work is on `origin/main`, verified against the remote | for a bead whose description carries a `mirrors:` line while its other half is unlanded, campaign consent included; and otherwise at commit time, or on a local commit that has not been pushed |
 | `bd dolt push` | bead state changed locally **and** the git side of the same change has already reached `origin` | as a way to publish beads for work that is not on `origin/main` yet; and inside a campaign that spans mirrored trackers - the conductor pushes those atomically |
 | a version bump on a release bead's branch | an operator-authorized release bead, inside a campaign carrying the operator's explicit consent | on any other bead, on main, or when the operator has not named this repo's release bead |
 | a release (tag, `mix hex.publish`, GitHub release) | never | always - publishing is the operator's, in every campaign |
 
 The organizing principle is that the human gate belongs where an action stops
 being reversible. A commit on a per-bead branch is undone with
-`git reset --soft HEAD~1`; a push, a request, a merge, and a closed bead are
-visible to other people and other machines, so those keep their gate.
+`git reset --soft HEAD~1`; a push, a request, a merge outside a consented
+campaign, and a closed bead are visible to other people and other machines, so
+those keep their gate.
 
 **CI replays the gate afterwards, and there is no second reviewer.**
 `.github/workflows/ci.yml` runs one job - the full gate, read out of
