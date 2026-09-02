@@ -4,8 +4,11 @@ defmodule StatifierUI.DatamodelExplorer.Markdown do
   `Kino.Markdown.new/1`, per the `sui-t36.7` plan's Phase 4.
 
   `render/2` is a pure function over the pane - it names `Kino` only in this
-  moduledoc and calls nothing under `Kino.*`. `sui-t36.8` owns wrapping the
-  returned string in an actual `Kino.Markdown` widget.
+  moduledoc and calls nothing under `Kino.*`, so the same string serves a
+  Livebook cell, a generated docs page, or a test assertion.
+  `StatifierUI.Kino.Updater` is the widget wrapper: it hands
+  `StatifierUI.Inspector.datamodel/1`'s string, which is this module's
+  output, to `Kino.Markdown.new/1` for the inspector's datamodel frame.
 
   ## Structure
 
