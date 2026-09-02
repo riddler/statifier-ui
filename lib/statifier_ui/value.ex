@@ -21,12 +21,18 @@ defmodule StatifierUI.Value do
   has its own tagged encoding because absence has no positional spelling
   inside a list or map value.
 
-  Durations are the one value that does not round-trip identically:
-  `StatifierUI.Shape.duration?/1` recognizes any non-empty subset of the
-  eight units (predicator's parser emits seven, omitting `:milliseconds`),
-  while `encode/1` always writes all eight, filling absent units with `0`.
-  The re-decoded value is therefore canonical rather than identical to the
-  input, and semantically equal to it.
+  Durations are the one value that does not round-trip identically.
+  `encode/1` always writes all eight units, filling absent ones with `0`,
+  which is predicator's own contract rather than a widening of it:
+  `Predicator.Duration.new/1` fills every unit it was not given, and since
+  predicator 9.0 the expression evaluator seeds all eight too, so
+  `Predicator.evaluate("3d")` carries `milliseconds: 0` like the rest
+  (px-69c). `StatifierUI.Shape.duration?/1` nonetheless recognizes any
+  non-empty subset of the eight units, and that tolerance is viewer-side -
+  a statement about the value streams this repository renders but did not
+  produce, not about what predicator emits. A subset map therefore
+  re-decodes as canonical rather than identical to the input, and
+  semantically equal to it.
 
   `encode/1` is closed over predicator's value domain (ADR-0005): the
   JSON-native scalars, `Date`, `DateTime`, durations, string- or
