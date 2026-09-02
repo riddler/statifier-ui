@@ -10,6 +10,7 @@ defmodule StatifierUI.KinoTest do
   alias StatifierUI.Fixtures.Bundle
   alias StatifierUI.Kino.Updater
   alias StatifierUI.Test.Support.Trace.SessionCase
+  alias StatifierUI.Trace.Capture
   alias StatifierUI.Trace.Subscriber
 
   setup :configure_livebook_bridge
@@ -210,6 +211,64 @@ defmodule StatifierUI.KinoTest do
 
       assert text =~ "# myapp.authorize"
       refute text =~ "myapp.plain"
+    end
+  end
+
+  describe "inspect_trace/3" do
+    setup do
+      machine = SessionCase.compile!(@two_state)
+
+      {:ok, session} =
+        Session.start_link(machine, trace: true, record: true, session_id: "sess_kino_reload")
+
+      Session.send_event(session, "go")
+      SessionCase.wait_for_macrostep(session, 2)
+
+      {:ok, messages} = Capture.record(session, machine, source: @two_state)
+
+      %{machine: machine, messages: messages}
+    end
+
+    test "composes a static layout over a message list", %{machine: machine, messages: messages} do
+      assert %Kino.Layout{} =
+               StatifierUI.Kino.inspect_trace(messages, nil, machine: machine)
+    end
+
+    test "reads a saved file through Capture.load/1", %{messages: messages} do
+      path =
+        Path.join(System.tmp_dir!(), "sui-pb2-kino-#{System.unique_integer([:positive])}.jsonl")
+
+      on_exit(fn -> File.rm(path) end)
+      :ok = Capture.save(messages, path)
+
+      assert %Kino.Layout{} = StatifierUI.Kino.inspect_trace(path)
+    end
+
+    test "recompiles the machine from the source the trace carries", %{messages: messages} do
+      # No `machine:` option, and the file is the only artefact: this is the
+      # round trip the wire format exists to make possible.
+      assert %Kino.Layout{} = StatifierUI.Kino.inspect_trace(messages)
+    end
+
+    test "says so rather than drawing when there is no chart", %{machine: machine} do
+      {:ok, session} =
+        Session.start_link(machine, trace: true, record: true, session_id: "sess_kino_nosource")
+
+      {:ok, sourceless} = Capture.record(session, machine)
+
+      assert %Kino.Markdown{text: text} = StatifierUI.Kino.inspect_trace(sourceless)
+      assert text =~ "No chart to draw"
+      assert text =~ "`:source`"
+    end
+
+    test "reports an unreadable path rather than raising" do
+      assert %Kino.Markdown{text: text} =
+               StatifierUI.Kino.inspect_trace(
+                 Path.join(System.tmp_dir!(), "sui-pb2-no-such-file.jsonl")
+               )
+
+      assert text =~ "Could not read"
+      assert text =~ ":enoent"
     end
   end
 end

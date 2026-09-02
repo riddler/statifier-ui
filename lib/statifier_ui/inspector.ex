@@ -448,20 +448,71 @@ defmodule StatifierUI.Inspector do
     Enum.join([header | projection_note(stats) ++ warnings], "\n\n")
   end
 
+  @doc """
+  The status header for a stream read back from storage rather than
+  watched live.
+
+  A persisted stream has no `StatifierUI.Trace.Subscriber` behind it, so
+  there is no status, no buffered or dropped count, and no diagnostics -
+  and this says `persisted` rather than inventing them.
+  `StatifierUI.Live`'s status pane takes the same position for the same
+  reason (`status_kind(nil)`), so both surfaces describe a reloaded trace
+  the same way.
+
+  What a persisted stream *can* still say is whether it is projected: the
+  `projection` header rides on its own `session.start` message (ADR-0012),
+  so a reloaded capture that withholds values still announces that it
+  does.
+  """
+  @spec persisted_status([Message.t()]) :: String.t()
+  def persisted_status(messages) do
+    session =
+      Enum.find_value(messages, "(no session.start)", fn
+        %Message{type: "session.start", session: session} -> session
+        _other -> nil
+      end)
+
+    header =
+      "**Session** `#{session}` - persisted - #{length(messages)} messages " <>
+        "(read from storage; a persisted stream has no subscriber counts)"
+
+    Enum.join([header | persisted_projection_note(messages)], "\n\n")
+  end
+
+  # The header rides on the stream's own `session.start` rather than on
+  # subscriber stats, so it is read from the messages and handed to the
+  # same note renderer the live status uses - one wording for both
+  # surfaces rather than two that can drift apart.
+  @spec persisted_projection_note([Message.t()]) :: [String.t()]
+  defp persisted_projection_note(messages) do
+    messages
+    |> Enum.find_value(fn
+      %Message{type: "session.start", payload: %{"projection" => %{"profile" => profile}}} ->
+        profile
+
+      _other ->
+        nil
+    end)
+    |> case do
+      nil -> []
+      profile -> [profile_note(profile)]
+    end
+  end
+
   # The profile name is surfaced wherever the mode is, so a user asking "why
   # can't I see this" has something to quote (ADR-0012). A stream with no
   # projection says nothing extra, which keeps the unprojected status line
   # byte-identical to what it was.
   @spec projection_note(Subscriber.stats()) :: [String.t()]
-  defp projection_note(%{projection: %{profile: profile}}) do
-    [
-      "> **Projected:** datamodel and payload values are withheld from this " <>
-        "stream under profile `#{profile}`. Redacted slots render as " <>
-        "`(redacted)`, which is not the same as unbound."
-    ]
-  end
-
+  defp projection_note(%{projection: %{profile: profile}}), do: [profile_note(profile)]
   defp projection_note(_stats), do: []
+
+  @spec profile_note(String.t()) :: String.t()
+  defp profile_note(profile) do
+    "> **Projected:** datamodel and payload values are withheld from this " <>
+      "stream under profile `#{profile}`. Redacted slots render as " <>
+      "`(redacted)`, which is not the same as unbound."
+  end
 
   @spec label(atom()) :: String.t()
   defp label(:not_recorded), do: "Live-only"
