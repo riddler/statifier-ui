@@ -5,14 +5,15 @@ exit and entry sets are engine-ordered sequences, not canonically sorted
 sets; extended by ADR-0012 (2026-08-26): the `$`-prefixed reserved value
 set gains exactly one form, `{"$redacted": true}`, producible by the
 projection layer; format version stays 1
-Amendment status: **proposed** (2026-09-01, sui-qay: attribute-level
-entries in the identity tables) - see "Amendment proposed" below; the
-accepted text is unchanged and stays authoritative until the amendment is
-read and accepted.
+Amendment status: **accepted** (2026-09-02, sui-qay: attribute-level
+entries in the identity tables, on the unqualified direction-agent verdict
+under the operator campaign-026 grant, PR 68; drafted 2026-09-01 as
+proposed) - see "Amendment accepted" below; the accepted text outside that
+section is unchanged.
 
-## Amendment proposed 2026-09-01 (sui-qay): attribute-level entries in the identity tables
+## Amendment accepted 2026-09-02 (sui-qay): attribute-level entries in the identity tables
 
-*Proposed, not accepted. Nothing outside this section has been edited, and
+*Accepted 2026-09-02. Nothing outside this section has been edited, and
 no Status line elsewhere in this record has been changed.*
 
 The Decision specifies `session.start` as carrying "the identity tables the
