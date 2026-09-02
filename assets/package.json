@@ -1,0 +1,21 @@
+{
+  "name": "statifier_ui",
+  "version": "0.2.0",
+  "description": "Source hooks for the statifier_ui hex package (ADR-0009: JavaScript ships as source)",
+  "license": "MIT",
+  "type": "module",
+  "main": "js/index.js",
+  "module": "js/index.js",
+  "exports": {
+    ".": "./js/index.js",
+    "./expression_input": "./js/expression_input.js"
+  },
+  "files": [
+    "js"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/riddler/statifier-ui"
+  },
+  "dependencies": {}
+}
