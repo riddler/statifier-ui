@@ -16,6 +16,7 @@
 | [0012](0012-trace-projection-and-redaction.md) | Trace projection and redaction | accepted |
 | [0013](0013-otel-correlation-in-the-wire-format.md) | OTel correlation in the trace wire format | accepted |
 | [0014](0014-non-value-error-reasons-on-the-wire.md) | Non-value error reasons on the wire | proposed |
+| [0015](0015-a-neutral-discriminator-for-exit-reasons.md) | A neutral discriminator beside session.terminated reason | proposed |
 
 New ADRs: next number, same three-section format (Context, Decision,
 Consequences), indexed here in the same commit.
