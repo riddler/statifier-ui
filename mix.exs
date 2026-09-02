@@ -66,7 +66,11 @@ defmodule StatifierUI.MixProject do
     [
       name: "statifier_ui",
       licenses: ["MIT"],
-      files: ~w(lib mix.exs README.md LICENSE CHANGELOG.md),
+      # `assets` is here because ADR-0009 makes it public API: the JavaScript
+      # ships as source and the host's bundler compiles it, so a tarball without
+      # it is a package whose documented hook cannot be imported.
+      # `test/packaging_test.exs` holds this list against the ADRs.
+      files: ~w(lib assets mix.exs README.md LICENSE CHANGELOG.md),
       links: %{
         "GitHub" => @source_url,
         "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md"
@@ -77,13 +81,7 @@ defmodule StatifierUI.MixProject do
   defp deps do
     [
       statifier_dep(),
-
-      # Declared directly because lib/ calls Predicator.* (the expectations
-      # runner). predicator already arrives transitively through statifier at
-      # this same version - see mix.lock - so this states a fact rather than
-      # adding a dependency; without it, warnings_as_errors: true fails the
-      # gate on the first cross-application call.
-      {:predicator, "~> 9.0"},
+      predicator_dep(),
 
       # Both integrations are optional: the package is a component library, and
       # a Livebook host has no reason to pull LiveView, or the reverse. Anything
@@ -105,6 +103,26 @@ defmodule StatifierUI.MixProject do
   # Export STATIFIER_PATH to point at a local checkout while co-developing a
   # change that spans both repos. It is an env var rather than a mix.exs edit
   # so the override never lands in a commit by accident.
+  # INTERIM GIT PIN (campaign 027, sui-wqr).
+  #
+  # Declared directly because lib/ calls Predicator.* - the expectations runner
+  # and, now, `StatifierUI.Expression`'s completion source. predicator also
+  # arrives transitively through statifier, so `override: true` is what lets a
+  # git ref stand in for the hex release both requirements name.
+  #
+  # The ref is `Predicator.Vocabulary` (px-15q), which is on predicator-ex main
+  # and not yet on Hex; `StatifierUI.Expression` degrades to declared paths
+  # alone without it, so this pin buys the grammar half rather than the
+  # package's ability to compile. It is replaced by a `~> 9.1` hex requirement
+  # the moment predicator publishes - the FINAL re-pin bead in the operator's
+  # queue owns that swap.
+  defp predicator_dep do
+    {:predicator,
+     github: "riddler/predicator-ex",
+     ref: "780e4319d9b9458cd99d2e4212296cab54ffcc7f",
+     override: true}
+  end
+
   defp statifier_dep do
     case System.get_env("STATIFIER_PATH") do
       nil -> {:statifier, "~> 2.0"}

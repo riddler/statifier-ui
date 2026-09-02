@@ -147,3 +147,83 @@ superseding or amending record if the answer contradicts this one.
   practically requires the precompiled-blob pattern, and Livebook migrated
   away from it to CM6. Choosing Monaco would have forced the rejected
   distribution model. Rejected.
+
+---
+
+## Note (2026-09-02): the `assets/` layout the first JavaScript fixed
+
+A dated note rather than an amendment, because no clause of the decision
+moves. JavaScript still ships as source under `assets/`, the host's bundler
+still compiles it, the editor is still CodeMirror 6, the precompiled
+`priv/static` bundle is still the documented fallback and still not the
+default, and the Kino open question is still open. Nothing above this line
+changes.
+
+The note exists because this record made two commitments that only one of them
+could be checked against an empty directory. It said the JavaScript would live
+in `assets/`, and it said **"`assets/` becomes public API. Its entry points,
+export names, and the hook names hosts register are a compatibility surface
+with the same versioning obligations as the Elixir modules."** Until sui-wqr
+there was no `assets/`, so that public API had no members and no shape. The
+first file to land settles the shape by existing, whether or not anyone writes
+it down. This writes it down.
+
+**The layout.**
+
+```
+assets/
+  package.json          name "statifier_ui", "type": "module", main js/index.js
+  js/
+    index.js            the entry point: named hook exports + StatifierUIHooks
+    expression_input.js the StatifierUIExpressionInput hook
+```
+
+**The `file:` target is `assets/`, not the package root.** A host adds
+
+```json
+"statifier_ui": "file:../deps/statifier_ui/assets"
+```
+
+This differs by one path segment from the line the decision above quotes, and
+the reason is mechanical rather than a change of mind: npm resolves a `file:`
+dependency against the directory holding `package.json`, and this package's
+root already has a `mix.exs` and a hex `files:` list. Putting `package.json`
+at the root would mean publishing a second manifest at the top of an Elixir
+package and adding the root's non-JavaScript neighbours to npm's view of it.
+`live_toast` points hosts at its `assets/` for the same reason, and it is one
+of the three packages this record named as the pattern being adopted. The
+decision's own commitment - source, `file:`, host bundler - is unchanged; only
+the segment the path ends on is now stated.
+
+**`assets/js/index.js` is the entry point, and the export names are the API.**
+`StatifierUIExpressionInput` is exported by name; `StatifierUIHooks` is every
+hook this package ships, keyed by the name its component renders, so a host
+registers all of them by spreading one object. A hook name is rendered as
+`phx-hook` by the Elixir side and typed into a host's `app.js` by hand, which
+makes renaming one exactly as breaking as renaming a public Elixir function,
+and it is versioned that way.
+
+**The first hook has no imports, and that is inside this record rather than an
+exception to it.** The decision rules out colocated hooks "for anything
+touching npm dependencies" and keeps them "fine for a genuinely self-contained
+hook with no imports"; CodeMirror 6 is chosen as **the editor**, meaning the
+source-editing pane. `StatifierUIExpressionInput` is neither: it upgrades a
+one-line `<input>` inside another package's inspector form, and it imports
+nothing. It ships as source under `assets/` anyway, because that is the
+delivery this record decides for all of this package's JavaScript and a second
+delivery mechanism for one file would be the thing worth avoiding. A host that
+registers no hook keeps the field, which renders a native `<datalist>` and
+needs no JavaScript at all.
+
+**What the gate can and cannot say about any of this.** The toolchain stays
+Node-free, so nothing here lints, bundles, type-checks, or executes the
+JavaScript, exactly as the Consequences above predict. Two things are
+mechanically held: `test/packaging_test.exs` fails the moment a file exists
+under `assets/` that `mix.exs`'s hex `files:` list does not publish, and
+`StatifierUI.Live.ExpressionInput`'s tests assert the hook name and the
+`data-completions` payload the hook reads. The JavaScript's own correctness
+still surfaces in a host's build, which is the price this record already
+accepted.
+
+No decision moves, no clause is edited, and no text above this line changes.
+Filed with `sui-wqr`, campaign 027's condition-editor arc.

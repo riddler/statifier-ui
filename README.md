@@ -196,6 +196,79 @@ run its own fixtures as part of its test suite. See
 [fixture bundles](docs/fixture-bundles.md) for the per-fragment layout and the
 sidecar file format.
 
+## Editing an expression
+
+`StatifierUI.Live.ExpressionInput` is an expression field with completion:
+predicator's own grammar - operators, keywords, literal words, duration units,
+and every function the host's providers resolve - plus the datamodel paths the
+host declares, offered at the caret.
+
+It is written for
+[statifier_blocks](https://github.com/riddler/statifier-blocks)' ADR-0005
+`expression_component` seam, which is the affordance that record defers to this
+package, and it drops into an editor as a function reference:
+
+```elixir
+<StatifierBlocks.Editor.editor
+  ...
+  expression_component={&StatifierUI.Live.ExpressionInput.expression_input/1}
+  path_candidates={StatifierBlocks.Datamodel.candidates(document, datamodel)}
+/>
+```
+
+Nothing about it is specific to that package - any host with an expression to
+edit can render it directly:
+
+```heex
+<StatifierUI.Live.ExpressionInput.expression_input
+  id="rule-cond"
+  name="rule[cond]"
+  value={@cond}
+  candidates={["order.total", "customer.tier"]}
+/>
+```
+
+The field carries no event of its own. It renders an `<input>` with the `name`
+it was given, so an edit arrives through the `phx-change` of whatever form the
+host already has around it - which is also true of a completion the author
+picks with the keyboard.
+
+**Without JavaScript** the field is bound to a native `<datalist>` of the
+word-shaped completions, and that is a working field. **With the hook**
+registered it drops the datalist and offers a caret-aware list instead: the
+token under the cursor is the prefix, arrow keys move, Enter or Tab inserts,
+Escape dismisses.
+
+Registering the hook is the two steps ADR-0009 describes - the JavaScript ships
+as source and your bundler compiles it. In `assets/package.json`:
+
+```json
+"dependencies": {
+  "statifier_ui": "file:../deps/statifier_ui/assets"
+}
+```
+
+and in `assets/js/app.js`:
+
+```javascript
+import { StatifierUIHooks } from "statifier_ui"
+
+let liveSocket = new LiveSocket("/live", Socket, {
+  hooks: { ...StatifierUIHooks }
+})
+```
+
+`StatifierUIHooks` is every hook this package ships, keyed by the name its
+component renders; `StatifierUIExpressionInput` is the one this field uses and
+can be imported on its own. Hook names and export names are public API
+(ADR-0009).
+
+Completion needs `Predicator.Vocabulary`, and a host on a predicator without it
+gets its declared paths and no grammar entries rather than an error - the
+rendered input stamps `data-vocabulary` so the two cases are told apart.
+`StatifierUI.Expression.completions/2` is the same list without any of the
+markup, for a host that would rather render its own control.
+
 ## The Livebook inspector
 
 `StatifierUI.Kino.inspect/3` composes the four panes above - configuration
@@ -235,12 +308,15 @@ walks the whole widget end to end and doubles as its manual acceptance test.
 | `StatifierUI.DatamodelExplorer` | the datamodel, live from a trace or authoring-time from a chart |
 | `StatifierUI.EventInjection` | the palette of example events a fixture set defines |
 | `StatifierUI.TruthTable` | expressions evaluated across datasets |
+| `StatifierUI.Expression` | the completion source: predicator's grammar plus declared datamodel paths |
 | `StatifierUI.Fixtures` | the example-data contract: scenarios, events, datasets, expressions |
 | `StatifierUI.Trace.Subscriber` | a session's effect stream, normalized and buffered |
 | `StatifierUI.Inspector` | the four panes composed, as strings |
 | `StatifierUI.Kino` | the same, as Livebook widgets (optional `:kino`) |
+| `StatifierUI.Live.ExpressionInput` | an expression field with completion (optional `:phoenix_live_view`) |
 
-Everything except `StatifierUI.Kino` is pure and dependency-free: build the
+Everything except `StatifierUI.Kino` and `StatifierUI.Live.*` is pure and
+dependency-free: build the
 strings, render them wherever you like.
 
 ## Documentation
