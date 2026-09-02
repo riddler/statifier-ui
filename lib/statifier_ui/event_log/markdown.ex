@@ -5,8 +5,11 @@ defmodule StatifierUI.EventLog.Markdown do
 
   `render/2` is a pure function over the log and the `StatifierUI.EventLog.Labels.t()`
   that resolves its indexes - it names `Kino` only in this moduledoc and
-  calls nothing under `Kino.*`. `sui-t36.8` owns wrapping the returned string
-  in an actual `Kino.Markdown` widget.
+  calls nothing under `Kino.*`, so the same string serves a Livebook cell, a
+  generated docs page, or a test assertion. `StatifierUI.Kino.Updater` is the
+  widget wrapper: it hands `StatifierUI.Inspector.event_log/2`'s string,
+  which is this module's output, to `Kino.Markdown.new/1` for the
+  inspector's log frame.
 
   ## Structure
 

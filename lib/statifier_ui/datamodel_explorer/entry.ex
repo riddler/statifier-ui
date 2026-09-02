@@ -7,8 +7,8 @@ defmodule StatifierUI.DatamodelExplorer.Entry do
 
   Struct and types only - the way `StatifierUI.EventLog.Round` and
   `StatifierUI.EventInjection.Entry` are - because both
-  `StatifierUI.DatamodelExplorer.Scope` (authoring and live alike) and
-  `sui-t36.8`'s renderer share this one shape.
+  `StatifierUI.DatamodelExplorer.Scope` (authoring and live alike) and the
+  renderer `StatifierUI.DatamodelExplorer.Markdown` share this one shape.
   """
 
   @typedoc """
