@@ -1,14 +1,15 @@
 # ADR-0007: Text-first authoring
 
 Status: accepted (2026-08-16)
-Amendment status: **proposed** (2026-09-01, sui-qay: attribute-level
-stamping and the closed layering gap) - see "Amendment proposed" below;
-the accepted text is unchanged and stays authoritative until the amendment
-is read and accepted.
+Amendment status: **accepted** (2026-09-02, sui-qay: attribute-level
+stamping and the closed layering gap, on the unqualified direction-agent
+verdict under the operator campaign-026 grant, PR 68; drafted 2026-09-01
+as proposed) - see "Amendment accepted" below; the accepted text outside
+that section is unchanged.
 
-## Amendment proposed 2026-09-01 (sui-qay): attribute-level stamping, and the layering gap is closed
+## Amendment accepted 2026-09-02 (sui-qay): attribute-level stamping, and the layering gap is closed
 
-*Proposed, not accepted. Nothing outside this section has been edited, and
+*Accepted 2026-09-02. Nothing outside this section has been edited, and
 no Status line elsewhere in this record has been changed.*
 
 Two passages of the accepted text - the "Hover targets go finer than one
