@@ -13,14 +13,17 @@
 // breaking change for every host that registered the old one.
 
 export { StatifierUIExpressionInput } from "./expression_input.js";
+export { StatifierUIExpressionPicklist } from "./expression_picklist.js";
 
 import { StatifierUIExpressionInput } from "./expression_input.js";
+import { StatifierUIExpressionPicklist } from "./expression_picklist.js";
 
 // Every hook this package ships, keyed by the name its component renders.
 // Spreading this object is the one-line registration; a host that wants only
 // some of them imports those by name instead.
 export const StatifierUIHooks = {
   StatifierUIExpressionInput,
+  StatifierUIExpressionPicklist,
 };
 
 export default StatifierUIHooks;
