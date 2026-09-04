@@ -38,6 +38,15 @@ defmodule StatifierUI.Trace.CaptureTest do
     path
   end
 
+  # The processes still running that this test process is linked to. Dead pids
+  # are filtered out because a link is torn down by the exit signal, which can
+  # still be in flight when `GenServer.stop/1`'s own monitor has already
+  # returned - a leak is a pid that is alive, not a pid that is listed.
+  defp live_links do
+    {:links, links} = Process.info(self(), :links)
+    Enum.filter(links, &Process.alive?/1)
+  end
+
   describe "record/3" do
     test "captures the initialize burst a late subscriber would have missed" do
       {machine, session} = recorded_session("sess_capture_initialize")
@@ -84,13 +93,24 @@ defmodule StatifierUI.Trace.CaptureTest do
       assert {:error, :not_recorded} = Capture.record(session, machine)
     end
 
+    # Scoped to this process's own links rather than to `Process.list/0`
+    # (sui-9ge): `record/3` starts its subscriber with `start_link`, so the
+    # caller is the test process and a subscriber left running is necessarily
+    # an extra live link here. The global count it used to sample was racy
+    # under `async: true` - the rest of the parallel suite starts and stops
+    # processes of its own between the two samples.
+    #
+    # Sabotage: dropped `GenServer.stop(subscriber)` from `record/3`'s
+    # `after` clause - this test went red on the second assert with the
+    # leaked subscriber pid in the diff, and every other test in this file
+    # stayed green.
     test "leaves no subscriber process behind" do
       {machine, session} = recorded_session("sess_capture_cleanup")
-      before = length(Process.list())
+      before = live_links()
 
       assert {:ok, _messages} = Capture.record(session, machine)
 
-      assert length(Process.list()) <= before
+      assert live_links() -- before == []
     end
   end
 
