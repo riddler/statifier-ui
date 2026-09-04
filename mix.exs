@@ -87,7 +87,16 @@ defmodule StatifierUI.MixProject do
       # `StatifierUI.Expression`'s completion source. 9.1 is the floor because
       # `Predicator.Vocabulary` (px-15q) landed there and the completion source
       # reads it.
-      {:predicator, "~> 9.1"},
+      #
+      # INTERIM git pin: `StatifierUI.Expression.simple/2` reads
+      # `Predicator.Simple`, which is on predicator-ex main and not yet in a
+      # Hex release. `mix hex.build` refuses a git dep, so this package cannot
+      # be published until the pin returns to a Hex requirement once 9.2.0 is
+      # out.
+      {:predicator,
+       github: "riddler/predicator-ex",
+       ref: "7ff1d0c5e0d2e2cc0865380edd7cb04e8ba10bde",
+       override: true},
 
       # Both integrations are optional: the package is a component library, and
       # a Livebook host has no reason to pull LiveView, or the reverse. Anything
