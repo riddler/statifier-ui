@@ -7,6 +7,11 @@ verdict under the operator campaign-026 grant, PR 68; drafted 2026-09-01
 as proposed) - see "Amendment accepted" below; the accepted text outside
 that section is unchanged.
 
+Amendment status: **proposed** (2026-09-04, sui-gcm: a picklist is a
+rendering of the expression string, and the component owns no second
+representation) - see "Amendment proposed" below; the accepted text
+outside that section is unchanged, as is the sui-qay amendment above it.
+
 ## Amendment accepted 2026-09-02 (sui-qay): attribute-level stamping, and the layering gap is closed
 
 *Accepted 2026-09-02. Nothing outside this section has been edited, and
@@ -70,6 +75,130 @@ The contract is recorded now, while the wire-format half is being written,
 so the renderer is built against it rather than retrofitted - the same
 reason the accepted text wrote down `data-state-index` before there was an
 SVG to put it on.
+
+## Amendment proposed 2026-09-04 (sui-gcm): a picklist is a rendering of the expression string, and the component owns no second representation
+
+*Proposed 2026-09-04. Nothing outside this section has been edited, and
+no Status line elsewhere in this record has been changed. This lands at
+`proposed`; it flips to accepted only by a separate, gated pull request
+that moves the Status line above and nothing else.*
+
+The expression-editing component grows a picklist mode: an author editing
+a `cond` can be shown a row of field / operator / value dropdowns instead
+of a bare text box. A row of dropdowns is a structured editing surface,
+which is the shape this record spent its Decision ruling out for charts -
+so where that affordance stops has to be written down, not left to the
+first implementation to imply.
+
+**The component owns no second representation.** A picklist is a
+*rendering* of the predicator source string, computed from that string on
+demand, and not a parallel data model kept beside it. Every edit an author
+makes through a dropdown is written back as source text, and the host
+still stores a string and only a string. There is no JSON predicate AST,
+no serialized clause list, no picklist document with its own identity,
+versioning, or migrations. Predicator source remains the only expression
+language in this package, and the picklist has no way to express anything
+the source cannot.
+
+**Why this follows from the accepted text rather than sitting beside it.**
+The Decision above rules that all modification is via text and the
+visualization is a read-only rendering of that text, and it gives the
+reason: a second editing surface backed by its own model becomes a second
+source of truth, and every edit then has to survive a round trip that
+loses whatever the model cannot represent. The picklist is the same
+question asked about expressions instead of charts, and it gets the same
+answer for the same reason - with one difference that is worth being
+precise about. The picklist *is* an editing surface, which the diagram
+deliberately is not. What keeps it inside this record rather than
+superseding it is that it edits **the text itself**, exactly as the
+accepted text's "does not preclude text edits made through UI affordances"
+clause allows: the affordance changes source, visibly, and the source is
+what is stored. A picklist that serialized clauses to its own format would
+be the round-trip problem this record avoids, reintroduced one layer down.
+
+**Display-first, with edit-on-request.** The fallback order is part of the
+contract, because the subset is narrower than the language:
+
+- A source string inside the picklist-renderable subset renders as
+  picklists. `plan == 'pro'` and
+  `status == 'active' AND amount >= 500` are inside it.
+- A source string outside the subset - a valid expression the dropdowns
+  cannot draw, such as
+  `status == 'active' AND (amount >= 500 OR plan == 'pro')` - falls back
+  to the text input the component already has. The component **never
+  refuses the expression and never rewrites the author's text** to force
+  it into the subset. Narrowing an author's working condition to make it
+  drawable would be exactly the silent loss this record exists to prevent.
+- Text that does not parse is a third answer, not the second one. It gets
+  the text input plus the parse error's position, the same way a
+  diagnostic is surfaced in the editor pane.
+- A **"switch to text"** affordance is always present, so the text is
+  never more than one click away and picklist mode is never a trap.
+  **"Switch to picklists"** appears only when the current text is inside
+  the subset, because outside it there is nothing honest to switch to.
+
+**The mechanism, which is what makes "no second representation" a fact
+rather than an assertion.** `StatifierUI.Expression.simple/2` classifies a
+source string and returns the rows a renderer walks:
+
+- `{:ok, rows, connective}` for source inside the subset - one row per
+  clause, with `connective` `nil` for a single row and `:and` or `:or` for
+  two or more.
+- `:outside` for a valid expression the picklist cannot draw.
+- `{:error, error}` for source that does not parse, carrying predicator's
+  own parse error and the position of the failure.
+
+Those three answers are kept apart deliberately, and the record names that
+as contract rather than implementation detail: an editor needs all three,
+and collapsing `:outside` into `{:error, _}` would tell an author their
+working condition is broken.
+
+The operator, path, and value **spellings on every row are derived by
+round-tripping through `Predicator.Simple.to_source/1`**, not read from a
+table maintained here. That is the mechanism by which this package holds
+no second copy of the grammar: an operator a picklist offers is spelled
+the way predicator itself writes it, so what the author picks and what the
+expression carries cannot drift. It is the same discipline
+`Predicator.Vocabulary` already imposes on the completion half, applied to
+the picklist half.
+
+`opts` carries `:value_candidates`, a map from a clause path to the values
+a host offers for it, accepting either `%{label: _, value: _}` maps or
+bare strings. Only the host knows its own value sets - the steps a signup
+wizard actually has, the plans it actually sells - so nothing is inferred
+here, and a path with no entry gets a free-text value control rather than
+a guess.
+
+The upstream dependency degrades rather than breaking, by the two-part
+guard this module already uses for `Predicator.Vocabulary`: the module is
+reached through `Application.get_env(:statifier_ui, :predicator_simple,
+Predicator.Simple)` and guarded with `Code.ensure_loaded?/1` plus
+`function_exported?/3`. A host on a predicator older than
+`Predicator.Simple` gets `:outside` for every source string, which lands
+it in the plain text input - a degraded answer, not a wrong one, and never
+a crash in the host's editor.
+
+**One thing is decided locally, and it is named here as the exception it
+is.** Which operators a picklist offers beside a value of a given kind -
+that a boolean gets `==` and `!=` and nothing else, that a string list
+gets `IN` - is a table in `StatifierUI.Expression` rather than a fact read
+from predicator. The grammar knows every operator; it does not yet know
+which of them belong beside a date as opposed to an integer. This is
+eligibility, not spelling: the spellings still round-trip through
+`to_source/1`, so the table cannot introduce an operator predicator would
+not accept. `Predicator.Simple.operators/1` is expected to own it upstream
+(px-84i), and when it lands the local table goes and the delegation
+replaces it. Until then it is the one place this package holds a judgement
+about the grammar, and it is deliberately the smallest such place.
+
+**What this does not decide.** It does not fix the picklist's visual
+design, its keyboard behaviour, or how a row is added and removed - that
+is presentation, owned by the component bead the same way the rendering
+stack is owned by its own. It does not widen the subset: what is drawable
+is `Predicator.Simple`'s question and predicator's to answer. And it does
+not forbid a future structured storage format for expressions; if that day
+comes it is a superseding record that must answer why a second
+representation will not drift from the source, not a drift into one.
 
 ## Context
 
