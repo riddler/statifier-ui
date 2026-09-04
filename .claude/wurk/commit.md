@@ -40,9 +40,20 @@ package version - read it there, and never repeat it into prose that will
 outlive it. Never edit the version field as part of an ordinary commit; a
 release bead moves it.
 
-The manifest's `release` key is `null`, so `/wurk:release` refuses to run in
-this repo: there is no recipe here and cutting a release is a hand-driven
-operator step, not something this workflow performs.
+The manifest does carry a `release` recipe - `kind: "hex"`, `version_file`
+`mix.exs`, `readme_pin` true - so `/wurk:release` runs here, driven by that
+block together with the required steps in `.claude/wurk/release.md`. None of
+that is a commit-time concern: the recipe runs on an operator-authorized
+release bead, and it still stops short of tagging, pushing and publishing,
+which `CLAUDE.md`'s authority table holds for the operator in every campaign.
+What it means for an ordinary commit is only this: if a version change turns
+up in the diff and you are not on a release bead, that is the finding -
+report it and stop, do not commit it.
+
+`.claude/wurk.json`'s `release` block and `.claude/wurk/release.md` are
+authoritative on release mechanics; this file defers to them and never
+restates them. Where this paragraph and those two disagree, they are the
+evidence and this paragraph is the defect.
 
 ## Gate thresholds are a human's call
 
