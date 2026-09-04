@@ -291,6 +291,83 @@ defmodule StatifierUI.ExpressionTest do
     end
   end
 
+  describe "the write half: source/2, value_source/2, segments/1" do
+    test "rows written back are the source they were read from" do
+      for source <- [
+            "plan == 'pro'",
+            "status == 'active' AND amount >= 500",
+            "step IN ['payment', 'review']",
+            "status == 'active' OR plan == 'pro'"
+          ] do
+        assert {:ok, rows, connective} = Expression.simple(source)
+        assert Expression.source(rows, connective) == {:ok, source}
+      end
+    end
+
+    # The writer has one spelling per operator, so reading `in` and writing it
+    # back gives `IN`. That is not a rewrite of the author's text: nothing
+    # stores this string until an author edits something, and the component
+    # renders `@value` untouched either way.
+    test "the writer's spelling is canonical, and may differ from what was typed" do
+      assert {:ok, rows, connective} = Expression.simple("step in ['payment']")
+      assert Expression.source(rows, connective) == {:ok, "step IN ['payment']"}
+
+      assert {:ok, rows, connective} = Expression.simple("plan=='pro'")
+      assert Expression.source(rows, connective) == {:ok, "plan == 'pro'"}
+    end
+
+    test "an edited row is written without the editor spelling anything itself" do
+      assert {:ok, [row], nil} = Expression.simple("plan == 'pro'")
+
+      assert Expression.source([%{row | op: :ne}], nil) == {:ok, "plan != 'pro'"}
+
+      assert {:ok, segments} = Expression.segments("card.brand")
+      assert Expression.source([%{row | segments: segments}], nil) == {:ok, "card.brand == 'pro'"}
+    end
+
+    test "a clause tuple is accepted as well as a row, which is what adding one needs" do
+      assert {:ok, [row], nil} = Expression.simple("plan == 'pro'")
+      assert {:ok, segments} = Expression.segments("status")
+      added = [row, {segments, :equal_equal, {:string, "active", :single}}]
+
+      assert Expression.source(added, :and) == {:ok, "plan == 'pro' AND status == 'active'"}
+    end
+
+    test "no rows is no source, rather than an invented one" do
+      assert Expression.source([], nil) == :error
+      assert Expression.source([], :and) == :error
+    end
+
+    test "value_source/2 spells one value the way the writer spells it" do
+      assert Expression.value_source(:equal_equal, {:string, "pro", :single}) == {:ok, "'pro'"}
+      assert Expression.value_source(:equal_equal, {:string, "pro", :double}) == {:ok, ~s("pro")}
+      assert Expression.value_source(:gte, {:integer, 500}) == {:ok, "500"}
+      assert Expression.value_source(:equal_equal, {:boolean, true}) == {:ok, "true"}
+
+      assert Expression.value_source(:in, {:list, [{:string, "payment", :single}]}) ==
+               {:ok, "['payment']"}
+    end
+
+    test "a value written on its own parses back to the value it came from" do
+      assert {:ok, [row], nil} = Expression.simple("step in ['payment', 'review']")
+      assert {:ok, written} = Expression.value_source(:in, row.value)
+      assert {:ok, [again], nil} = Expression.simple("step in " <> written)
+      assert again.value == row.value
+    end
+
+    test "segments/1 reads a declared path with predicator's own parser" do
+      assert Expression.segments("status") == {:ok, [root: "status"]}
+      assert Expression.segments("card.brand") == {:ok, [root: "card", property: "brand"]}
+      assert Expression.segments("cart['items']") == {:ok, [root: "cart", key: "items"]}
+    end
+
+    test "segments/1 refuses a string that is not a path" do
+      for source <- ["amount >= 500", "len(plan)", "", "'pro'"] do
+        assert Expression.segments(source) == :error
+      end
+    end
+  end
+
   describe "the degraded source (no Predicator.Simple)" do
     setup do
       Application.put_env(:statifier_ui, :predicator_simple, NotPredicatorSimple)
@@ -305,6 +382,14 @@ defmodule StatifierUI.ExpressionTest do
 
     test "no operators are offered, because there is nothing truthful to offer" do
       assert Expression.operators(:string) == []
+    end
+
+    test "the write half answers :error rather than guessing at a spelling" do
+      assert Expression.source([{[root: "plan"], :equal_equal, {:string, "pro", :single}}], nil) ==
+               :error
+
+      assert Expression.value_source(:equal_equal, {:string, "pro", :single}) == :error
+      assert Expression.segments("status") == :error
     end
 
     test "simple_available? says which of the two answers :outside means" do

@@ -364,6 +364,125 @@ defmodule StatifierUI.Expression do
       function_exported?(module, :to_source, 1)
   end
 
+  @doc """
+  Writes a source string back from the rows `simple/2` returned.
+
+  The write half of the same round trip: `simple/2` reads source into rows and
+  this reads rows back into source, both through `Predicator.Simple`, so a
+  picklist never has to spell an operator, a quote, or a connective itself.
+  That is what makes the rendered dropdowns a *view* of the source text rather
+  than a second representation of the condition - a renderer edits a row's
+  `:segments`, `:op`, or `:value`, asks for the source, and stores the string
+  it gets back.
+
+  `:error` when `Predicator.Simple` is not resolvable, or when `rows` is
+  empty: there is no source string to write, and inventing one would be the
+  duplication this module exists to avoid.
+
+  ## Examples
+
+      iex> {:ok, rows, connective} =
+      ...>   StatifierUI.Expression.simple("status == 'active' AND amount >= 500")
+      iex> StatifierUI.Expression.source(rows, connective)
+      {:ok, "status == 'active' AND amount >= 500"}
+
+      iex> {:ok, [row], nil} = StatifierUI.Expression.simple("plan == 'pro'")
+      iex> StatifierUI.Expression.source([%{row | value: {:string, "free", :single}}], nil)
+      {:ok, "plan == 'free'"}
+
+      iex> StatifierUI.Expression.source([], nil)
+      :error
+
+  """
+  @spec source([row() | {[tuple()], atom(), term()}], connective()) ::
+          {:ok, String.t()} | :error
+  def source([], _connective), do: :error
+
+  def source(rows, connective) do
+    if simple_available?() do
+      module = simple_module()
+      clauses = Enum.map(rows, &clause/1)
+
+      {:ok, module |> struct(connective: connective, clauses: clauses) |> module.to_source()}
+    else
+      :error
+    end
+  end
+
+  @doc """
+  The source text one clause value is written as, on its own.
+
+  `source/2` covers every edit a renderer makes to a whole expression. This
+  covers the one case it cannot: a control that has to *compose* a value - a
+  free-text field that types into a quoted string, a multi-select that builds
+  a list - needs the spellings of the pieces, and asking for them here keeps
+  them coming from `Predicator.Simple.to_source/1` rather than from a quoting
+  rule written a second time in JavaScript.
+
+  `op` is the operator the value sits beside, because `:in` is the one
+  operator whose right-hand side is a list.
+
+  ## Examples
+
+      iex> StatifierUI.Expression.value_source(:equal_equal, {:string, "pro", :single})
+      {:ok, "'pro'"}
+
+      iex> StatifierUI.Expression.value_source(:gte, {:integer, 500})
+      {:ok, "500"}
+
+      iex> StatifierUI.Expression.value_source(:in, {:list, [{:string, "payment", :single}]})
+      {:ok, "['payment']"}
+
+  """
+  @spec value_source(atom(), term()) :: {:ok, String.t()} | :error
+  def value_source(op, value) do
+    if simple_available?() do
+      {:ok, value_source(simple_module(), op, value)}
+    else
+      :error
+    end
+  end
+
+  @doc """
+  The path segments a declared datamodel path parses to.
+
+  A picklist's field dropdown offers the paths a host declared, as strings.
+  Swapping a clause onto one of them needs that path in the structural form a
+  clause carries, and the only honest way to get there is predicator's own
+  parser - a path split on dots here would read `cart['items']` wrong and
+  would be a second parser besides.
+
+  `:error` for a string that is not a path, and for every string when
+  `Predicator.Simple` is not resolvable.
+
+  ## Examples
+
+      iex> StatifierUI.Expression.segments("card.brand")
+      {:ok, [root: "card", property: "brand"]}
+
+      iex> StatifierUI.Expression.segments("amount >= 500")
+      :error
+
+  """
+  @spec segments(String.t()) :: {:ok, [tuple()]} | :error
+  def segments(path) when is_binary(path) do
+    if simple_available?() do
+      module = simple_module()
+      probe = path <> " " <> operator_label(module, :equal_equal) <> " 0"
+
+      case module.from_source(probe) do
+        {:ok, %{clauses: [{segments, _op, _value}]}} -> {:ok, segments}
+        _other -> :error
+      end
+    else
+      :error
+    end
+  end
+
+  @spec clause(row() | {[tuple()], atom(), term()}) :: {[tuple()], atom(), term()}
+  defp clause(%{segments: segments, op: op, value: value}), do: {segments, op, value}
+  defp clause({_segments, _op, _value} = clause), do: clause
+
   @spec grammar(keyword()) :: [completion()]
   defp grammar(opts) do
     if vocabulary_available?() do
