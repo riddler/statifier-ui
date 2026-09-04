@@ -10,6 +10,59 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into a version section at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [0.4.0] 2026-09-04
+
+Structured authoring reaches the expression field. `StatifierUI.Expression`
+gains a read and write pass over the picklist-renderable subset of
+predicator's grammar, and `StatifierUI.Live.ExpressionInput` renders that
+subset as one row of dropdowns per clause - field, operator, value - keeping
+the text field for anything outside it. The source string stays the single
+representation: picklists are a rendering of it and never a second form of it
+(ADR-0007), and every value a dropdown offers is a complete expression the
+writer produced.
+
+### Added
+
+- `StatifierUI.Expression.simple/2` classifies a source string against the
+  picklist-renderable subset, returning `{:ok, rows, connective}` for source a
+  row of dropdowns can draw, `:outside` for a valid expression it cannot, and
+  `{:error, error}` for source that does not parse. Each row carries the field
+  path, the operator, the value, and the value's kind in both structural and
+  source form.
+- `StatifierUI.Expression.operators/1` returns the operators a picklist offers
+  beside a value of a given kind, and
+  `StatifierUI.Expression.value_candidates/2` normalizes the values a host
+  declares for a path.
+- `StatifierUI.Expression.simple_available?/0` reports whether the resolved
+  predicator exposes `Predicator.Simple`. A host on an older predicator gets
+  `:outside` for every source string rather than an error.
+- `StatifierUI.Live.ExpressionInput` renders a **picklist mode**: a source
+  string inside the picklist-renderable subset draws one row of dropdowns per
+  clause - field, operator, value - with a connective toggle, an add-clause
+  button and a remove-clause button per row. A valid expression outside the
+  subset, and source that does not parse, render the text input as before.
+  The component never refuses a source string and never rewrites one.
+- Source that does not parse now renders the text input alongside the parse
+  error's message and position, stamped as `data-error-position`, rather than
+  falling back silently.
+- A switch to text mode is always offered; the switch to picklists appears
+  only while the current text is inside the subset. `:mode` (`:auto`, `:text`,
+  `:picklist`) sets which mode renders first, and `:value_candidates` supplies
+  the values a host offers per clause path.
+- `StatifierUIExpressionPicklist`, a second hook, shipped as source alongside
+  the completion popup and exported from `StatifierUIHooks`.
+  `StatifierUI.Live.ExpressionInput.picklist_hook_name/0` names it, and
+  `display_label/1` is the one place an operator label is cased for display.
+  A host that registers no hook gets the text field alone.
+- `StatifierUI.Expression.source/2` writes a source string back from the rows
+  `simple/2` returned, `value_source/2` spells one clause value on its own,
+  and `segments/1` reads a declared path into the structural form a clause
+  carries. Together they are the write half of the same round trip through
+  `Predicator.Simple`, which is what keeps the source text the single
+  representation: every picklist option's value is a complete expression the
+  writer produced, and no quoting, escaping, list punctuation or operator
+  spelling is repeated in JavaScript.
+
 ## [0.3.0] 2026-09-02
 
 The ops surface arrives. `StatifierUI.Live` ships read-only LiveView
