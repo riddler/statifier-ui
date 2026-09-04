@@ -113,4 +113,206 @@ defmodule StatifierUI.ExpressionTest do
       end
     end
   end
+
+  describe "the picklist half: what is in the subset" do
+    test "a single clause carries no connective" do
+      assert {:ok, [row], nil} = Expression.simple("status == 'active'")
+
+      assert row.path == "status"
+      assert row.op == :equal_equal
+      assert row.value_kind == :string
+      assert row.value == {:string, "active", :single}
+    end
+
+    test "clauses joined by one connective carry it" do
+      assert {:ok, rows, :and} = Expression.simple("status == 'active' AND amount >= 500")
+      assert Enum.map(rows, & &1.path) == ["status", "amount"]
+      assert Enum.map(rows, & &1.op) == [:equal_equal, :gte]
+
+      assert {:ok, _rows, :or} = Expression.simple("plan == 'pro' OR amount >= 500")
+    end
+
+    test "a membership clause reads as a list value" do
+      assert {:ok, [row], nil} = Expression.simple("step in ['payment', 'review']")
+
+      assert row.op == :in
+      assert row.value_kind == {:list, :string}
+      assert row.value == {:list, [{:string, "payment", :single}, {:string, "review", :single}]}
+    end
+
+    test "a dotted path and a bracket path both come back as one field" do
+      assert {:ok, [dotted], nil} = Expression.simple("card.brand == 'visa'")
+      assert dotted.path == "card.brand"
+      assert dotted.segments == [root: "card", property: "brand"]
+
+      assert {:ok, [bracketed], nil} = Expression.simple("cart['items'] contains 'gift'")
+      assert bracketed.path == "cart['items']"
+      assert bracketed.segments == [root: "cart", key: "items"]
+    end
+
+    test "a relative date is a value like any other, so a form can offer a window control" do
+      assert {:ok, [row], nil} = Expression.simple("signup.created_at < 30d ago")
+
+      assert row.value_kind == :relative_date
+      assert row.value == {:relative_date, [{30, "d"}], :ago}
+      assert row.value_source == "30d ago"
+    end
+  end
+
+  describe "the picklist half: what is outside it, and what is not an expression" do
+    test "a valid expression a picklist cannot draw is :outside, not an error" do
+      for source <- [
+            "status == 'active' AND (amount >= 500 OR plan == 'pro')",
+            "NOT plan == 'pro'",
+            "status == 'active' AND amount >= 500 OR plan == 'pro'",
+            "amount + 1 >= 500",
+            "len(step) > 0",
+            "500 <= amount"
+          ] do
+        assert Expression.simple(source) == :outside,
+               "#{source} is outside the subset and did not answer :outside"
+      end
+    end
+
+    test "source that does not parse stays an error, so the caller can underline it" do
+      assert {:error, error} = Expression.simple("amount >= >=")
+      assert error.position == {1, 11}
+    end
+  end
+
+  describe "value candidates" do
+    test "a row carries the values its host declared for that path" do
+      assert {:ok, [row], nil} =
+               Expression.simple("step in ['payment', 'review']",
+                 value_candidates: %{"step" => ["payment", "review", "confirmation"]}
+               )
+
+      assert Enum.map(row.candidates, & &1.label) == ["payment", "review", "confirmation"]
+    end
+
+    test "a candidate may name a label distinct from the value it writes" do
+      assert {:ok, [row], nil} =
+               Expression.simple("plan == 'pro'",
+                 value_candidates: %{"plan" => [%{label: "Pro", value: "pro"}]}
+               )
+
+      assert row.candidates == [%{label: "Pro", value: "pro"}]
+    end
+
+    test "a path the host declared nothing for gets an empty list, never a guess" do
+      assert {:ok, [row], nil} = Expression.simple("amount >= 500")
+      assert row.candidates == []
+
+      assert Expression.value_candidates(%{"step" => ["payment"]}, "plan") == []
+    end
+  end
+
+  describe "operator lists" do
+    test "each value kind offers only the operators a picklist can draw beside it" do
+      assert Enum.map(Expression.operators(:boolean), & &1.op) == [:equal_equal, :ne]
+      assert :contains in Enum.map(Expression.operators(:string), & &1.op)
+      assert :gte in Enum.map(Expression.operators(:integer), & &1.op)
+    end
+
+    test "membership belongs to the list side and containment to the scalar side" do
+      assert Enum.map(Expression.operators({:list, :string}), & &1.op) == [:in]
+      refute :in in Enum.map(Expression.operators(:string), & &1.op)
+      refute :contains in Enum.map(Expression.operators({:list, :string}), & &1.op)
+    end
+
+    test "an empty list still has a kind, so a row for one still renders" do
+      assert {:ok, [row], nil} = Expression.simple("step in []")
+      assert row.value_kind == {:list, nil}
+      assert Enum.map(row.operators, & &1.op) == [:in]
+    end
+
+    test "an operator's detail is the grammar's own description" do
+      gte = Expression.operators(:integer) |> Enum.find(&(&1.op == :gte))
+
+      assert gte.label == ">="
+      assert gte.detail == "Greater than or equal to"
+    end
+  end
+
+  # These three hold the spellings this module hands a renderer against the
+  # parser that has to read them back. Nothing here writes source text of its
+  # own - every spelling is asked of `Predicator.Simple.to_source/1` - and
+  # these tests are what say that asking worked.
+  describe "the picklist half round-trips its own spellings" do
+    @kinds [
+      :string,
+      :integer,
+      :boolean,
+      :duration,
+      :relative_date,
+      {:list, :string}
+    ]
+
+    test "every operator label parses back to the operator it names" do
+      for kind <- @kinds, operator <- Expression.operators(kind) do
+        value = if match?({:list, _member}, kind), do: "[1]", else: "1"
+        source = "amount " <> operator.label <> " " <> value
+
+        assert {:ok, [row], nil} = Expression.simple(source),
+               "#{source} did not read back into the subset"
+
+        assert row.op == operator.op,
+               "#{operator.label} was offered for #{inspect(operator.op)} and parsed as #{inspect(row.op)}"
+      end
+    end
+
+    test "every path parses back to the segments it was rendered from" do
+      for path <- ["status", "card.brand", "cart['items']", "signup.created_at"] do
+        assert {:ok, [row], nil} = Expression.simple(path <> " == 'active'")
+        assert row.path == path
+
+        assert {:ok, [again], nil} = Expression.simple(row.path <> " == 'active'")
+        assert again.segments == row.segments
+      end
+    end
+
+    test "every value_source parses back to the value it was rendered from" do
+      for source <- [
+            "status == 'active'",
+            "amount >= 500",
+            "plan == true",
+            "step in ['payment', 'review']",
+            "signup.created_at < 30d ago",
+            "cart['items'] contains 'gift'"
+          ] do
+        assert {:ok, [row], nil} = Expression.simple(source)
+
+        assert {:ok, [again], nil} =
+                 Expression.simple("amount " <> row.op_label <> " " <> row.value_source),
+               "#{row.value_source} did not read back into the subset"
+
+        assert again.value == row.value
+      end
+    end
+  end
+
+  describe "the degraded source (no Predicator.Simple)" do
+    setup do
+      Application.put_env(:statifier_ui, :predicator_simple, NotPredicatorSimple)
+      on_exit(fn -> Application.delete_env(:statifier_ui, :predicator_simple) end)
+    end
+
+    test "every source string is :outside, including one that does not parse" do
+      for source <- ["status == 'active'", "NOT plan == 'pro'", "amount >= >="] do
+        assert Expression.simple(source) == :outside
+      end
+    end
+
+    test "no operators are offered, because there is nothing truthful to offer" do
+      assert Expression.operators(:string) == []
+    end
+
+    test "simple_available? says which of the two answers :outside means" do
+      refute Expression.simple_available?()
+    end
+  end
+
+  test "simple_available? is true against the resolved predicator" do
+    assert Expression.simple_available?()
+  end
 end
