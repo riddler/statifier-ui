@@ -59,9 +59,9 @@ defmodule StatifierUI.Expression do
 
   ## Examples
 
-      iex> StatifierUI.Expression.completions(["order.total"])
-      ...> |> Enum.find(&(&1.insert == "order.total"))
-      %{label: "order.total", insert: "order.total", kind: "path", detail: "declared path"}
+      iex> StatifierUI.Expression.completions(["card.brand"])
+      ...> |> Enum.find(&(&1.insert == "card.brand"))
+      %{label: "card.brand", insert: "card.brand", kind: "path", detail: "declared path"}
 
   """
 
@@ -460,7 +460,7 @@ defmodule StatifierUI.Expression do
   A picklist's field dropdown offers the paths a host declared, as strings.
   Swapping a clause onto one of them needs that path in the structural form a
   clause carries, and the only honest way to get there is predicator's own
-  parser - a path split on dots here would read `cart['items']` wrong and
+  parser - a path split on dots here would read `account['tags']` wrong and
   would be a second parser besides.
 
   `:error` for a string that is not a path, and for every string when

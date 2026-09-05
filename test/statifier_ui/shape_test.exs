@@ -178,16 +178,16 @@ defmodule StatifierUI.ShapeTest do
     end
 
     test "deep nesting infers recursively" do
-      value = %{"orders" => [%{"items" => [%{"amount" => 100}]}]}
+      value = %{"accounts" => [%{"transactions" => [%{"amount_cents" => 100}]}]}
 
       assert Shape.infer(value) ==
                {:map,
                 %{
-                  "orders" =>
+                  "accounts" =>
                     {:list,
                      {:map,
                       %{
-                        "items" => {:list, {:map, %{"amount" => :integer}}}
+                        "transactions" => {:list, {:map, %{"amount_cents" => :integer}}}
                       }}}
                 }}
     end
