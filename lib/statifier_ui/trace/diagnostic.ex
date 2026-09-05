@@ -1,7 +1,15 @@
 defmodule StatifierUI.Trace.Diagnostic do
   @moduledoc """
-  The wire `error` object for an expression failure: what
-  `docs/wire-format.md` documents as an event object's `error` key.
+  The wire `error` object: what `docs/wire-format.md` documents as an event
+  object's `error` key.
+
+  It has two arms, discriminated on the wire by `"class"` (ADR-0014).
+  `object/4` renders an expression failure (`class: "expression"`) and is
+  the bulk of this module - spans, anchors, and the `location_kind`
+  discipline below are all its. `reason_object/4` renders a non-value
+  reason term (`class: "reason"`), peeling `{:nested_content, _, _}` first
+  so a wrapped expression failure comes back through `object/4` with its
+  span intact rather than as an opaque string.
 
   This is the **only** caller of `Statifier.Parser.Location.resolve_span/4`
   in this repo (ADR-0002 - never reimplement the engine's span composition
@@ -45,7 +53,10 @@ defmodule StatifierUI.Trace.Diagnostic do
   @doc """
   The wire `error` object for `error`, raised with cause `origin`.
 
-  `"kind"` and `"expression"` are always present. `"span"` is present only
+  `"class"` is always `"expression"` here - ADR-0014's discriminator,
+  explicit on both arms rather than absent-means-expression, so a consumer
+  never infers the class from a key's absence. `"kind"` and `"expression"`
+  are always present. `"span"` is present only
   when `error.span` is non-nil. `"location"`/`"location_kind"` are present
   only when both `machine` and `source` are supplied *and* `anchor/3` finds
   a location to anchor on - `origin` of `nil`, `machine`/`source` of `nil`,
@@ -60,10 +71,98 @@ defmodule StatifierUI.Trace.Diagnostic do
           String.t() | nil
         ) :: map()
   def object(%Evaluator.Error{} = error, origin, machine, source) do
-    %{"kind" => kind(error.error), "expression" => error.source}
+    %{"class" => "expression", "kind" => kind(error.error), "expression" => error.source}
     |> put_span(error.span)
     |> put_location(error, origin, machine, source)
   end
+
+  @doc """
+  The wire `error` object for a **non-value reason** term - ADR-0014's
+  `class: "reason"` arm, and the terms it peels on the way there.
+
+  `term` is `Statifier.Interpreter.Content.raise_execution_error/4`'s
+  unconstrained `reason`, which reaches an `error.execution` or
+  `error.communication` event's `data` as a tagged tuple, a bare atom, or
+  anything else at all. Three things happen to it here, in this order:
+
+  1. **`{:nested_content, c_index, inner}` is peeled**, repeatedly,
+     collecting each `c_index` in order into `"content_path"`. The wrapper
+     is what an `<if>` partition or a `<foreach>` body puts around a failure
+     raised inside it, and treating it as opaque would leave every nested
+     expression failure rendering as a string - ADR-0014 decision 4.
+  2. **An innermost `%Statifier.Evaluator.Error{}` routes to `object/4`**,
+     so a wrapped expression failure keeps its span and its location and
+     renders as `class: "expression"`, with `"content_path"` beside it.
+  3. **Anything else renders as `class: "reason"`**: `"kind"` derived from
+     the term's shape by `reason_kind/1`, and `"reason"` the whole term's
+     `inspect/1`.
+
+  `"reason"` is documented on the wire as human-readable text rather than
+  structured data to branch on, the same wording `session.terminated`'s
+  `reason` carries. `"kind"` is the branchable half.
+
+  `"location"`/`"location_kind"` are present only when the producer could
+  anchor, and on this arm the anchor is always the owning node's own span
+  (`location_kind: "node"`): there is no expression span to resolve
+  against, so `anchor/3` is called with no error at all.
+  """
+  @spec reason_object(
+          term(),
+          Statifier.Event.Cause.origin() | nil,
+          Machine.t() | nil,
+          String.t() | nil
+        ) :: map()
+  def reason_object(term, origin, machine, source) do
+    {content_path, innermost} = peel(term, [])
+
+    innermost
+    |> classified(origin, machine, source)
+    |> put_content_path(content_path)
+  end
+
+  @spec classified(
+          term(),
+          Statifier.Event.Cause.origin() | nil,
+          Machine.t() | nil,
+          String.t() | nil
+        ) ::
+          map()
+  defp classified(%Evaluator.Error{} = error, origin, machine, source),
+    do: object(error, origin, machine, source)
+
+  defp classified(term, origin, machine, source) do
+    %{"class" => "reason", "kind" => reason_kind(term), "reason" => inspect(term)}
+    |> put_node_location(origin, machine, source)
+  end
+
+  # `c_index` values only - a `{:nested_content, _, _}` whose second element
+  # is not a content index is not the engine's wrapper, so it is classified
+  # as an ordinary tagged tuple rather than peeled into a `content_path`
+  # this format promises is a `session.start` contents-table index.
+  @spec peel(term(), [non_neg_integer()]) :: {[non_neg_integer()], term()}
+  defp peel({:nested_content, c_index, inner}, path) when is_integer(c_index) and c_index >= 0,
+    do: peel(inner, [c_index | path])
+
+  defp peel(term, path), do: {Enum.reverse(path), term}
+
+  @spec put_content_path(map(), [non_neg_integer()]) :: map()
+  defp put_content_path(object, []), do: object
+  defp put_content_path(object, path), do: Map.put(object, "content_path", path)
+
+  # ADR-0014 decision 2: derived from the term's shape, never from a table
+  # of statifier's tags. The tags belong to the engine, they arrive with
+  # engine ADRs, and a table here would be stale on the next one.
+  @spec reason_kind(term()) :: String.t()
+  defp reason_kind(term) when is_atom(term), do: Atom.to_string(term)
+
+  defp reason_kind(term) when is_tuple(term) and tuple_size(term) > 0 do
+    case elem(term, 0) do
+      tag when is_atom(tag) -> Atom.to_string(tag)
+      _other -> "unknown"
+    end
+  end
+
+  defp reason_kind(_term), do: "unknown"
 
   @doc """
   Where to anchor `error`'s span for `origin`: the value location of the
@@ -81,8 +180,12 @@ defmodule StatifierUI.Trace.Diagnostic do
   A candidate value location is only ever returned as `{:value, _}` when
   `error.span` is non-nil - a `nil` span means `resolve_span/4` would not be
   called, so the caller must not be handed a location that invites it.
+
+  `error` of `nil` is ADR-0014's `class: "reason"` arm: there is no
+  expression and no span, so every origin that names a node at all returns
+  `{:node, _}` and nothing ever returns `{:value, _}`.
   """
-  @spec anchor(Statifier.Event.Cause.origin() | nil, Machine.t(), Evaluator.Error.t()) ::
+  @spec anchor(Statifier.Event.Cause.origin() | nil, Machine.t(), Evaluator.Error.t() | nil) ::
           {:value, Location.t()} | {:node, Location.t()} | :none
   def anchor(nil, _machine, _error), do: :none
 
@@ -109,7 +212,12 @@ defmodule StatifierUI.Trace.Diagnostic do
 
   def anchor({:content, c_index, _owner}, machine, error) do
     node = Machine.content(machine, c_index)
-    value_or_node(content_expr_location(node, error.source), content_node_location(node), error)
+
+    value_or_node(
+      content_expr_location(node, error_source(error)),
+      content_node_location(node),
+      error
+    )
   end
 
   def anchor({:state, state_index}, machine, _error) do
@@ -161,9 +269,15 @@ defmodule StatifierUI.Trace.Diagnostic do
   # `<data>` "no distinct value" case). Only ever `{:value, _}` when
   # `error.span` is non-nil, per this module's own "nil span means the
   # helper is not called" rule.
-  @spec value_or_node(Location.t() | nil, Location.t(), Evaluator.Error.t()) ::
+  @spec error_source(Evaluator.Error.t() | nil) :: String.t() | nil
+  defp error_source(%Evaluator.Error{source: source}), do: source
+  defp error_source(nil), do: nil
+
+  @spec value_or_node(Location.t() | nil, Location.t(), Evaluator.Error.t() | nil) ::
           {:value, Location.t()} | {:node, Location.t()}
   defp value_or_node(nil, node_location, _error), do: {:node, node_location}
+
+  defp value_or_node(_candidate, node_location, nil), do: {:node, node_location}
 
   defp value_or_node(_candidate, node_location, %Evaluator.Error{span: nil}),
     do: {:node, node_location}
@@ -182,7 +296,7 @@ defmodule StatifierUI.Trace.Diagnostic do
   # candidate guards. Every other kind (`Content.Send`, `Content.Cancel`,
   # `Content.Script`, `Content.Raise`), or an `If` with no matching branch,
   # has no expression candidate here.
-  @spec content_expr_location(Content.t(), String.t()) :: Location.t() | nil
+  @spec content_expr_location(Content.t(), String.t() | nil) :: Location.t() | nil
   defp content_expr_location(%Content.Log{expr_location: expr_location}, _source),
     do: expr_location
 
@@ -203,7 +317,7 @@ defmodule StatifierUI.Trace.Diagnostic do
 
   defp content_expr_location(_node, _source), do: nil
 
-  @spec branch_matches?(Content.If.Branch.t(), String.t()) :: boolean()
+  @spec branch_matches?(Content.If.Branch.t(), String.t() | nil) :: boolean()
   defp branch_matches?(%Content.If.Branch{cond: {:compiled, _compiled, source}}, source), do: true
   defp branch_matches?(%Content.If.Branch{}, _source), do: false
 
@@ -234,19 +348,13 @@ defmodule StatifierUI.Trace.Diagnostic do
 
   @spec put_location(map(), Evaluator.Error.t(), term(), Machine.t() | nil, String.t() | nil) ::
           map()
-  defp put_location(object, _error, _origin, nil, _source), do: object
-  defp put_location(object, _error, _origin, _machine, nil), do: object
-
-  defp put_location(object, error, origin, %Machine{} = machine, source)
-       when is_binary(source) do
-    case anchor(origin, machine, error) do
+  defp put_location(object, error, origin, machine, source) do
+    case anchored(origin, machine, source, error) do
       :none ->
         object
 
       {:node, location} ->
-        object
-        |> Map.put("location", location_object(location))
-        |> Map.put("location_kind", "node")
+        put_node(object, location)
 
       {:value, value_location} ->
         resolved = Location.resolve_span(value_location, error.span, error.source, source)
@@ -256,6 +364,32 @@ defmodule StatifierUI.Trace.Diagnostic do
         |> Map.put("location_kind", "resolved")
     end
   end
+
+  # The `class: "reason"` arm's location: `anchored/4` is handed no error at
+  # all, so it can only ever come back `:none` or `{:node, _}` - there is no
+  # span to compose and nothing to compose it against.
+  @spec put_node_location(map(), term(), Machine.t() | nil, String.t() | nil) :: map()
+  defp put_node_location(object, origin, machine, source) do
+    case anchored(origin, machine, source, nil) do
+      {:node, location} -> put_node(object, location)
+      _none_or_value -> object
+    end
+  end
+
+  @spec put_node(map(), Location.t()) :: map()
+  defp put_node(object, location) do
+    object
+    |> Map.put("location", location_object(location))
+    |> Map.put("location_kind", "node")
+  end
+
+  @spec anchored(term(), Machine.t() | nil, String.t() | nil, Evaluator.Error.t() | nil) ::
+          {:value, Location.t()} | {:node, Location.t()} | :none
+  defp anchored(_origin, nil, _source, _error), do: :none
+  defp anchored(_origin, _machine, nil, _error), do: :none
+
+  defp anchored(origin, %Machine{} = machine, source, error) when is_binary(source),
+    do: anchor(origin, machine, error)
 
   # A location is always all six fields, wholly present - mirrors
   # `StatifierUI.Trace.Manifest.location_object/1`.

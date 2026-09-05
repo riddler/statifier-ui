@@ -89,6 +89,21 @@ defmodule StatifierUI.Trace.ProjectionDriftTest do
 
   defp event_with_data, do: %{"name" => "go", "type" => "external", "data" => @secret}
 
+  # ADR-0014's reason arm. `reason` is `inspect/1` of an engine reason term,
+  # so a datamodel value reaches it verbatim - the marker stands in for one.
+  defp event_with_error_reason do
+    %{
+      "name" => "error.execution",
+      "type" => "platform",
+      "error" => %{
+        "class" => "reason",
+        "kind" => "not_iterable",
+        "reason" => @secret,
+        "content_path" => [3]
+      }
+    }
+  end
+
   defp populated_messages do
     [
       message("session.datamodel", %{"datamodel" => %{"account" => @secret}}),
@@ -99,6 +114,24 @@ defmodule StatifierUI.Trace.ProjectionDriftTest do
         "prior_value" => @secret
       }),
       message("trace.event_dequeued", %{"event" => event_with_data(), "from" => "external"}),
+      message("trace.event_dequeued", %{
+        "event" => event_with_error_reason(),
+        "from" => "internal"
+      }),
+      message("trace.transitions_selected", %{
+        "t_indexes" => [0],
+        "event" => event_with_error_reason()
+      }),
+      message("trace.finalize_autoforward", %{
+        "event" => event_with_error_reason(),
+        "finalized" => true,
+        "forwarded" => true
+      }),
+      message("effect.autoforward", %{
+        "invoke_id" => "i1",
+        "state_index" => 0,
+        "event" => event_with_error_reason()
+      }),
       message("trace.transitions_selected", %{"t_indexes" => [0], "event" => event_with_data()}),
       message("trace.finalize_autoforward", %{
         "event" => event_with_data(),

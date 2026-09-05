@@ -27,6 +27,13 @@ defmodule StatifierUI.Trace.Normalizer do
   value - it is reduced by `StatifierUI.Trace.Diagnostic.object/4` into
   the wire `error` object and lands on the event's `"error"` key instead
   of `"data"`. The two keys are alternatives, never siblings.
+  An `error.execution` or `error.communication` event's data gets the same
+  treatment for the same reason (ADR-0014): the engine's raise site puts an
+  unconstrained reason term there, `StatifierUI.Value.encode/1` rejects the
+  tagged tuples it is in practice, and the whole message used to be dropped
+  rather than rendered. It is reduced by
+  `StatifierUI.Trace.Diagnostic.reason_object/4` onto the same `"error"`
+  key instead.
 
   ## Absence
 
@@ -466,6 +473,37 @@ defmodule StatifierUI.Trace.Normalizer do
     object =
       Diagnostic.object(
         error,
+        origin_of(ev.cause),
+        Map.get(ctx, :machine),
+        Map.get(ctx, :source)
+      )
+
+    {:ok, Map.put(base, "error", object)}
+  end
+
+  # ADR-0014's reason arm. `Statifier.Interpreter.Content.raise_execution_error/4`
+  # puts an unconstrained `reason` term in these two events' `data`, and
+  # `StatifierUI.Value.encode/1` rejects the tagged tuples it is in practice
+  # - which failed the whole message, so the subscriber dropped it and the
+  # failure never rendered at all. It is reduced structurally instead, onto
+  # the same `"error"` key the clause above uses.
+  #
+  # The clause is selected by the event's `name` and not by whether the term
+  # encodes: ADR-0014's per-variant table is the two names above and nothing
+  # else, and a bare string or a list is a perfectly good `data` value on
+  # every other event. Both names take identical rows - a consumer branches
+  # on `class` and `kind`, never on which `error.*` event carried them.
+  #
+  # `:undefined` is excluded because it is this format's own spelling of
+  # absence (ADR-0005, ADR-0037), not a reason term: rendering it as
+  # `kind: "undefined"` would assert a failure the run never named. The
+  # engine's raise site always supplies a reason, so the exclusion is a
+  # guard on an unreachable shape rather than a case with traffic in it.
+  defp put_event_data(base, %Event{name: name, data: data} = ev, ctx)
+       when name in ["error.execution", "error.communication"] and data != :undefined do
+    object =
+      Diagnostic.reason_object(
+        ev.data,
         origin_of(ev.cause),
         Map.get(ctx, :machine),
         Map.get(ctx, :source)

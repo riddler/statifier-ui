@@ -544,8 +544,8 @@ Emitted when an event is selected off a queue for processing.
 | Field | Type | Presence |
 |---|---|---|
 | name | string | always |
-| data | value | present only when data was supplied and is not an expression-evaluation failure (absence-rule: `:undefined` omits the key, `nil` present as `null`, `%{}` present as `{}`; omitted, instead of failing to normalize, when the event's data is an expression-evaluation failure - such an event carries `error` instead) |
-| error | error object | present only when the event's data is an expression-evaluation failure |
+| data | value | present only when data was supplied and the event carries no `error` object (absence-rule: `:undefined` omits the key, `nil` present as `null`, `%{}` present as `{}`; omitted, instead of failing to normalize, when the event carries `error` - the two keys are alternatives, never siblings) |
+| error | error object | present when the event's data is an expression-evaluation failure, and on every `error.execution` and `error.communication` event that supplied any data at all |
 | type | string | always - `"external"`, `"internal"`, or `"platform"` |
 | cause | cause object | present only for `"internal"`/`"platform"` events the platform itself raised |
 | invokeid | string | present only when set |
@@ -553,17 +553,55 @@ Emitted when an event is selected off a queue for processing.
 | origintype | string | present only when set |
 | sendid | string | present only when set |
 
-**An error object** is the wire rendering of a failed expression
-evaluation (`Statifier.Evaluator.Error.t()`), produced when an event's data
-is such a failure rather than a value:
+**An error object** is the wire rendering of a failure that reached an
+event's data in place of a value. It has two arms, and `class` says which:
+
+- `"expression"` - a failed expression evaluation
+  (`Statifier.Evaluator.Error.t()`), the arm this object was introduced for.
+- `"reason"` - a non-value reason term the engine's raise site put in the
+  data of an `error.execution` or `error.communication` event
+  (ADR-0014). Before ADR-0014 these messages did not render at all: the
+  term is not a value, so the whole message failed to normalize and was
+  dropped.
 
 | Field | Type | Presence |
 |---|---|---|
-| kind | string | always - the underscored name of the predicator error struct, trailing `_error` dropped (e.g. `"undefined_variable"`, `"type_mismatch"`, `"evaluation"`, `"parse"`, `"location"`) |
-| expression | string | always - the failing expression's **entity-expanded** text, not the raw source |
-| span | span object (`start_line`, `start_column`, `end_line`, `end_column`) | present only when the underlying evaluator error carries a span within `expression` |
+| class | string | always - `"expression"` or `"reason"` |
+| kind | string | always - on `"expression"`, the underscored name of the predicator error struct with trailing `_error` dropped (e.g. `"undefined_variable"`, `"type_mismatch"`, `"evaluation"`, `"parse"`, `"location"`); on `"reason"`, the reason term's own tag, or `"unknown"` - see below |
+| expression | string | present only on `class: "expression"`, where it is always present - the failing expression's **entity-expanded** text, not the raw source |
+| span | span object (`start_line`, `start_column`, `end_line`, `end_column`) | present only on `class: "expression"`, and only when the underlying evaluator error carries a span within `expression` |
+| reason | string | present only on `class: "reason"`, where it is always present - human-readable text, not structured data to branch on |
 | location | location object | present only when the producer had both a `Statifier.Machine.t()` and `source` to resolve against, and could anchor the failure on a location at all |
-| location_kind | string | present only alongside `location` - `"resolved"` or `"node"`, see below |
+| location_kind | string | present only alongside `location` - `"resolved"` or `"node"`, see below. Always `"node"` on `class: "reason"`, which has no expression span to resolve |
+| content_path | array of integer | present only when the failure was raised inside an `<if>` partition or a `<foreach>` body and the producer unwrapped it - the `c_index` of each enclosing content node, outermost first |
+
+`class` is explicit on both arms rather than left to be inferred from a
+key's absence, so a consumer tells a known reason from an opaque one
+without string-sniffing. `kind` is not unique across the two classes - a
+future engine tag `parse` would collide with the predicator error name
+`"parse"` - so branch on the pair, never on `kind` alone.
+
+**`kind` on `class: "reason"` is derived from the term's shape**, not from
+a table this format maintains: a tagged tuple gives its tag
+(`{:not_iterable, 42}` gives `"not_iterable"`), a bare token gives itself,
+and anything else gives `"unknown"`. The tags belong to the engine and
+arrive with engine decisions, so a producer meeting one it has never seen
+still emits a usable token rather than failing.
+
+**`reason` is human-readable, and `content_path` is the machine-readable
+half beside it.** `reason` carries the whole term rendered for a person -
+the same standing as `session.terminated`'s `reason`, and the reason it is
+redacted under every projection profile (see "Projection" below): a term
+like `{:not_iterable, 42}` embeds a datamodel value verbatim.
+`content_path`'s integers are `session.start` contents-table indexes, so a
+consumer can point at the enclosing `<if>` or `<foreach>` even when
+`reason` is a sentinel.
+
+A failure raised **inside** an `<if>` partition or a `<foreach>` body
+arrives wrapped, and the producer unwraps it before classifying: a wrapped
+expression failure is still `class: "expression"` with its span and its
+location intact, with `content_path` beside it. A consumer never sees the
+wrapper.
 
 Three notes a consumer needs before using this object to underline
 anything:
@@ -1029,21 +1067,26 @@ is the checklist: a value position added to this format later without a
 projection rule would carry values through a projected stream silently,
 which is the worst failure available here because it is invisible.
 
-`error` carries no value position by construction: the predicator error's
-rendered message - the field that would embed datamodel values - is
-deliberately not on the wire (see the `error` object's fields above), so
-`trace.event_dequeued`'s `error` key needs no row in this table.
+`error` carries no value *position* by construction, on either arm. On
+`class: "expression"` the predicator error's rendered message - the field
+that would embed datamodel values - is deliberately not on the wire (see
+the `error` object's fields above). On `class: "reason"` the field that
+does embed them, `reason`, is redacted unconditionally rather than being a
+position a profile could allow back: it is a whole engine term rendered for
+a person, so no profile makes it safe. That unconditional redaction is a
+row in the table below, beside `session.terminated`'s `reason`; `error`'s
+other keys need none.
 
 | Message | Position |
 |---|---|
 | `session.datamodel` | every value in `datamodel` |
 | `effect.datamodel_change` | `new_value`, `prior_value` |
-| `trace.event_dequeued` | `event.data` |
-| `trace.transitions_selected` | `event.data` |
-| `trace.finalize_autoforward` | `event.data` |
+| `trace.event_dequeued` | `event.data`; `event.error.reason`, replaced whole |
+| `trace.transitions_selected` | `event.data`; `event.error.reason`, replaced whole |
+| `trace.finalize_autoforward` | `event.data`; `event.error.reason`, replaced whole |
 | `trace.done` | `donedata` |
 | `effect.done` | `donedata` |
-| `effect.autoforward` | `event.data` |
+| `effect.autoforward` | `event.data`; `event.error.reason`, replaced whole |
 | `effect.budget_exhausted` | `data` on each `pending_internal_events` entry |
 | `effect.log` | `value` |
 | `effect.invoke` | `params`, `content` |
@@ -1087,8 +1130,8 @@ objects; event `name`s; transition event descriptors; `label` on
 `effect.log`; `src` and `invoke_type` on `effect.invoke`; `target` and
 `send_type` on the send family; `location_path` and `location_source` on
 `effect.datamodel_change`; `session.halted`'s `reason` (a closed three-value
-set); `effect.done`'s `configuration`; and, on `trace.event_dequeued`'s
-`error` object, `kind`, `span`, `location`, and `location_kind`.
+set); `effect.done`'s `configuration`; and, on an event's `error` object,
+`class`, `kind`, `span`, `location`, `location_kind`, and `content_path`.
 
 That list is what leaves a projected stream worth rendering at all: the
 timeline, the diagram highlighting, the click-through to source, and the
@@ -1179,10 +1222,13 @@ sentinel. The cost is stated plainly: without `source`, location objects
 still resolve to line and column but nothing can display the text at them,
 so click-through degrades to coordinates.
 
-`trace.event_dequeued`'s `error.expression` is chart text under the same
-reasoning - it is the failing expression's entity-expanded source, not run
-data - so `allow_source: false` redacts it alongside `source`. `error`'s
-other keys (`kind`, `span`, `location`, `location_kind`) are unaffected.
+An event's `error.expression` is chart text under the same reasoning - it
+is the failing expression's entity-expanded source, not run data - so
+`allow_source: false` redacts it alongside `source`. `error.reason` is the
+one key on that object redacted under *every* profile, `allow_source` or
+not: it is a whole engine reason term rendered for a person and can embed a
+datamodel value verbatim. `error`'s remaining keys (`class`, `kind`,
+`span`, `location`, `location_kind`, `content_path`) are unaffected.
 
 ### What projection is not
 

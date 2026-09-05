@@ -1098,6 +1098,7 @@ defmodule StatifierUI.Trace.NormalizerTest do
       assert {:ok, %Message{} = message} = Normalizer.normalize({:trace, payload}, @ctx)
 
       event_obj = message.payload["event"]
+      assert event_obj["error"]["class"] == "expression"
       assert event_obj["error"]["kind"] == "undefined_variable"
       assert event_obj["error"]["expression"] == "amount < limit"
 
@@ -1189,6 +1190,156 @@ defmodule StatifierUI.Trace.NormalizerTest do
       event_obj = message.payload["event"]
       refute Map.has_key?(event_obj["error"], "span")
       assert event_obj["error"]["location_kind"] == "node"
+    end
+  end
+
+  # -- ADR-0014: a non-value reason term in an error.* event's data -------
+
+  defp error_event(name, data, cause \\ nil) do
+    %Trace.EventDequeued{
+      event: %Event{name: name, type: :platform, data: data, cause: cause},
+      from: :internal,
+      macrostep: 1,
+      microstep: 0,
+      round: 0
+    }
+  end
+
+  defp error_object(payload, ctx \\ @ctx) do
+    assert {:ok, %Message{} = message} = Normalizer.normalize({:trace, payload}, ctx)
+    message.payload["event"]
+  end
+
+  describe "normalize/2 - a reason term in an error.* event's data" do
+    test "a tagged tuple renders as class reason, with the tag as kind" do
+      event_obj = error_object(error_event("error.execution", {:not_iterable, 42}))
+
+      assert event_obj["error"] == %{
+               "class" => "reason",
+               "kind" => "not_iterable",
+               "reason" => "{:not_iterable, 42}"
+             }
+
+      refute Map.has_key?(event_obj, "data")
+    end
+
+    test "error.communication takes the identical shape - only the name differs" do
+      execution = error_object(error_event("error.execution", {:unreachable_target, "#_bad"}))
+
+      communication =
+        error_object(error_event("error.communication", {:unreachable_target, "#_bad"}))
+
+      assert execution["error"] == communication["error"]
+      assert communication["error"]["kind"] == "unreachable_target"
+    end
+
+    test "a bare atom renders as itself" do
+      event_obj = error_object(error_event("error.execution", :no_route))
+
+      assert event_obj["error"]["kind"] == "no_route"
+      assert event_obj["error"]["reason"] == ":no_route"
+    end
+
+    test "anything else renders as kind unknown, with the term inspected" do
+      for term <- ["boom", 42, [1, 2], {"untagged", 1}, {}] do
+        event_obj = error_object(error_event("error.execution", term))
+
+        assert event_obj["error"]["kind"] == "unknown",
+               "#{inspect(term)} should not have produced a tag"
+
+        assert event_obj["error"]["reason"] == inspect(term)
+      end
+    end
+
+    test "an :undefined data keeps the format's absence rule and produces no error object" do
+      event_obj = error_object(error_event("error.execution", :undefined))
+
+      refute Map.has_key?(event_obj, "error")
+      refute Map.has_key?(event_obj, "data")
+    end
+
+    test "a term on any other event name is still a value, not a reason" do
+      event_obj = error_object(error_event("myapp:authorize", "boom"))
+
+      assert event_obj["data"] == "boom"
+      refute Map.has_key?(event_obj, "error")
+    end
+
+    test "a wrapped %Evaluator.Error{} keeps its expression arm and gains content_path" do
+      wrapped = {:nested_content, 2, {:nested_content, 5, @evaluator_error}}
+      event_obj = error_object(error_event("error.execution", wrapped))
+
+      assert event_obj["error"]["class"] == "expression"
+      assert event_obj["error"]["kind"] == "undefined_variable"
+      assert event_obj["error"]["expression"] == "amount < limit"
+      assert event_obj["error"]["content_path"] == [2, 5]
+    end
+
+    test "a wrapped reason term keeps the reason arm and gains content_path" do
+      wrapped = {:nested_content, 0, {:invalid_delay, "soon"}}
+      event_obj = error_object(error_event("error.execution", wrapped))
+
+      assert event_obj["error"]["class"] == "reason"
+      assert event_obj["error"]["kind"] == "invalid_delay"
+      assert event_obj["error"]["reason"] == "{:invalid_delay, \"soon\"}"
+      assert event_obj["error"]["content_path"] == [0]
+    end
+
+    test "a direct %Evaluator.Error{} on an error.* event is the expression arm unchanged" do
+      event_obj = error_object(error_event("error.execution", @evaluator_error))
+
+      assert event_obj["error"]["class"] == "expression"
+      refute Map.has_key?(event_obj["error"], "content_path")
+      refute Map.has_key?(event_obj["error"], "reason")
+    end
+
+    test "the reason arm anchors on the owning node when ctx carries machine and source" do
+      source = """
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="idle" version="1.0" datamodel="predicator">
+          <state id="idle">
+              <onentry>
+                  <foreach array="42" item="i">
+                      <log expr="i"/>
+                  </foreach>
+              </onentry>
+          </state>
+      </scxml>
+      """
+
+      {:ok, machine} = Statifier.compile(source)
+
+      cause = %Cause{
+        origin: {:content, 0, {:onentry, 1, 0}},
+        macrostep: 1,
+        microstep: 0,
+        round: 0
+      }
+
+      ctx = Map.merge(@ctx, %{machine: machine, source: source})
+
+      event_obj =
+        error_object(error_event("error.execution", {:not_iterable, 42}, cause), ctx)
+
+      assert event_obj["error"]["location_kind"] == "node"
+
+      assert %{"start_offset" => start_offset, "end_offset" => end_offset} =
+               event_obj["error"]["location"]
+
+      assert String.slice(source, start_offset, end_offset - start_offset) =~ "<foreach"
+    end
+
+    test "the reason arm omits location when there is no machine or source" do
+      cause = %Cause{
+        origin: {:content, 0, {:onentry, 1, 0}},
+        macrostep: 1,
+        microstep: 0,
+        round: 0
+      }
+
+      event_obj = error_object(error_event("error.execution", {:not_iterable, 42}, cause))
+
+      refute Map.has_key?(event_obj["error"], "location")
+      refute Map.has_key?(event_obj["error"], "location_kind")
     end
   end
 end
