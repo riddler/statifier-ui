@@ -1,6 +1,6 @@
 # ADR-0014: Non-value error reasons on the wire
 
-Status: proposed (2026-09-02, campaign-027)
+Status: accepted (2026-09-05, campaign-029; proposed 2026-09-02, campaign-027)
 
 Extends ADR-0005 additively: the existing event `error` object gains a
 discriminator and two optional fields, and becomes reachable for a class of
