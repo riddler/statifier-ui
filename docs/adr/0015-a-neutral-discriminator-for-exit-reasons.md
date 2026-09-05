@@ -1,6 +1,6 @@
 # ADR-0015: A neutral discriminator beside `session.terminated`'s reason
 
-Status: proposed (2026-09-02, campaign-027)
+Status: accepted (2026-09-05, campaign-029)
 
 Extends ADR-0005 additively: `session.terminated` gains one optional field,
 `kind`, carrying a language-neutral token for the exit reason's class. The
