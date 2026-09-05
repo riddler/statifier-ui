@@ -446,6 +446,35 @@ defmodule StatifierUI.Trace.NormalizerTest do
     end
   end
 
+  describe "normalize/2 - skipped trace effects" do
+    test "a CondsEvaluated payload is skipped, not refused" do
+      # Built through new/2, never a struct literal: the payload module's
+      # moduledoc makes that the contract, and it is what stamps the
+      # counters.
+      payload =
+        Trace.CondsEvaluated.new(
+          %Statifier.MachineState{
+            configuration: MapSet.new(),
+            machine: nil,
+            macrostep: 1,
+            microstep: 0,
+            round: 0
+          },
+          evaluations: [%{t_index: 0, outcome: :enabled, reason: nil}]
+        )
+
+      assert Normalizer.normalize({:trace, payload}, @ctx) == :skip
+    end
+
+    test "the skip is named, so an unconsidered trace payload still refuses" do
+      assert {:error, {:unknown_effect, {:trace, Statifier.Event}}} =
+               Normalizer.normalize(
+                 {:trace, %Statifier.Event{name: "not-a-trace-payload", type: :external}},
+                 @ctx
+               )
+    end
+  end
+
   describe "normalize/2 - unknown effects" do
     test "an unknown tag returns {:error, {:unknown_effect, tag}}" do
       assert Normalizer.normalize({:not_a_real_effect, %{}}, @ctx) ==

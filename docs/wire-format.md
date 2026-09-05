@@ -34,6 +34,13 @@ version bump.** A version bump is reserved for a change that would make a
 consumer of the previous version misread the stream - removing a field,
 changing a field's meaning or shape, or renaming a type.
 
+The producer's mirror of the consumer's second rule: an engine trace effect
+for which this version defines no message is skipped rather than refused, so
+a stream carrying one is still a whole stream. Today that is
+`Statifier.Effect.Trace.CondsEvaluated` (statifier 2.5.0's guard-evaluation
+seam) alone; giving it a type is a v1 addition, not a version bump, and
+`sui-e41` is where that addition is decided.
+
 ## The envelope
 
 Every message is a JSON object. Every message carries:
