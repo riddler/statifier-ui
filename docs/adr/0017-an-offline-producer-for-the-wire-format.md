@@ -229,6 +229,13 @@ avoids paying, it pays in surface.
 Recommended, pending the operator's flip. The Status line above stays
 `proposed`.
 
+**Note, 2026-09-05 (campaign-030, `sui-yse`):** the flip landed in the pull
+request that carries this Note, and the header above now reads `accepted`.
+The sentence above stands as written and is historical: it describes the
+state at the recording pull request, not the record's state today. Added by
+addition rather than by rewording, so the flip removes no line but the
+status text.
+
 ### 1. Option B: `StatifierUI.Trace.Replay.from_events/4`
 
     @spec from_events(
