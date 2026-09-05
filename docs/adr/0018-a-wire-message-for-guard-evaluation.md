@@ -373,6 +373,60 @@ the visitor in variant B, `"disabled"` for the visitor in variant A - which
 is precisely the difference an inspector today renders as two identical
 streams.
 
+### Note 2026-09-05 (sui-51o): two Implementation claims that went stale
+
+*A note, not an amendment. Nothing above or below it has been edited and
+this record's Status line has not been changed - it is still `proposed`,
+and it flips only by its own gated pull request (`sui-3or`), after the
+0.7.0 prep. This note annotates two of the descriptive bullets in the
+section above; it touches no numbered decision, and every decision 1-6
+landed as written.*
+
+`sui-e41` implemented this record on `main` at `ac93c18` (PR 126). Two
+statements in this section describe the implementation rather than decide
+it, and both went stale when it landed. They are recorded here rather than
+edited away, because what the record predicted and what the gate permitted
+are two different facts and the second is the interesting one.
+
+**The `:skip` arm did not stay: the mechanism retired end to end.** The
+third bullet above says `lib/statifier_ui/trace/subscriber.ex` and the
+replay path need no change beyond the vocabulary count, because each
+already carries a `:skip` arm beside its `{:ok, _}` arm. Under this
+repository's gate that shape was not writable. With the guard-evaluation
+effect mapped onto a `trace_message/2` clause, `@skipped_trace_effects` had
+no members left, and the empty form does not survive the gate: a guard over
+an empty list warns that its clause cannot match and an unused module
+attribute warns on its own, both fatal under `warnings_as_errors`; and with
+no clause producing `:skip`, dialyzer reported each caller's `:skip` arm as
+a pattern that can never match. So the delegated choice this section leaves
+open - "whether the constant stays declared-and-empty or retires with its
+moduledoc section" - resolved to **retire**, and the answer retired with
+its last member. `:skip` is out of `normalize/2`'s spec
+(`lib/statifier_ui/trace/normalizer.ex:188`) and out of both callers, each
+of which now carries a comment where its arm was, recording that a future
+skipped effect reinstates the answer together with the clause that produces
+it (`lib/statifier_ui/trace/replay.ex:272-275`,
+`lib/statifier_ui/trace/subscriber.ex:529-534`); the module's own "The
+retired third answer" section (`normalizer.ex:54-77`) states the same. What
+this section and the Consequences promise either way is intact: the
+fallthrough that refuses an *unknown* trace effect is untouched, and is now
+the only half of the pair with members
+(`normalizer.ex:255-256` and `:323-324`, `{:error, {:unknown_effect, _}}`).
+
+**Two vocabulary-count sites decision 6's table does not list.** Both
+became false at 25 types, and `sui-e41` moved them:
+`lib/statifier_ui/trace/replay.ex:128-129`, "nine of the format's
+twenty-four types" -> "ten of the format's twenty-five types"; and
+`docs/wire-format.md:790`, whose "`trace.*` are the nine Appendix D phase
+boundaries" was reworded to name the tenth rather than to raise the count -
+"the nine Appendix D phase boundaries plus `trace.conds_evaluated`, the
+guard seam inside selection" - which is decision 5's distinction restated
+in prose, nine boundaries and ten types, not an amendment to it.
+(`lib/statifier_ui/trace/projection.ex:31` also moved, sixteen key paths to
+seventeen. It counts the key paths projection touches rather than the
+format's types, so it is outside decision 6's subject and is named here
+only so the search is not repeated.)
+
 ## Consequences
 
 - The inspector can answer "why did this branch fire" from a persisted
