@@ -47,9 +47,11 @@ defmodule StatifierUI.Expression do
   `simple_available?/0` also requires the resolved module to export
   `from_source/1`, `to_source/1`, `operators/1` and `value_kind/1`. A host on
   an older predicator - or one that points that key at a module missing any of
-  the four - gets `:outside` for every source string, an empty operator list, and
-  `:error` from the three writing functions, which is the answer that makes
-  the component fall back to its plain text input.
+  the four - degrades every function this guard gates, exactly as
+  `simple_available?/0`'s own documentation lists them: `simple/2` answers
+  `:outside` for every source string, `operators/1` answers `[]`, and
+  `source/2`, `value_source/2` and `segments/1` answer `:error`. That is the
+  answer that makes the component fall back to its plain text input.
 
   ## Shape
 

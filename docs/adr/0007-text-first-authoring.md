@@ -301,6 +301,34 @@ split is what lets a dropdown read "is one of" while the stored source stays
 `IN`, and it is the accepted text's rule unchanged: **the spelling is still
 the writer's, and only the writer's.**
 
+### Note 2026-09-05 (sui-7x6): which shape a Note in this record takes
+
+*A note about this record's own form, not about the decision it records. It
+adds nothing to the text above it and removes nothing from it.*
+
+Notes appended to this record appear in two shapes, and the difference is a
+convention rather than an inconsistency to be tidied away. A Note that ends
+its section takes a `###` heading - the sui-94o Note above, and this one. A
+Note that annotates one paragraph inside a section and is *followed* by more
+of that section's own text takes a bold lead instead - the sui-l3y Note
+above, which scopes the re-ordering sentence and is followed by the "Display
+labels move with the same delegation" paragraph, which belongs to the sui-94o
+Note rather than to it.
+
+The reason is Markdown's. A `###` opens a subsection that runs to the next
+heading, so promoting a mid-section Note to a heading would pull every
+paragraph after it under that Note and silently rescope text nobody edited.
+The bold lead is what holds a Note's scope to its own paragraphs. Stated once
+so a later editor does not read the split as an oversight: **a Note takes a
+heading when nothing of its section follows it, and a bold lead when
+something does.**
+
+Restructuring the sui-l3y Note into a heading was considered and rejected. An
+in-place edit to a merged record is safe only when it changes no words, and
+promoting that bold lead would change its own wording and move the paragraph
+that follows it. Recording the convention adds lines and removes none, which
+is the shape of change this record can take after the fact.
+
 ## Context
 
 Every authoring tool for statecharts has to answer one question first: what
