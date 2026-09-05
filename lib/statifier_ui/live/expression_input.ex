@@ -88,13 +88,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
     `Predicator.Vocabulary`'s human labels (px-84i), operator labels are the
     grammar's own phrases, delivered by `StatifierUI.Expression.operators/1` as
     the `:label` beside the writer's `:lexeme` - so this module no longer makes
-    them. `display_label/1` still lowercases a word-shaped lexeme, but the
-    grammar's phrases are already display-cased - the only word-shaped one,
-    `contains`, is already lowercase - so it is a no-op for operator labels.
-    It is still called, on every operator option this module renders; what it
-    should become now that it changes nothing, and whether its own `@doc`
-    below should still describe casing `IN` down to `in`, are sui-ne0's
-    questions rather than this module's.
+    them, and no longer cases one either: every operator option it renders
+    carries the grammar's `:label` verbatim, so one spelling of a display
+    phrase exists in the system and it is the vocabulary's. The
+    `display_label/1` that used to lowercase a word-shaped lexeme is gone with
+    the job it did (sui-ne0). Its one caller was `op_options/5` here; the
+    grammar's phrases are already display-cased, and every one of them is
+    either multi-word or already lowercase, so it returned every label it
+    could be handed unchanged.
 
     ## Two affordances, and the second one is optional
 
@@ -584,7 +585,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
           written ->
             [
               %{
-                label: display_label(operator.label),
+                label: operator.label,
                 detail: operator.detail,
                 source: written,
                 selected: written == canonical
@@ -592,30 +593,6 @@ if Code.ensure_loaded?(Phoenix.Component) do
             ]
         end
       end)
-    end
-
-    @doc """
-    The display spelling of a source lexeme.
-
-    The one place a label is cased. `Predicator.Simple.to_source/1` writes
-    `IN` and `CONTAINS` because that is what the grammar's decompiler writes,
-    and that spelling is what gets stored; an author reading a dropdown is
-    better served by `in`. The two concerns never meet: this touches labels
-    only, and every `value` attribute in the rendered picklist is the writer's
-    own untouched output.
-
-    ## Examples
-
-        iex> StatifierUI.Live.ExpressionInput.display_label("IN")
-        "in"
-
-        iex> StatifierUI.Live.ExpressionInput.display_label(">=")
-        ">="
-
-    """
-    @spec display_label(String.t()) :: String.t()
-    def display_label(label) do
-      if label =~ ~r/\A[A-Za-z]+\z/, do: String.downcase(label), else: label
     end
 
     @spec value_control(
@@ -983,11 +960,5 @@ else
     @doc "The hook name a host registers for the picklist."
     @spec picklist_hook_name() :: String.t()
     def picklist_hook_name, do: "StatifierUIExpressionPicklist"
-
-    @doc "The display spelling of a source lexeme."
-    @spec display_label(String.t()) :: String.t()
-    def display_label(label) when is_binary(label) do
-      if label =~ ~r/\A[A-Za-z]+\z/, do: String.downcase(label), else: label
-    end
   end
 end
