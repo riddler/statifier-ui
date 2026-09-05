@@ -222,7 +222,7 @@ The producer renders it through the existing
 `StatifierUI.Trace.Diagnostic.reason_object/4` with the origin
 `{:transition, t_index}` taken from the entry itself. That origin is not a
 new one: it is the `"transition"` row of this format's origin table
-(`docs/wire-format.md:907`, "the platform raised the event about a
+(`docs/wire-format.md:906`, "the platform raised the event about a
 transition's own `cond`"), and `Diagnostic.anchor/3` already has its clause
 (`lib/statifier_ui/trace/diagnostic.ex:193-196`), which resolves the
 transition's `cond_location` and falls back to the transition's own
@@ -298,7 +298,7 @@ behaviour the rule requires of it. **The version stays `1`.**
 
 This is settled precedent in this format, not a fresh argument.
 `effect.datamodel_change` joined after v1 had already shipped with 23
-types, and `docs/wire-format.md:891-896` records the same conclusion in
+types, and `docs/wire-format.md:890-895` records the same conclusion in
 the same terms - "unlike `session.datamodel`, which kept version 1
 because its type string was already reserved, this one keeps it because
 new types never bump the version at all." ADR-0014 decision 7 reached it
@@ -333,10 +333,10 @@ one of them is `sui-e41`'s to move. They are not interchangeable:
 |---|---|---|
 | `lib/statifier_ui/trace/normalizer.ex:132-157` (`@types`) | 24 entries | 25 entries |
 | `test/statifier_ui/trace/normalizer_test.exs:718-721` | "exactly 24", `length(types) == 24` | 25 |
-| `docs/wire-format.md:1388-1389` (type index) | "24 rows: 9 `trace.*`, 10 `effect.*`, and 5 `session.*`" | 25 rows: 10 `trace.*` |
-| `docs/wire-format.md:534` (schemas heading) | "The nine `trace.*` schemas" | ten |
+| `docs/wire-format.md:1387-1388` (type index) | "24 rows: 9 `trace.*`, 10 `effect.*`, and 5 `session.*`" | 25 rows: 10 `trace.*` |
+| `docs/wire-format.md:533` (schemas heading) | "The nine `trace.*` schemas" | ten |
 | `docs/wire-format.md:20` (conformance MUST) | "the nine `trace.*` types at the phase boundaries Appendix D names" | **still nine** - decision 5 |
-| `docs/wire-format.md:9` and `:1426` | "ADR-0005 settled ... the nine `trace.*` type names" | **still nine** - these describe what ADR-0005 settled, which this record does not change |
+| `docs/wire-format.md:9` and `:1425` | "ADR-0005 settled ... the nine `trace.*` type names" | **still nine** - these describe what ADR-0005 settled, which this record does not change |
 
 ## Implementation
 
