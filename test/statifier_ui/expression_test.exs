@@ -292,6 +292,29 @@ defmodule StatifierUI.ExpressionTest do
       end
     end
 
+    # The label a row carries is read off the operator's vocabulary entry
+    # (sui-55g); it used to be split out of a clause rendered by the writer.
+    # This holds the two derivations against each other for every operator the
+    # vocabulary offers, so the swap stays a swap rather than a change of
+    # spelling nobody asked for.
+    test "a row is labelled with the spelling the writer would render" do
+      labelled =
+        for kind <- @kinds, operator <- Expression.operators(kind), do: {kind, operator}
+
+      refute labelled == [], "the kind list offered nothing, so this asserts nothing"
+
+      for {kind, operator} <- labelled do
+        value = if match?({:list, _member}, kind), do: "[1]", else: "1"
+        source = "amount " <> operator.lexeme <> " " <> value
+        written = written_spelling(operator.op)
+
+        assert {:ok, [row], nil} = Expression.simple(source)
+
+        assert row.op_label == written,
+               "#{inspect(operator.op)} is labelled #{inspect(row.op_label)}, written #{inspect(written)}"
+      end
+    end
+
     test "every path parses back to the segments it was rendered from" do
       for path <- ["status", "card.brand", "cart['items']", "signup.created_at"] do
         assert {:ok, [row], nil} = Expression.simple(path <> " == 'active'")
@@ -430,5 +453,21 @@ defmodule StatifierUI.ExpressionTest do
 
   test "simple_available? is true against the resolved predicator" do
     assert Expression.simple_available?()
+  end
+
+  # The derivation the module used before sui-55g: render a probe clause
+  # through `Predicator.Simple.to_source/1` and take the word between the path
+  # and the value. It lives here, and only here, as the thing the vocabulary
+  # read is checked against.
+  defp written_spelling(op) do
+    value = if op == :in, do: {:list, [{:integer, 0}]}, else: {:integer, 0}
+
+    [_path, spelling | _rest] =
+      Predicator.Simple
+      |> struct(connective: nil, clauses: [{[{:root, "x"}], op, value}])
+      |> Predicator.Simple.to_source()
+      |> String.split(" ", parts: 3)
+
+    spelling
   end
 end
