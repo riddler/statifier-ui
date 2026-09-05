@@ -32,7 +32,7 @@ defmodule StatifierUI.DatamodelExplorer.Entry do
     `non_neg_integer() | [non_neg_integer()]` multi-arity form verbatim.
   * `declared_source` - the tier-1 declared expression text, display only.
     Present only when the pane was given the chart source and
-    `value_location != location` (`docs/wire-format.md:335-348`).
+    `value_location != location` (`docs/wire-format.md:420-432`).
   * `location_source` - `effect.datamodel_change`'s raw author string,
     live mode only, display only.
   """

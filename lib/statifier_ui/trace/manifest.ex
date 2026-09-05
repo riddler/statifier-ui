@@ -230,6 +230,11 @@ defmodule StatifierUI.Trace.Manifest do
     |> Enum.map(&data_object/1)
   end
 
+  # ADR-0016: `value_location` is written only when it spans a *written*
+  # value. The compiler falls back to the element's own span for an element
+  # written with neither `expr` nor `src`, and that fallback is dropped here
+  # rather than passed on, so presence of the key is the whole answer to "is
+  # there a written value to show" - no consumer compares the two spans.
   @spec data_object(Data.t()) :: map()
   defp data_object(%Data{} = element) do
     %{
@@ -237,8 +242,14 @@ defmodule StatifierUI.Trace.Manifest do
       "id" => element.id,
       "location" => location_object(element.location)
     }
-    |> put_present("value_location", location_object_or_nil(element.value_location))
+    |> put_present("value_location", written_value_location(element))
   end
+
+  @spec written_value_location(Data.t()) :: map() | nil
+  defp written_value_location(%Data{value_location: same, location: same}), do: nil
+
+  defp written_value_location(%Data{value_location: value_location}),
+    do: location_object_or_nil(value_location)
 
   # -- Locations ----------------------------------------------------------------
 

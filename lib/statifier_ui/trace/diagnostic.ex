@@ -196,10 +196,11 @@ defmodule StatifierUI.Trace.Diagnostic do
   end
 
   # `Statifier.Machine.Data.value_location` falls back to the element's own
-  # `location` when there is no distinct value span
-  # (`docs/wire-format.md:411-424`); anchoring on it in that case would be
-  # anchoring on the whole `<data>` element, which is what `{:node, _}`
-  # already does honestly. Equal means `{:node, _}`.
+  # `location` when there is no distinct value span. The wire format drops
+  # that fallback and omits the key instead (`docs/wire-format.md:420-432`),
+  # but this reads the compiled struct, where the fallback is still present:
+  # anchoring on it would be anchoring on the whole `<data>` element, which
+  # is what `{:node, _}` already does honestly. Equal means `{:node, _}`.
   def anchor({:data, d_index}, machine, error) do
     data = Machine.data(machine, d_index)
 
