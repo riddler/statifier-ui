@@ -163,14 +163,13 @@ defmodule StatifierUI.Trace.SubscriberTest do
     end
   end
 
-  describe "a guarded transition (sui-9fs)" do
+  describe "a guarded transition (sui-9fs, sui-e41)" do
     # statifier 2.5.0 emits a `Statifier.Effect.Trace.CondsEvaluated` for the
-    # round that evaluates `ready`. The v1 vocabulary carries no message for
-    # it, so `StatifierUI.Trace.Normalizer.normalize/2` answers `:skip` and
-    # this subscriber passes over it. The regression this guards is the one
-    # the bead reported: the effect used to come back
-    # `{:error, {:unknown_effect, _}}`, which counted as an error and left a
-    # gap where a consumer expects contiguity.
+    # round that evaluates `ready`, and ADR-0018 mapped it onto
+    # `trace.conds_evaluated`, so this subscriber now buffers a message for
+    # it. The regression this guards is still the one `sui-9fs` reported: the
+    # effect used to come back `{:error, {:unknown_effect, _}}`, which counted
+    # as an error and left a gap where a consumer expects contiguity.
     @guarded """
     <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="a" version="1.0" datamodel="predicator">
         <datamodel>
@@ -185,12 +184,12 @@ defmodule StatifierUI.Trace.SubscriberTest do
     </scxml>
     """
 
-    # 16 messages for @guarded driven with one "go": seq 0 (session.start)
-    # through seq 15 (the driven macrostep's trace.macrostep_stable). One
-    # more than @two_state's 15, and the extra one is the
-    # effect.datamodel_change that initializing `ready` produces - @two_state
-    # declares no datamodel. The skipped CondsEvaluated adds none.
-    @guarded_full_seq 16
+    # 17 messages for @guarded driven with one "go": seq 0 (session.start)
+    # through seq 16 (the driven macrostep's trace.macrostep_stable). Two more
+    # than @two_state's 15: the effect.datamodel_change that initializing
+    # `ready` produces (@two_state declares no datamodel), and the
+    # trace.conds_evaluated for the round that evaluated it.
+    @guarded_full_seq 17
 
     test "records no error and leaves seq contiguous" do
       machine = SessionCase.compile!(@guarded)
@@ -216,6 +215,26 @@ defmodule StatifierUI.Trace.SubscriberTest do
       assert stats.errors == 0
       assert stats.dropped == 0
       assert stats.diagnostics == []
+    end
+
+    test "the guard's outcome is on the wire, once, for the round that evaluated it" do
+      machine = SessionCase.compile!(@guarded)
+      {sub, session} = SessionCase.start_early!(machine, "sess_guarded")
+      Session.send_event(session, "go")
+      SessionCase.wait_for_seq(sub, @guarded_full_seq)
+
+      assert [message] =
+               sub
+               |> Subscriber.messages()
+               |> Enum.filter(&(&1.type == "trace.conds_evaluated"))
+
+      assert message.payload == %{
+               "evaluations" => [%{"t_index" => 0, "outcome" => "enabled"}]
+             }
+
+      # The unguarded fallback into "c" was a candidate in the same round and
+      # gets no entry: a `nil` `cond` is not an evaluation.
+      refute Enum.any?(message.payload["evaluations"], &(&1["t_index"] == 1))
     end
   end
 

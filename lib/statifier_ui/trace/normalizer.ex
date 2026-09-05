@@ -51,25 +51,29 @@ defmodule StatifierUI.Trace.Normalizer do
   `:undefined` alike as absence for those fields, applied uniformly instead
   of remembered clause by clause.
 
-  ## Skipped trace effects
+  ## The retired third answer
 
-  `normalize/2` has a third answer, `:skip`, for an engine trace effect the
-  v1 wire format deliberately does not carry. It is not a failure and it is
-  not an unknown effect: the set is closed, named in
-  `@skipped_trace_effects`, and every member has been looked at and ruled
-  out of v1 on purpose. Today the set is
-  `Statifier.Effect.Trace.CondsEvaluated` alone - statifier 2.5.0's guard
-  seam, emitted once per selection round that evaluated a written `cond`.
-  The vocabulary has no guard-evaluation message to map it onto, and
-  inventing one is a wire-format change with an ADR in front of it (sui-e41
-  will add `trace.conds_evaluated`), so until then the producer passes over
-  the effect rather than refusing the stream it appears in. Refusing it is
-  what this skip replaces: a chart with a single guarded transition used to
-  fail the whole offline replay on its first branch.
+  `normalize/2` used to have a third answer, `:skip`, for an engine trace
+  effect the wire format deliberately did not carry - closed, named, and
+  distinct from an unknown effect. It had exactly one member,
+  `Statifier.Effect.Trace.CondsEvaluated`, skipped by `sui-9fs` because v1
+  had no guard-evaluation message to map it onto. ADR-0018 added that
+  message, `sui-e41` moved the effect onto the mapping clause below, and the
+  answer retired with its last member: **nothing in this module returns
+  `:skip`, and `normalize/2` no longer offers it.**
+
+  It was retired rather than kept empty because the empty form is not
+  writable here. A guard over an empty list warns that its clause cannot
+  match, an unused constant warns on its own, and a contract offering a
+  return no clause produces makes every caller's third arm dead code the
+  analyzer refuses. The next trace effect ruled out of the vocabulary
+  reintroduces the answer with the clause that produces it, which is the
+  only form that stays honest.
 
   The fallthrough that answers `{:error, {:unknown_effect, _}}` is
   untouched, and deliberately so - a trace effect nobody has considered
-  still refuses.
+  still refuses. That refusal is the mechanism the skip was always distinct
+  from, and it is the half that has members.
   """
 
   alias Statifier.Effect.Autoforward
@@ -124,14 +128,10 @@ defmodule StatifierUI.Trace.Normalizer do
           | {:halted, :done | :cancelled | :budget_exhausted}
           | {:unroutable, Statifier.Effect.t()}
 
-  # The trace payload modules `normalize/2` answers `:skip` for, listed in
-  # one place so the set is readable without reading the clauses. See this
-  # module's "Skipped trace effects" section for why each member is here.
-  @skipped_trace_effects [Trace.CondsEvaluated]
-
   @types [
     "trace.event_dequeued",
     "trace.transitions_selected",
+    "trace.conds_evaluated",
     "trace.exit_set",
     "trace.content_executed",
     "trace.entry_set",
@@ -158,12 +158,14 @@ defmodule StatifierUI.Trace.Normalizer do
 
   @doc """
   The closed, sorted list of every `type` string this format defines - the
-  vocabulary's single definition site in code. 24 entries: 9 `trace.*`, 10
+  vocabulary's single definition site in code. 25 entries: 10 `trace.*` (the
+  nine Appendix D phase boundaries plus `trace.conds_evaluated`, the guard
+  seam inside selection, from `Statifier.Effect.Trace.CondsEvaluated`), 10
   `effect.*` (the nine core effects plus `effect.datamodel_change`, from
   `Statifier.Effect.DatamodelChange`), and 5 `session.*` (the four
   lifecycle types plus `session.datamodel`, emitted once per session from
   `Statifier.Effect.DatamodelInit`). `docs/wire-format.md`'s type index
-  table is the same 24, and `test/statifier_ui/trace/wire_format_spec_test.exs`
+  table is the same 25, and `test/statifier_ui/trace/wire_format_spec_test.exs`
   asserts the two sets are equal.
   """
   @spec types() :: [String.t()]
@@ -178,15 +180,12 @@ defmodule StatifierUI.Trace.Normalizer do
   exactly what ADR-0005's Consequences warn a drift test must catch. It is
   the caller's job to decide what to do with the error.
 
-  Returns `:skip` for an engine trace effect the wire format deliberately
-  does not carry - the closed `@skipped_trace_effects` set, today
-  `Statifier.Effect.Trace.CondsEvaluated` alone. `:skip` is not a failure:
-  the effect produced no message because v1 has no message for it, so a
-  caller consumes no `seq` for it, records no error, and carries on. See
-  this module's "Skipped trace effects" section. A caller matching only
-  `{:ok, _}` and `{:error, _}` needs a third clause.
+  There is no third answer. `normalize/2` returned `:skip` while one engine
+  trace effect had no message to map onto; ADR-0018 gave it one, so every
+  effect this module accepts now produces a message or an error. See this
+  module's "The retired third answer" section.
   """
-  @spec normalize(input(), ctx()) :: {:ok, Message.t()} | :skip | {:error, term()}
+  @spec normalize(input(), ctx()) :: {:ok, Message.t()} | {:error, term()}
   def normalize({:effect, effect}, ctx), do: normalize(effect, ctx)
 
   def normalize({:halted, reason}, ctx) when reason in [:done, :cancelled, :budget_exhausted] do
@@ -240,7 +239,7 @@ defmodule StatifierUI.Trace.Normalizer do
             map()}
 
   @spec decompose(Statifier.Effect.t(), ctx()) ::
-          {:ok, decomposed()} | :skip | {:error, term()}
+          {:ok, decomposed()} | {:error, term()}
   defp decompose({:trace, payload}, ctx), do: trace_message(payload, ctx)
   defp decompose({:log, payload}, ctx), do: core_message(payload, ctx)
   defp decompose({:done, payload}, ctx), do: core_message(payload, ctx)
@@ -256,9 +255,9 @@ defmodule StatifierUI.Trace.Normalizer do
   defp decompose({tag, _payload}, _ctx), do: {:error, {:unknown_effect, tag}}
   defp decompose(other, _ctx), do: {:error, {:unknown_effect, other}}
 
-  # -- The nine trace.* payloads ---------------------------------------------
+  # -- The ten trace.* payloads ----------------------------------------------
 
-  @spec trace_message(struct(), ctx()) :: {:ok, decomposed()} | :skip | {:error, term()}
+  @spec trace_message(struct(), ctx()) :: {:ok, decomposed()} | {:error, term()}
   defp trace_message(%Trace.EventDequeued{} = p, ctx) do
     with {:ok, event_obj} <- event(p.event, ctx) do
       payload = %{"event" => event_obj, "from" => Atom.to_string(p.from)}
@@ -316,13 +315,53 @@ defmodule StatifierUI.Trace.Normalizer do
     end
   end
 
-  # Named, never open-ended: the guard matches only the modules
-  # `@skipped_trace_effects` lists, so the fallthrough below still refuses a
-  # trace effect this module has never seen.
-  defp trace_message(%module{}, _ctx) when module in @skipped_trace_effects, do: :skip
+  defp trace_message(%Trace.CondsEvaluated{} = p, ctx) do
+    payload = %{"evaluations" => Enum.map(p.evaluations, &evaluation(&1, ctx))}
+    {:ok, {"trace.conds_evaluated", p.macrostep, p.microstep, p.round, payload}}
+  end
 
   defp trace_message(payload, _ctx),
     do: {:error, {:unknown_effect, {:trace, payload.__struct__}}}
+
+  # One `trace.conds_evaluated` entry, ADR-0018 decisions 2 and 3.
+  #
+  # `outcome` is the engine atom's own name, lowercased as written, and a
+  # closed discriminator - it is never derived from whether `reason` is
+  # present, so the two stay independently checkable the way the record says
+  # a consumer may test either.
+  #
+  # `reason` goes through the same `Diagnostic.reason_object/4` an
+  # `error.execution` event's data goes through, with the entry's own
+  # `{:transition, t_index}` origin. That is deliberate rather than
+  # convenient: the engine produces **two** shapes here -
+  # `{:non_boolean_cond, value}` and `%Statifier.Evaluator.Error{}` - and
+  # `reason_object/4` is already the function that sorts an unconstrained
+  # term into ADR-0014's two classes. Rendering only one of them, or adding a
+  # second diagnostic surface for the other, is the mistake the record names.
+  @spec evaluation(Trace.CondsEvaluated.evaluation(), ctx()) :: map()
+  defp evaluation(%{t_index: t_index, outcome: outcome, reason: reason}, ctx) do
+    %{"t_index" => t_index, "outcome" => Atom.to_string(outcome)}
+    |> put_reason(reason, t_index, ctx)
+  end
+
+  # `nil` is absence, not a null: the engine spells "no failure here" as a
+  # plain `nil` on every non-error outcome, with no `:undefined` to tell a
+  # genuine null from it, so this follows `put_present/3`'s rule rather than
+  # `_event.data`'s three-way one (ADR-0018 decision 2).
+  @spec put_reason(map(), term(), non_neg_integer(), ctx()) :: map()
+  defp put_reason(base, nil, _t_index, _ctx), do: base
+
+  defp put_reason(base, reason, t_index, ctx) do
+    object =
+      Diagnostic.reason_object(
+        reason,
+        {:transition, t_index},
+        Map.get(ctx, :machine),
+        Map.get(ctx, :source)
+      )
+
+    Map.put(base, "reason", object)
+  end
 
   # -- The ten effect.* payloads ----------------------------------------------
 

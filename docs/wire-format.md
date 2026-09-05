@@ -17,12 +17,14 @@ interpreter's author needs first.
 **Conformance.** A conformant producer:
 
 - MUST emit exactly one `session.start` message opening a session's stream.
-- MUST, when tracing is enabled, emit the nine `trace.*` types at the phase
-  boundaries Appendix D names, with the envelope fields this document
-  requires.
-- MAY emit further message families (this document also specifies ten
-  `effect.*` types and four `session.*` lifecycle types) and MAY add fields
-  to any message beyond what this document requires.
+- MUST, when tracing is enabled, emit the nine Appendix D phase-boundary
+  `trace.*` types, with the envelope fields this document requires. Nine is
+  the count of *those* types, not of the `trace.*` family: the family has
+  ten, and `trace.conds_evaluated` is the tenth.
+- MAY emit further message families (this document also specifies
+  `trace.conds_evaluated`, which is a seam inside selection rather than a
+  phase boundary, ten `effect.*` types and four `session.*` lifecycle types)
+  and MAY add fields to any message beyond what this document requires.
 
 A conformant consumer:
 
@@ -530,7 +532,7 @@ Being an identity table, `attribute_locations` is never projected - it
 falls under "every `session.start` table and every `location` object in
 them" in the Projection section below, and carries no datamodel value.
 
-## The nine `trace.*` schemas
+## The ten `trace.*` schemas
 
 Every `trace.*` message carries the envelope's `macrostep`, `microstep`,
 and `round`, in addition to `type`, `session`, and `seq`. Fields below are
@@ -652,6 +654,61 @@ nothing.
 | t_indexes | array of integers | always - selected transitions' `t_index`, in selection order, empty when none selected |
 | event | event object | present only for an event-triggered round; absent marks an eventless (NULL) round |
 
+### `trace.conds_evaluated`
+
+Emitted once per selection round in which at least one **written** `cond` was
+evaluated, and not emitted at all for a round that evaluated none. It carries
+the round's guard outcomes - which transition was guarded, what its `cond`
+answered, and, when the answer was a failure, why - which is the one question
+a branching chart's stream could not otherwise answer.
+
+This type is **not** an Appendix D phase boundary. It is a seam inside
+selection, so it sits under the conformance clause's MAY rather than its MUST
+(ADR-0018).
+
+| Field | Type | Presence |
+|---|---|---|
+| evaluations | array of evaluation objects | always - and never empty |
+
+**`evaluations` is never empty**, and that is a schema commitment rather than
+an accident: a round that evaluated nothing emits no message at all, so an
+empty list would describe a round that cannot exist. A consumer may rely on
+it. Two absences follow from the same place, and are the engine's commitments
+rather than this format's: a transition written without a `cond` performs no
+evaluation and gets no entry, and a round that performed no evaluation is
+silent here - unlike `trace.transitions_selected`, which is emitted on every
+round including the empty one.
+
+**An evaluation object** is one guard evaluation:
+
+| Field | Type | Presence |
+|---|---|---|
+| t_index | integer | always - the guarded transition, resolved through `session.start`'s `transitions` table like every other `t_index` in this format |
+| outcome | string | always - one of `"enabled"`, `"disabled"`, `"error"` |
+| reason | error object | present only when `outcome` is `"error"`, where it is always present; absent, never `null`, otherwise |
+
+`outcome` is a closed discriminator: a consumer may branch on it, and a value
+outside those three is a producer defect rather than something to tolerate. It
+has three values and not four because spec 5.9.1 joins "cannot be evaluated as
+a boolean value" and "its evaluation causes an error" into one case with one
+consequence, so both arrive as `"error"`.
+
+`reason` is the **error object** defined under `trace.event_dequeued` above,
+and **both** of its classes are reachable here. A non-boolean result renders
+as `class: "reason"`, with the result itself inside `reason`; an
+expression-evaluation failure renders as `class: "expression"`, carrying the
+`cond`'s entity-expanded text and a span into it. `location`/`location_kind`
+anchor on the guarded transition's own `cond_location`, falling back to the
+transition's whole span, exactly as they do for an `error.execution` event
+raised about the same `cond`. The key's presence is redundant with
+`outcome == "error"`, deliberately: a consumer may test either.
+
+**Array order is load-bearing.** The entries are in the engine's walk order,
+which is the order that round raises `error.execution` in, so a consumer
+joining the two pairs the *n*th `"error"` entry with the *n*th raised event.
+This is the same posture the exit and entry sets take: a sequence stays a
+sequence.
+
 ### `trace.exit_set`
 
 Emitted before any state is exited, whether by ordinary transition or by
@@ -730,8 +787,9 @@ ADR-0005 leaves non-trace effect naming to this document
 because a bare top-level `done` type would sit confusingly next to
 `trace.done` - a different message about the same moment in the run.
 `effect.*` and `trace.*` are two visibly distinct halves of the vocabulary:
-`trace.*` are the nine Appendix D phase boundaries and `effect.*` are the
-core effect vocabulary, both stamped with all three counters (see "The
+`trace.*` are the nine Appendix D phase boundaries plus
+`trace.conds_evaluated`, the guard seam inside selection, and `effect.*` are
+the core effect vocabulary, both stamped with all three counters (see "The
 envelope" above; `round` joined the `effect.*` envelopes in `sui-67d`,
 after `effect.budget_exhausted` had carried it from the start).
 
@@ -1089,6 +1147,7 @@ other keys need none.
 | `effect.datamodel_change` | `new_value`, `prior_value` |
 | `trace.event_dequeued` | `event.data`; `event.error.reason`, replaced whole |
 | `trace.transitions_selected` | `event.data`; `event.error.reason`, replaced whole |
+| `trace.conds_evaluated` | on each `evaluations` entry: `reason.reason`, replaced whole; `reason.expression` when `allow_source` is false |
 | `trace.finalize_autoforward` | `event.data`; `event.error.reason`, replaced whole |
 | `trace.done` | `donedata` |
 | `effect.done` | `donedata` |
@@ -1384,9 +1443,9 @@ in the first place.
 
 ## Type index
 
-One row per type this document defines - 24 rows: 9 `trace.*`, 10
-`effect.*`, and 5 `session.*` (the four lifecycle types plus
-`session.datamodel`). This table's first column is a machine boundary: a
+One row per type this document defines - 25 rows: 10 `trace.*` (the nine
+Appendix D phase boundaries plus `trace.conds_evaluated`), 10 `effect.*`, and
+5 `session.*` (the four lifecycle types plus `session.datamodel`). This table's first column is a machine boundary: a
 drift test parses exactly this table's backtick-quoted `type` strings and
 asserts them equal to the producer's own emitted type set, so a type
 documented here and not emitted, or emitted and not documented here, fails
@@ -1396,6 +1455,7 @@ that test rather than drifting silently.
 |---|---|---|
 | `trace.event_dequeued` | trace | an event is dequeued for processing |
 | `trace.transitions_selected` | trace | transition selection runs |
+| `trace.conds_evaluated` | trace | a selection round evaluates at least one written `cond` |
 | `trace.exit_set` | trace | before states are exited |
 | `trace.content_executed` | trace | a block of executable content runs |
 | `trace.entry_set` | trace | before states are entered |

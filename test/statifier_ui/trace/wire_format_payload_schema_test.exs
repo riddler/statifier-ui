@@ -31,7 +31,7 @@ defmodule StatifierUI.Trace.WireFormatPayloadSchemaTest do
   @wire_format_path Path.join([__DIR__, "..", "..", "..", "docs", "wire-format.md"])
 
   @section_heading "## `session.start`"
-  @section_end "## The nine `trace.*` schemas"
+  @section_end "## The ten `trace.*` schemas"
 
   # Every optional payload field written, every conditional row-level field
   # present: a transition with a `cond`, executable content, and `<data>`

@@ -28,7 +28,7 @@ defmodule StatifierUI.Trace.Projection do
   carrying it," which is a claim about the stream rather than about the run.
 
   The corollary that governs every clause below: **a position is replaced
-  only where it is already present.** Nine of the sixteen key paths this
+  only where it is already present.** Nine of the seventeen key paths this
   module touches are conditionally absent, and writing a sentinel into one
   that was absent would assert something the run never did - an eventless
   round becoming evented (`trace.transitions_selected`'s `event`), a first
@@ -192,6 +192,7 @@ defmodule StatifierUI.Trace.Projection do
     "effect.datamodel_change",
     "trace.event_dequeued",
     "trace.transitions_selected",
+    "trace.conds_evaluated",
     "trace.finalize_autoforward",
     "trace.done",
     "effect.done",
@@ -357,6 +358,19 @@ defmodule StatifierUI.Trace.Projection do
     end)
   end
 
+  # ADR-0018 decision 4. The position is one level inside an array of
+  # objects, which is the shape `effect.budget_exhausted` above already
+  # projects, so this maps the per-object projector over the list rather than
+  # inventing a traversal. `evaluations` itself is always present and never
+  # empty, but `replace_present/3` is still what writes it: this module's
+  # rule is that redaction never creates a key, and it holds without
+  # exception rather than per type.
+  defp project_payload("trace.conds_evaluated", payload, profile) do
+    replace_present(payload, "evaluations", fn evaluations ->
+      Enum.map(evaluations, &project_evaluation(&1, profile))
+    end)
+  end
+
   defp project_payload("effect.log", payload, profile) do
     replace_present(payload, "value", &project_position(&1, :log_value, profile))
   end
@@ -416,6 +430,16 @@ defmodule StatifierUI.Trace.Projection do
   end
 
   defp project_event(event, _profile), do: event
+
+  # A `trace.conds_evaluated` entry. `reason` is the same `error` object an
+  # event carries, so it takes the same `project_error/2` and needs no rule
+  # of its own; `t_index` and `outcome` are an index and a closed
+  # discriminator, both already in "What is never projected".
+  @spec project_evaluation(map(), Profile.t()) :: map()
+  defp project_evaluation(evaluation, profile) when is_map(evaluation),
+    do: replace_present(evaluation, "reason", &project_error(&1, profile))
+
+  defp project_evaluation(evaluation, _profile), do: evaluation
 
   # `error.expression` is chart text - the entity-expanded string the
   # expression engine counted columns in - so it is governed by the

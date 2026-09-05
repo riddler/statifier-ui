@@ -45,10 +45,12 @@ defmodule StatifierUI.Trace.ReplayTest do
 
   # A branching chart: statifier 2.5.0 emits a
   # `Statifier.Effect.Trace.CondsEvaluated` for the selection round that
-  # evaluates `ready`, and the v1 wire format carries no message for it. The
-  # golden below is what proves the whole offline path survives that -
-  # before `normalize/2` learned to answer `:skip`, `from_events/4` failed
-  # closed on the first branch and produced no stream at all (sui-9fs).
+  # evaluates `ready`, and ADR-0018 gave it `trace.conds_evaluated`, so the
+  # golden below now carries that message rather than a gap where it was.
+  # What this fixture proves is that the offline path produces the new type
+  # exactly as the live one does - `sui-9fs` proved the path survives the
+  # effect at all, and `StatifierUI.Trace.GoldenCondsEvaluatedTest` is where
+  # the type's own three outcomes are captured.
   # Off `<invoke>` and `<send target="#_internal">` for the same reason the
   # two-state chart is: a plain byte comparison.
   @guarded """
@@ -144,7 +146,7 @@ defmodule StatifierUI.Trace.ReplayTest do
       assert Json.encode_lines(messages) == File.read!(@guarded_fixture_path)
     end
 
-    test "skips the guard-evaluation effect without consuming a seq" do
+    test "maps the guard-evaluation effect, offline, into the same message the live producer emits" do
       machine = SessionCase.compile!(@guarded)
 
       session = SessionCase.start_recorded!(machine, "sess_guarded")
@@ -164,10 +166,15 @@ defmodule StatifierUI.Trace.ReplayTest do
       assert Enum.map(rest, & &1.seq) == Enum.to_list(1..length(rest))
 
       # The guard fired - the chart really did take the cond'd transition -
-      # and no message in the stream reports the evaluation, because v1 has
-      # no type for it.
+      # and the round that evaluated `ready` reports it, which is the whole
+      # point of ADR-0018. The offline producer consumes a `seq` for it, so
+      # the message is not a rendering detail of the live path.
       assert Enum.any?(rest, &(&1.type == "trace.entry_set"))
-      refute Enum.any?(rest, &String.contains?(&1.type, "cond"))
+
+      assert [%Message{payload: %{"evaluations" => evaluations}}] =
+               Enum.filter(rest, &(&1.type == "trace.conds_evaluated"))
+
+      assert evaluations == [%{"t_index" => 0, "outcome" => "enabled"}]
     end
   end
 
