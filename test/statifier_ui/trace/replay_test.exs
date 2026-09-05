@@ -15,11 +15,20 @@ defmodule StatifierUI.Trace.ReplayTest do
   `<send target="#_internal">`, which is what keeps the comparison a plain
   byte comparison rather than a `(macrostep, round)`-sorted one (ADR-0017's
   open question O-4 leaves widening it to whoever needs the coverage).
+
+  `recording/3`'s cases add a third chart, `@timed`, and a second kind of
+  input: rows in a host's own storage shape rather than
+  `t:Statifier.Session.Recording.entry/0` values taken straight back out of
+  a live recording. Reconstructing those rows is what a host actually does
+  (`docs/ops-embedding.md`'s mapping table), and the one row that has more
+  than one plausible reading - a fired delayed send - is the reason "the
+  timer rule" has its own cases.
   """
 
   use ExUnit.Case, async: true
 
   alias Statifier.Event
+  alias Statifier.Send.Routes
   alias Statifier.Session
   alias Statifier.Session.Recording
   alias StatifierUI.Test.Support.Trace.SessionCase
@@ -27,6 +36,7 @@ defmodule StatifierUI.Trace.ReplayTest do
   alias StatifierUI.Trace.Message
   alias StatifierUI.Trace.Projection
   alias StatifierUI.Trace.Replay
+  alias StatifierUI.Trace.Subscriber
 
   doctest StatifierUI.Trace.Replay
 
@@ -69,6 +79,22 @@ defmodule StatifierUI.Trace.ReplayTest do
 
   @guarded_fixture_path Path.join([__DIR__, "..", "..", "support", "trace", "guarded.jsonl"])
 
+  # One delayed `<send>`, armed on entry, whose firing takes the chart out of
+  # the state that armed it - so exactly one pending-timer credit exists for
+  # the whole run and nothing re-arms it. That is what makes the credit
+  # arithmetic in "the timer rule" below observable rather than incidental.
+  @timed """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="a" version="1.0">
+      <state id="a">
+          <onentry>
+              <send id="t1" event="tick" delay="10ms"/>
+          </onentry>
+          <transition event="tick" target="b"/>
+      </state>
+      <state id="b"/>
+  </scxml>
+  """
+
   @minimal """
   <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="a" version="1.0">
       <state id="a"/>
@@ -79,6 +105,42 @@ defmodule StatifierUI.Trace.ReplayTest do
 
   defp trace_opts(extra \\ []),
     do: Keyword.merge([session_id: "sess_offline", trace: true], extra)
+
+  # The @timed run's whole stream: seq 0 through 16.
+  @timed_full_seq 16
+  @timed_session "sess_timer"
+
+  defp timed_opts, do: [session_id: @timed_session, trace: true]
+
+  # A host's own storage shape for the @timed run - one row per recorded
+  # input, in serialized input order, carrying only what a column can hold.
+  # `docs/ops-embedding.md`'s "From a persisted event log" is the table this
+  # mirrors, and `"kind"` is the discriminator it maps on.
+  defp timer_rows do
+    [
+      %{
+        "kind" => "timer",
+        "send_id" => "t1",
+        "event" => "tick",
+        "origin" => "#_scxml_#{@timed_session}",
+        "origintype" => "http://www.w3.org/TR/scxml/#SCXMLEventProcessor"
+      }
+    ]
+  end
+
+  defp entry_from_row(%{"kind" => "timer"} = row),
+    do: {:timer, row["send_id"], row_event(row), nil}
+
+  defp entry_from_row(%{"kind" => "event"} = row),
+    do: {:event, row_event(row), nil}
+
+  defp row_event(row) do
+    Event.external(row["event"],
+      sendid: row["send_id"],
+      origin: row["origin"],
+      origintype: row["origintype"]
+    )
+  end
 
   describe "the round trip against the checked-in golden" do
     test "reproduces the live producer's stream byte-for-byte" do
@@ -235,6 +297,84 @@ defmodule StatifierUI.Trace.ReplayTest do
 
       assert {:error, {:unknown_entry, _}} =
                Replay.from_events(minimal_machine(), trace_opts(), entries)
+    end
+  end
+
+  describe "recording/3 over a host's own stored rows" do
+    test "a stored log with one fired timer replays to the live session's trace" do
+      machine = SessionCase.compile!(@timed)
+      {:ok, sub} = Subscriber.start_link(machine: machine)
+
+      {:ok, session} =
+        Session.start_link(machine,
+          trace: true,
+          record: true,
+          subscribers: [sub],
+          session_id: "sess_timer"
+        )
+
+      :ok = Subscriber.attach(sub, session, subscribe: false)
+      SessionCase.wait_for_seq(sub, @timed_full_seq)
+
+      entries = Enum.map(timer_rows(), &entry_from_row/1)
+
+      assert {:ok, recording} = Replay.recording(machine, timed_opts(), entries)
+      assert Recording.entries(recording) == entries
+
+      # The live session named the same firing the same way, over the same
+      # event. Its route snapshot is the one that was in force; the host
+      # stored `nil`, which means the session-start snapshot - the same set
+      # here, and the streams below agree because of it.
+      assert {:ok, live_recording} = Session.recording(session)
+      assert [{:timer, "t1", live_event, %Routes{}}] = Recording.entries(live_recording)
+      assert [{:timer, "t1", ^live_event, nil}] = entries
+
+      assert {:ok, messages} = Replay.from_events(machine, timed_opts(), entries)
+      assert Json.encode_lines(messages) == Json.encode_lines(Subscriber.messages(sub))
+    end
+
+    test "an unrecognized row shape is an error, not a skip" do
+      assert Replay.recording(minimal_machine(), trace_opts(), [{:teleport, :somewhere}]) ==
+               {:error, {:unknown_entry, {:teleport, :somewhere}}}
+    end
+
+    test "fails closed - a bad entry returns no partial recording" do
+      entries = [{:event, Event.external("e"), nil}, {:teleport, :somewhere}]
+
+      assert Replay.recording(minimal_machine(), trace_opts(), entries) ==
+               {:error, {:unknown_entry, {:teleport, :somewhere}}}
+    end
+
+    test "checks :trace and :session_id nowhere - those are from_events/4's" do
+      assert {:ok, recording} = Replay.recording(minimal_machine(), [], [])
+      assert Recording.opts(recording)[:trace] == false
+      assert Recording.opts(recording)[:session_id] == nil
+    end
+  end
+
+  describe "the timer rule" do
+    test "a fired timer draws the pending credit its {:timer, ...} name matches" do
+      machine = SessionCase.compile!(@timed)
+      [row] = timer_rows()
+      fired = entry_from_row(row)
+
+      # One `<send>` armed one credit, and the first firing spent it. A
+      # second has nothing left to draw, which is the check the shape buys.
+      assert Replay.from_events(machine, timed_opts(), [fired, fired]) ==
+               {:error, {:unscheduled_timer_firing, "t1"}}
+    end
+
+    test "naming the same firing {:event, ...} leaves the credit outstanding" do
+      machine = SessionCase.compile!(@timed)
+      [row] = timer_rows()
+      fired = entry_from_row(row)
+      mislabelled = entry_from_row(Map.put(row, "kind", "event"))
+
+      # Same delivered event, same position, and for a single firing the same
+      # stream - so the divergence only shows once something else asks after
+      # the credit. Here the second firing is accepted because the first never
+      # spent it.
+      assert {:ok, _messages} = Replay.from_events(machine, timed_opts(), [mislabelled, fired])
     end
   end
 

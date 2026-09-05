@@ -186,6 +186,65 @@ Two things about the contract decide what a host has to store:
   know is `{:unknown_entry, entry}`, and whatever the engine's replay, the
   manifest builder or the normalizer returns comes back unwrapped.
 
+### Which stored row becomes which entry
+
+`t:Statifier.Session.Recording.entry/0` has six shapes, one per kind of input
+a session can be driven by. A host that stores its log as rows rather than as
+a `Statifier.Session.Recording.to_binary/1` blob has to map each row back to
+one of them, and this table is that mapping:
+
+| What the row recorded | Entry shape | What the row has to carry |
+|---|---|---|
+| An external event delivered to the session | `{:event, event, routes}` | the `Statifier.Event` |
+| An external event one of this session's own `<invoke>`s delivered | `{:invoked_event, invoke_id, event, routes}` | the id of the **invocation that delivered it**, which is not `event.invokeid` |
+| The session being cancelled | `{:cancel, routes}` | nothing but the marker; `<onexit>` runs from it |
+| A delayed `<send>` firing | `{:timer, send_id, event, routes}` | the `send_id` (`nil` for an unnamed send) and the delivered event |
+| One `interpret/2` batch | `{:interpret, effects, routes}` | the `[Statifier.Effect.t()]` of that batch, whose boundary is the entry |
+| An internal or platform event raised into the session | `{:internal, kind, name, origin, opts, routes}` | `kind` is `:internal` or `:platform`; `origin` is the raising element |
+
+`routes` is the last element of every shape: the `Statifier.Send.Routes`
+snapshot in force for the drive that row triggered, or `nil`. Store the
+snapshot if the run had one worth distinguishing - sends aimed at other
+sessions, a parent, or an invocation. `nil` means the session-start
+snapshot, which is what a single-session run has for its whole life.
+
+Rows go into a `Statifier.Session.Recording` through
+`StatifierUI.Trace.Replay.recording/3`, which is the same fold
+`from_events/4` runs and returns the recording itself - for
+`Statifier.Replay.run/1`, for `to_binary/1`, or to compare against one you
+already hold:
+
+```elixir
+entries = Enum.map(rows, &MyApp.Runs.to_entry/1)
+
+{:ok, recording} =
+  StatifierUI.Trace.Replay.recording(machine, initialize_opts, entries)
+```
+
+An unrecognized shape is `{:error, {:unknown_entry, entry}}` from either
+function, never a skipped row.
+
+### A fired timer is `{:timer, ...}`, not `{:event, ...}`
+
+The engine delivered an ordinary external event when the delayed send fired,
+so a stored row can look like either one. It has to be named `{:timer,
+send_id, event, routes}`, because the `send_id` is what the replay matches
+on: each recorded `<send>` with a delay becomes a pending-timer **credit**
+under its `send_id`, and only a `{:timer, ...}` entry draws one.
+
+Naming the firing as an event skips that matching entirely, and two things
+follow. The replay stops checking: a firing the chart never scheduled is
+accepted instead of returning
+`{:error, {:unscheduled_timer_firing, send_id}}`. And the credit the firing
+should have spent stays outstanding, where a later cancel of the same
+`send_id` moves it to the raced pool and a subsequent firing can still draw
+it - so a run with a cancel replays differently from the one that was
+recorded.
+
+A single firing with nothing after it produces the same message stream under
+either name, which is why this is worth stating rather than leaving to be
+discovered by the run where it matters.
+
 What comes out is the same list `StatifierUI.Trace.Subscriber` produces from
 a live session: the same message types in the same order, with the same
 `seq` values and the same payload bytes under

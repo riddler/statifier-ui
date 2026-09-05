@@ -10,7 +10,8 @@ defmodule StatifierUI.Trace.Replay do
   because it stores runs for audit and renders them later - has the inputs
   a run was driven by, the compiled chart, and the options the session ran
   under, and nothing left to subscribe to. `from_events/4` is what it calls
-  instead.
+  instead, and `recording/3` is the step in the middle it can reach for on
+  its own.
 
   ## The four steps, and why they are the subscriber's four steps
 
@@ -53,6 +54,44 @@ defmodule StatifierUI.Trace.Replay do
       `Process.send_after/3`, and a recorded firing is delivered at its
       recorded position and nowhere else. Wall-clock time never enters,
       which is what makes this function deterministic.
+
+  ## The recording, on its own
+
+  `recording/3` is the first of the four steps, exposed. A host that stores
+  its run as rows rather than as a `Statifier.Session.Recording.to_binary/1`
+  blob has to turn those rows back into `t:Statifier.Session.Recording.entry/0`
+  values before anything can replay them, and the six-clause fold that puts
+  them into a recording through the module's public constructors is the same
+  fold whether the caller wants messages afterwards or the recording itself
+  - to hand to `Statifier.Replay.run/1` directly, to `to_binary/1` for
+  storage, or to compare against one it already had.
+
+  `from_events/4` calls it, so the two cannot drift. It stops where the
+  recording is built: `:trace` and `:session_id` are checked by
+  `from_events/4` and not here, because they are requirements of the
+  *message stream* rather than of the recording (a recording made without
+  `trace: true` replays perfectly well; it just carries no trace effects).
+
+  `docs/ops-embedding.md`'s "From a persisted event log" section carries the
+  row-to-entry mapping table for all six shapes, and the timer rule below.
+
+  ## The timer rule
+
+  A fired delayed send is `{:timer, send_id, event, routes}` and never
+  `{:event, event, routes}`, even though the engine delivered an ordinary
+  external event either way. The difference is the matching:
+  `Statifier.Replay` turns each recorded `<send>` with a delay into a
+  pending-timer *credit* under its `send_id`, and only a `{:timer, ...}`
+  entry draws one (statifier `lib/statifier/replay.ex:337-346`, `:359-374`).
+
+  So a firing named as an event is not checked against anything. The
+  replay accepts a firing the chart never scheduled, instead of returning
+  `{:error, {:unscheduled_timer_firing, send_id}}`; and the credit it
+  should have consumed stays outstanding, where a later
+  `{:cancel_timers, send_id}` moves it into the `raced` pool and a
+  subsequent firing can still draw it. A single fired timer with nothing
+  after it produces the same stream under either name, which is exactly why
+  the rule has to be stated rather than discovered.
 
   ## The name
 
@@ -172,7 +211,7 @@ defmodule StatifierUI.Trace.Replay do
   def from_events(%Machine{} = machine, initialize_opts, events, opts \\ [])
       when is_list(initialize_opts) and is_list(events) and is_list(opts) do
     with {:ok, session} <- validate_initialize_opts(initialize_opts),
-         {:ok, recording} <- build_recording(machine, initialize_opts, events),
+         {:ok, recording} <- recording(machine, initialize_opts, events),
          {:ok, %{stream: stream}} <- EngineReplay.run(recording) do
       emit(machine, session, stream, opts)
     end
@@ -197,14 +236,48 @@ defmodule StatifierUI.Trace.Replay do
 
   # -- the recording ----------------------------------------------------------
 
-  # Built through the public constructors, never as a struct literal:
-  # `Statifier.Session.Recording.t()` is `@opaque` upstream, and building it
-  # by hand would couple this repository to a struct deliberately closed
-  # (ADR-0017 decision 2). One clause per `Recording.entry/0` shape, and an
-  # unrecognized shape is an error rather than a skip.
-  @spec build_recording(Machine.t(), keyword(), [Recording.entry()]) ::
-          {:ok, Recording.t()} | {:error, {:unknown_entry, term()}}
-  defp build_recording(machine, initialize_opts, events) do
+  @doc """
+  Builds the `Statifier.Session.Recording` a host's stored inputs describe.
+
+  Built through the public constructors, never as a struct literal:
+  `Statifier.Session.Recording.t()` is `@opaque` upstream, and building it
+  by hand would couple this repository to a struct deliberately closed
+  (ADR-0017 decision 2). One clause per `t:Statifier.Session.Recording.entry/0`
+  shape, and an unrecognized shape is `{:error, {:unknown_entry, entry}}`
+  rather than a skip - the same fail-closed reading `from_events/4` gives,
+  and for the same reason: a seventh shape appearing upstream must not be
+  dropped silently.
+
+  The arguments are `from_events/4`'s first three, unchanged - see there for
+  what each carries, and `docs/ops-embedding.md`'s "From a persisted event
+  log" for the table that says which stored row becomes which entry shape.
+  A fired delayed send is `{:timer, send_id, event, routes}`; see this
+  module's "The timer rule".
+
+  This is where `from_events/4` gets its recording, so the two cannot drift.
+  Call it directly when the recording rather than the message stream is what
+  you want: `Statifier.Replay.run/1` on it, `Recording.to_binary/1` to store
+  it, or a comparison against one you already hold.
+
+  ## Examples
+
+      iex> {:ok, machine} = Statifier.compile(~s(<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a"><state id="a"/></scxml>))
+      iex> {:ok, recording} = StatifierUI.Trace.Replay.recording(machine, [session_id: "s", trace: true], [])
+      iex> Statifier.Session.Recording.entries(recording)
+      []
+
+      iex> {:ok, machine} = Statifier.compile(~s(<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a"><state id="a"/></scxml>))
+      iex> StatifierUI.Trace.Replay.recording(machine, [session_id: "s", trace: true], [{:teleport, :somewhere}])
+      {:error, {:unknown_entry, {:teleport, :somewhere}}}
+
+  """
+  @spec recording(
+          machine :: Machine.t(),
+          initialize_opts :: keyword(),
+          events :: [Recording.entry()]
+        ) :: {:ok, Recording.t()} | {:error, {:unknown_entry, term()}}
+  def recording(%Machine{} = machine, initialize_opts, events)
+      when is_list(initialize_opts) and is_list(events) do
     Enum.reduce_while(events, {:ok, Recording.new(machine, initialize_opts)}, fn
       entry, {:ok, recording} ->
         case put_entry(recording, entry) do
