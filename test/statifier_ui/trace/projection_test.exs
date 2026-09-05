@@ -615,6 +615,73 @@ defmodule StatifierUI.Trace.ProjectionTest do
     end
   end
 
+  describe "trace.conds_evaluated (ADR-0018)" do
+    @evaluations [
+      %{"t_index" => 0, "outcome" => "disabled"},
+      %{
+        "t_index" => 1,
+        "outcome" => "error",
+        "reason" => %{
+          "class" => "reason",
+          "kind" => "non_boolean_cond",
+          "reason" => "{:non_boolean_cond, \"b\"}"
+        }
+      },
+      %{
+        "t_index" => 2,
+        "outcome" => "error",
+        "reason" => %{
+          "class" => "expression",
+          "kind" => "undefined_variable",
+          "expression" => "variant == 'b'"
+        }
+      }
+    ]
+
+    defp project_evaluations(profile),
+      do:
+        project("trace.conds_evaluated", %{"evaluations" => @evaluations}, profile)["evaluations"]
+
+    test "every entry's reason is projected, not only the first" do
+      # The array traversal is the defect this guards: a projector that
+      # mapped over the head alone would leave the third entry's chart text
+      # in a projected stream.
+      assert [_disabled, second, third] =
+               project_evaluations(Projection.profile!("p", allow_source: false))
+
+      assert second["reason"]["reason"] == @redacted
+      assert third["reason"]["expression"] == @redacted
+    end
+
+    test "the reason class is redacted even under the most permissive profile" do
+      permissive =
+        Projection.profile!("p", allow_source: true, allow_positions: Projection.positions())
+
+      assert [_disabled, second, third] = project_evaluations(permissive)
+
+      # `reason` has no profile that allows it back; `expression` is chart
+      # text and follows `allow_source`, exactly as on an event's error.
+      assert second["reason"]["reason"] == @redacted
+      assert third["reason"]["expression"] == "variant == 'b'"
+    end
+
+    test "t_index, outcome and the discriminators survive every profile" do
+      assert [disabled, second, third] = project_evaluations(deny_all())
+
+      assert disabled == %{"t_index" => 0, "outcome" => "disabled"}
+      assert second["t_index"] == 1
+      assert second["outcome"] == "error"
+      assert second["reason"]["class"] == "reason"
+      assert second["reason"]["kind"] == "non_boolean_cond"
+      assert third["reason"]["class"] == "expression"
+    end
+
+    test "an entry with no reason does not acquire one" do
+      assert [disabled | _rest] = project_evaluations(deny_all())
+      refute Map.has_key?(disabled, "reason")
+    end
+  end
+
   describe "what is never projected" do
     test "the envelope is untouched" do
       profile = deny_all()

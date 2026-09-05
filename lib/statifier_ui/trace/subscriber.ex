@@ -526,15 +526,12 @@ defmodule StatifierUI.Trace.Subscriber do
       {:ok, message} ->
         buffer_and_fanout(state, message)
 
-      # An engine trace effect the v1 vocabulary does not carry
-      # (`StatifierUI.Trace.Normalizer`'s "Skipped trace effects"). No message,
-      # so nothing to buffer or fan out; not a failure, so no diagnostic; and
-      # `seq` stays where it is, because `seq` numbers the messages this
-      # subscriber emitted, not the effects it saw. Advancing it here would
-      # leave a hole in a stream a consumer checks for contiguity.
-      :skip ->
-        state
-
+      # There is no `:skip` arm: `StatifierUI.Trace.Normalizer.normalize/2`
+      # retired that answer with its last member (ADR-0018 gave the
+      # guard-evaluation effect a message), and an arm nothing can reach is
+      # dead code the analyzer refuses. A future skipped effect reinstates it
+      # here, not advancing `seq` - `seq` numbers the messages this subscriber
+      # emitted, not the effects it saw.
       {:error, reason} ->
         record_normalize_error(state, effect_tag(input), reason)
     end

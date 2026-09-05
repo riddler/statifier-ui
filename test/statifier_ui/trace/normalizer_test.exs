@@ -20,8 +20,8 @@ defmodule StatifierUI.Trace.NormalizerTest do
 
   @ctx %{session: "sess_1", seq: 7}
 
-  # The nineteen {tag, payload_module} pairs the engine can emit today
-  # (nine trace payloads, ten core effects; DatamodelInit is exercised in
+  # The twenty {tag, payload_module} pairs the engine can emit today
+  # (ten trace payloads, ten core effects; DatamodelInit is exercised in
   # its own "session.datamodel" describe instead, since its maximal shape
   # is the probe fixture there) - the table Success Criteria names, so a
   # payload module added upstream and not handled here fails the first
@@ -36,6 +36,7 @@ defmodule StatifierUI.Trace.NormalizerTest do
   @coverage [
     {:trace, Trace.EventDequeued},
     {:trace, Trace.TransitionsSelected},
+    {:trace, Trace.CondsEvaluated},
     {:trace, Trace.ExitSet},
     {:trace, Trace.ContentExecuted},
     {:trace, Trace.EntrySet},
@@ -55,7 +56,7 @@ defmodule StatifierUI.Trace.NormalizerTest do
     {:cancel, Cancel}
   ]
 
-  describe "normalize/2 - the nine trace.* effects" do
+  describe "normalize/2 - the ten trace.* effects" do
     test "trace.event_dequeued" do
       event = %Event{name: "go", type: :external, data: %{"x" => 1}}
 
@@ -446,27 +447,108 @@ defmodule StatifierUI.Trace.NormalizerTest do
     end
   end
 
-  describe "normalize/2 - skipped trace effects" do
-    test "a CondsEvaluated payload is skipped, not refused" do
-      # Built through new/2, never a struct literal: the payload module's
-      # moduledoc makes that the contract, and it is what stamps the
-      # counters.
-      payload =
-        Trace.CondsEvaluated.new(
-          %Statifier.MachineState{
-            configuration: MapSet.new(),
-            machine: nil,
-            macrostep: 1,
-            microstep: 0,
-            round: 0
-          },
-          evaluations: [%{t_index: 0, outcome: :enabled, reason: nil}]
-        )
-
-      assert Normalizer.normalize({:trace, payload}, @ctx) == :skip
+  describe "normalize/2 - trace.conds_evaluated" do
+    # Built through new/2, never a struct literal: the payload module's
+    # moduledoc makes that the contract, and it is what stamps the counters.
+    defp conds_evaluated(evaluations) do
+      Trace.CondsEvaluated.new(
+        %Statifier.MachineState{
+          configuration: MapSet.new(),
+          machine: nil,
+          macrostep: 1,
+          microstep: 0,
+          round: 0
+        },
+        evaluations: evaluations
+      )
     end
 
-    test "the skip is named, so an unconsidered trace payload still refuses" do
+    test "the three outcomes map to their lowercased names, reason only on error" do
+      payload =
+        conds_evaluated([
+          %{t_index: 0, outcome: :disabled, reason: nil},
+          %{t_index: 1, outcome: :enabled, reason: nil},
+          %{t_index: 2, outcome: :error, reason: {:non_boolean_cond, "b"}}
+        ])
+
+      assert {:ok, %Message{type: "trace.conds_evaluated", macrostep: 1, round: 0} = message} =
+               Normalizer.normalize({:trace, payload}, @ctx)
+
+      assert [disabled, enabled, errored] = message.payload["evaluations"]
+
+      # Absence, not a null: `reason` is omitted on both non-error outcomes.
+      assert disabled == %{"t_index" => 0, "outcome" => "disabled"}
+      assert enabled == %{"t_index" => 1, "outcome" => "enabled"}
+      refute Map.has_key?(disabled, "reason")
+
+      assert errored["t_index"] == 2
+      assert errored["outcome"] == "error"
+      assert errored["reason"]["class"] == "reason"
+    end
+
+    test "walk order is preserved, so the nth error entry stays the nth" do
+      payload =
+        conds_evaluated([
+          %{t_index: 5, outcome: :error, reason: {:non_boolean_cond, "first"}},
+          %{t_index: 3, outcome: :disabled, reason: nil},
+          %{t_index: 9, outcome: :error, reason: {:non_boolean_cond, "second"}}
+        ])
+
+      assert {:ok, %Message{} = message} = Normalizer.normalize({:trace, payload}, @ctx)
+
+      assert Enum.map(message.payload["evaluations"], & &1["t_index"]) == [5, 3, 9]
+
+      assert message.payload["evaluations"]
+             |> Enum.filter(&(&1["outcome"] == "error"))
+             |> Enum.map(& &1["reason"]["reason"]) == [
+               ~s({:non_boolean_cond, "first"}),
+               ~s({:non_boolean_cond, "second"})
+             ]
+    end
+
+    test "a non-boolean cond renders as ADR-0014's reason class" do
+      payload = conds_evaluated([%{t_index: 0, outcome: :error, reason: {:non_boolean_cond, 42}}])
+
+      assert {:ok, %Message{} = message} = Normalizer.normalize({:trace, payload}, @ctx)
+      assert [%{"reason" => reason}] = message.payload["evaluations"]
+
+      # `kind` is derived from the term's shape (ADR-0014 decision 2), not
+      # from a table of engine tags this producer maintains.
+      assert reason["class"] == "reason"
+      assert reason["kind"] == "non_boolean_cond"
+      assert reason["reason"] == "{:non_boolean_cond, 42}"
+      refute Map.has_key?(reason, "expression")
+    end
+
+    test "an evaluator error renders as the expression class, not the reason class" do
+      # The second shape `Selection.condition_match/2` produces for `reason`.
+      # `StatifierUI.Trace.DiagnosticTest` covers this object's own arms
+      # against real evaluator errors; what is under test here is that this
+      # clause routes to it at all rather than rendering every reason term as
+      # `class: "reason"`.
+      error = %Statifier.Evaluator.Error{
+        source: "amount < limit",
+        error: %Predicator.Errors.UndefinedVariableError{
+          message: "Undefined variable: limit",
+          variable: "limit"
+        },
+        span: nil
+      }
+
+      payload = conds_evaluated([%{t_index: 0, outcome: :error, reason: error}])
+
+      assert {:ok, %Message{} = message} = Normalizer.normalize({:trace, payload}, @ctx)
+      assert [%{"reason" => reason}] = message.payload["evaluations"]
+
+      assert reason["class"] == "expression"
+      assert reason["kind"] == "undefined_variable"
+      assert reason["expression"] == "amount < limit"
+
+      # `reason` belongs to the other class and is never a sibling here.
+      refute Map.has_key?(reason, "reason")
+    end
+
+    test "an unconsidered trace payload still refuses" do
       assert {:error, {:unknown_effect, {:trace, Statifier.Event}}} =
                Normalizer.normalize(
                  {:trace, %Statifier.Event{name: "not-a-trace-payload", type: :external}},
@@ -715,14 +797,15 @@ defmodule StatifierUI.Trace.NormalizerTest do
   end
 
   describe "types/0" do
-    test "returns exactly 24 sorted, unique type strings" do
+    test "returns exactly 25 sorted, unique type strings" do
       types = Normalizer.types()
 
-      assert length(types) == 24
+      assert length(types) == 25
       assert Enum.uniq(types) == types
       assert Enum.sort(types) == types
       assert "session.datamodel" in types
       assert "effect.datamodel_change" in types
+      assert "trace.conds_evaluated" in types
     end
   end
 
@@ -876,6 +959,15 @@ defmodule StatifierUI.Trace.NormalizerTest do
     %Trace.TransitionsSelected{
       t_indexes: [0],
       event: %Event{name: "go", type: :external},
+      macrostep: 1,
+      microstep: 0,
+      round: 0
+    }
+  end
+
+  defp maximal(:trace, Trace.CondsEvaluated) do
+    %Trace.CondsEvaluated{
+      evaluations: [%{t_index: 0, outcome: :error, reason: {:non_boolean_cond, "b"}}],
       macrostep: 1,
       microstep: 0,
       round: 0
@@ -1062,6 +1154,7 @@ defmodule StatifierUI.Trace.NormalizerTest do
 
   defp expected_keys(:trace, Trace.EventDequeued), do: MapSet.new(~w(event from))
   defp expected_keys(:trace, Trace.TransitionsSelected), do: MapSet.new(~w(t_indexes event))
+  defp expected_keys(:trace, Trace.CondsEvaluated), do: MapSet.new(~w(evaluations))
   defp expected_keys(:trace, Trace.ExitSet), do: MapSet.new(~w(indexes))
   defp expected_keys(:trace, Trace.ContentExecuted), do: MapSet.new(~w(owner c_indexes))
   defp expected_keys(:trace, Trace.EntrySet), do: MapSet.new(~w(indexes))

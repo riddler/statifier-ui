@@ -125,8 +125,8 @@ defmodule StatifierUI.Trace.Replay do
     * `{:initialize_opts, :trace_disabled}` when `initialize_opts` does not
       carry a truthy `:trace`. `Statifier.Session.Recording.new/3` defaults
       the flag to `false`, and a run made without it completes successfully
-      while emitting no `trace.*` messages at all - nine of the format's
-      twenty-four types missing, silently. The flag is the caller's to
+      while emitting no `trace.*` messages at all - ten of the format's
+      twenty-five types missing, silently. The flag is the caller's to
       supply, because defaulting it on would produce a stream the recorded
       run never produced.
     * `{:initialize_opts, :missing_session_id}` when `:session_id` is
@@ -145,11 +145,10 @@ defmodule StatifierUI.Trace.Replay do
     * anything `StatifierUI.Trace.Manifest.build/3` or
       `StatifierUI.Trace.Normalizer.normalize/2` returns.
 
-  A `:skip` from `StatifierUI.Trace.Normalizer.normalize/2` is not one of
-  these. It means the engine emitted a trace effect the v1 wire format
-  deliberately does not carry, the fold moves to the next element, and no
-  `seq` is consumed - fail-closed (decision 5) applies to `{:error, _}`
-  and is untouched.
+  `StatifierUI.Trace.Normalizer.normalize/2` has no third answer to fold in:
+  it returned `:skip` while one engine trace effect had no message to map
+  onto, and ADR-0018 gave it one. Fail-closed (decision 5) applies to
+  `{:error, _}` and is untouched.
 
   ## Examples
 
@@ -270,12 +269,10 @@ defmodule StatifierUI.Trace.Replay do
           {:ok, message} ->
             {:cont, {:ok, [chokepoint(message, opts) | messages], seq + 1}}
 
-          # `seq` is deliberately not advanced - see the subscriber's clause of the
-          # same shape. Parity with it is what ADR-0017 decision 3 asks for, and a
-          # skipped effect must not shift the numbering on either side.
-          :skip ->
-            {:cont, {:ok, messages, seq}}
-
+          # No `:skip` arm - see the subscriber's clause of the same shape, and
+          # `StatifierUI.Trace.Normalizer`'s "The retired third answer".
+          # Parity with the subscriber is what ADR-0017 decision 3 asks for,
+          # so the two reinstate it together or not at all.
           {:error, _reason} = error ->
             {:halt, error}
         end

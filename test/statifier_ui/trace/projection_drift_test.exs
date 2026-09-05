@@ -91,16 +91,15 @@ defmodule StatifierUI.Trace.ProjectionDriftTest do
 
   # ADR-0014's reason arm. `reason` is `inspect/1` of an engine reason term,
   # so a datamodel value reaches it verbatim - the marker stands in for one.
-  defp event_with_error_reason do
+  defp event_with_error_reason,
+    do: %{"name" => "error.execution", "type" => "platform", "error" => error_reason_object()}
+
+  defp error_reason_object do
     %{
-      "name" => "error.execution",
-      "type" => "platform",
-      "error" => %{
-        "class" => "reason",
-        "kind" => "not_iterable",
-        "reason" => @secret,
-        "content_path" => [3]
-      }
+      "class" => "reason",
+      "kind" => "not_iterable",
+      "reason" => @secret,
+      "content_path" => [3]
     }
   end
 
@@ -121,6 +120,16 @@ defmodule StatifierUI.Trace.ProjectionDriftTest do
       message("trace.transitions_selected", %{
         "t_indexes" => [0],
         "event" => event_with_error_reason()
+      }),
+      # ADR-0018: the reason object at a position one level inside an array of
+      # objects. Both entries carry one, so a projector that mapped over only
+      # the head of the list would still leak the second.
+      message("trace.conds_evaluated", %{
+        "evaluations" => [
+          %{"t_index" => 0, "outcome" => "disabled"},
+          %{"t_index" => 1, "outcome" => "error", "reason" => error_reason_object()},
+          %{"t_index" => 2, "outcome" => "error", "reason" => error_reason_object()}
+        ]
       }),
       message("trace.finalize_autoforward", %{
         "event" => event_with_error_reason(),
