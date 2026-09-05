@@ -59,7 +59,7 @@ stamps on every `trace.*` message
 order - the same order `Statifier.Interpreter.Selection` raises
 `error.execution` in - one entry per evaluation the round performed." Each
 entry is a plain map, never a `%Statifier.Machine.Transition{}`
-(`:16-17`):
+(`:16-17`), and its shape is the engine's own `evaluation` type (`:51-55`):
 
 ```elixir
 @type evaluation :: %{
@@ -189,6 +189,15 @@ so `nil` is absence (`lib/statifier_ui/trace/normalizer.ex:38-52`). The
 key's presence is therefore redundant with `outcome == "error"`, and
 deliberately so - a consumer may test either.
 
+Per outcome, in full - the form ADR-0014 decision 6 and ADR-0016 decision 3
+use, so a consumer reads one row rather than assembling three claims:
+
+| `outcome` | Engine result | `reason` | Under a projected stream |
+|---|---|---|---|
+| `"enabled"` | `{:ok, true}` | absent | `t_index` and `outcome` in the clear; nothing redacted |
+| `"disabled"` | `{:ok, false}` | absent | `t_index` and `outcome` in the clear; nothing redacted |
+| `"error"` | an evaluation error, or a non-boolean result - spec 5.9.1 joins the two | present, the object of decision 3 | `reason.reason` redacted unconditionally; `reason.expression` under `allow_source`; everything else in the clear |
+
 **Array order is load-bearing.** The entries are in the engine's walk
 order, which is the order that round raises `error.execution` events in.
 A consumer joining a `trace.conds_evaluated` entry to the round's
@@ -245,11 +254,23 @@ position:
 | class, kind, span, location, location_kind, content_path | never projected - closed discriminators and location data, the categories ADR-0012's "What is never projected" already covers |
 | the entry's own `t_index` and `outcome` | never projected - `t_index` is an index into `session.start`'s `transitions`, `outcome` is a closed discriminator; both are already covered by ADR-0012's list |
 
-The mechanics are new even though the rule is not: this is the first
-payload in the format whose projected position sits inside an **array of
-objects**. `lib/statifier_ui/trace/projection.ex:411-441` today reaches
-`project_error/2` through a single-valued `event` key. `sui-e41` maps the
-same function over `evaluations`, applying it to each entry's `reason`
+The traversal has a precedent, and `sui-e41` should follow it rather than
+invent one. `effect.budget_exhausted` already projects a position that
+sits inside an **array of objects** - `data` on each
+`pending_internal_events` entry, ADR-0012's table row at
+`docs/adr/0012-trace-projection-and-redaction.md:267` - and it does so by
+mapping the per-object projector over the list
+(`lib/statifier_ui/trace/projection.ex:354-358`):
+
+```elixir
+replace_present(payload, "pending_internal_events", fn events ->
+  Enum.map(events, &project_event(&1, profile))
+end)
+```
+
+`trace.conds_evaluated` is the same shape one function down: map over
+`evaluations` and apply the existing `project_error/2`
+(`lib/statifier_ui/trace/projection.ex:436-441`) to each entry's `reason`
 where present. This record fixes the rule; how the traversal is spelled is
 the implementing bead's.
 
@@ -301,8 +322,9 @@ reads unambiguously as the Appendix-D nine rather than as a count of all
 `sui-e41`, and `docs/wire-format.md`'s type index carries 25 rows - 10
 `trace.*`, 10 `effect.*`, 5 `session.*`. The drift test parses that
 table's backtick-quoted type strings and asserts them equal to the
-producer's emitted set, so the table and the producer move together or the
-test fails, which is the point.
+producer's emitted set
+(`test/statifier_ui/trace/wire_format_spec_test.exs:9-34`), so the table
+and the producer move together or the test fails, which is the point.
 
 The count appears in more places than the bead's file map names, and every
 one of them is `sui-e41`'s to move. They are not interchangeable:
@@ -331,9 +353,10 @@ stated here only so the record's claims are checkable against it:
   for the new type, mapping the existing `project_error/2` over
   `evaluations`.
 - `lib/statifier_ui/trace/subscriber.ex` and the replay path need **no**
-  change beyond the vocabulary count: they consume `{:ok, message}`
-  already, and an effect that used to answer `:skip` now answers `{:ok,
-  _}` through the path every other trace effect takes.
+  change beyond the vocabulary count: both already have a `:skip` arm
+  beside their `{:ok, _}` arm (`lib/statifier_ui/trace/subscriber.ex:535`,
+  `lib/statifier_ui/trace/replay.ex:276`), so an effect that used to answer
+  `:skip` now takes the `{:ok, _}` path every other trace effect takes.
 - `docs/wire-format.md` - a schema section for the type, its type-index
   row, and the count sites in decision 6's table.
 - A golden over a chart with a guarded transition, round-tripping through
