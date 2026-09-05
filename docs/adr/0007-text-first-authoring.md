@@ -256,10 +256,10 @@ answer for that kind and the grammar's.
 | `:relative_date` | `:date` | gains `===`, `!==`, `CONTAINS`; the vocabulary names no kind of its own for it |
 | `{:list, _}` | `:list` | unchanged - `IN` and nothing else |
 
-Two of those rows are the reason `CONTAINS` widened at all: `contains`
-takes its collection on the **left**, so the value beside it is a scalar
-of any kind, and the local table's confinement of it to strings was the
-judgement being handed over rather than a fact about the grammar.
+The `CONTAINS` column widened for one reason: `contains` takes its
+collection on the **left**, so the value beside it is a scalar of any
+kind; the local table's confinement of it to strings was the judgement
+being handed over rather than a fact about the grammar.
 
 Display labels move with the same delegation. An operator entry now carries
 `:lexeme` - the spelling `to_source/1` writes, which is what a clause is
