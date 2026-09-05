@@ -492,6 +492,7 @@ defmodule StatifierUI.Trace.ProjectionTest do
 
   describe "event.error (sui-czr Phase 2)" do
     @error_obj %{
+      "class" => "expression",
       "kind" => "undefined_variable",
       "expression" => "amount < limit",
       "span" => %{"start_line" => 1, "start_column" => 10, "end_line" => 1, "end_column" => 15},
@@ -520,6 +521,7 @@ defmodule StatifierUI.Trace.ProjectionTest do
 
       error_obj = payload["event"]["error"]
       assert error_obj["expression"] == @redacted
+      assert error_obj["class"] == @error_obj["class"]
       assert error_obj["kind"] == @error_obj["kind"]
       assert error_obj["span"] == @error_obj["span"]
       assert error_obj["location"] == @error_obj["location"]
@@ -548,6 +550,68 @@ defmodule StatifierUI.Trace.ProjectionTest do
         )
 
       refute Map.has_key?(payload["event"], "error")
+    end
+  end
+
+  # ADR-0014 decision 5: `reason` is `inspect/1` of an engine reason term
+  # and can embed a datamodel value verbatim, so no profile allows it back.
+  describe "event.error.reason (ADR-0014)" do
+    @reason_obj %{
+      "class" => "reason",
+      "kind" => "not_iterable",
+      "reason" => "{:not_iterable, 42}",
+      "content_path" => [3],
+      "location" => %{
+        "start_line" => 4,
+        "start_column" => 13,
+        "start_offset" => 146,
+        "end_line" => 6,
+        "end_column" => 23,
+        "end_offset" => 230
+      },
+      "location_kind" => "node"
+    }
+
+    defp project_reason(profile, error_obj) do
+      "trace.event_dequeued"
+      |> project(
+        %{
+          "event" => %{
+            "name" => "error.execution",
+            "type" => "platform",
+            "error" => error_obj
+          }
+        },
+        profile
+      )
+      |> get_in(["event", "error"])
+    end
+
+    test "reason is redacted even under the most permissive profile there is" do
+      permissive =
+        Projection.profile!("p", allow_source: true, allow_positions: Projection.positions())
+
+      assert project_reason(permissive, @reason_obj)["reason"] == @redacted
+    end
+
+    test "reason is redacted under a deny-all profile" do
+      assert project_reason(deny_all(), @reason_obj)["reason"] == @redacted
+    end
+
+    test "class, kind, content_path and location survive every profile" do
+      error_obj = project_reason(deny_all(), @reason_obj)
+
+      assert error_obj["class"] == "reason"
+      assert error_obj["kind"] == "not_iterable"
+      assert error_obj["content_path"] == [3]
+      assert error_obj["location"] == @reason_obj["location"]
+      assert error_obj["location_kind"] == "node"
+    end
+
+    test "redaction replaces at a key already present and never creates one" do
+      error_obj = project_reason(deny_all(), Map.delete(@reason_obj, "reason"))
+
+      refute Map.has_key?(error_obj, "reason")
     end
   end
 

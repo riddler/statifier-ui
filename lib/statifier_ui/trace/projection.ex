@@ -96,12 +96,17 @@ defmodule StatifierUI.Trace.Projection do
   records that as an accepted residual: a consumer that cannot see the path
   cannot fold the write at all.
 
-  An event's `error` object (`StatifierUI.Trace.Diagnostic.object/4`) adds
-  four more never-projected fields: `kind`, `span`, `location`, and
-  `location_kind`. Only `error.expression` is chart text and is redacted with
-  `session.start`'s `source` under `allow_source: false` - it is not a new
-  entry in `positions/0`, since the existing `allow_source` knob already
-  governs chart text.
+  An event's `error` object (`StatifierUI.Trace.Diagnostic`) adds six more
+  never-projected fields: `class`, `kind`, `span`, `location`,
+  `location_kind`, and `content_path`. Two of its keys are not in that set.
+  `error.expression` is chart text and is redacted with `session.start`'s
+  `source` under `allow_source: false` - it is not a new entry in
+  `positions/0`, since the existing `allow_source` knob already governs
+  chart text. `error.reason` is redacted **unconditionally**, under every
+  profile, beside `session.terminated`'s `reason`: it is `inspect/1` of an
+  engine reason term and can embed a datamodel value verbatim (ADR-0014
+  decision 5), so no profile can allow it back and it is not a position
+  either.
 
   ## Not anonymization, not access control
 
@@ -415,12 +420,25 @@ defmodule StatifierUI.Trace.Projection do
   # `error.expression` is chart text - the entity-expanded string the
   # expression engine counted columns in - so it is governed by the
   # existing `allow_source` knob rather than a new `positions/0` entry.
-  # `kind`, `span`, `location`, and `location_kind` are never touched here:
-  # `kind` is a closed discriminator and the other three are location data,
-  # the category the moduledoc's "What is never projected" section already
-  # covers.
+  #
+  # `error.reason` is the other half, and it is unconditional (ADR-0014
+  # decision 5): it is `inspect/1` of an engine reason term, and
+  # `{:not_iterable, value}` embeds a datamodel value verbatim, so there is
+  # no profile under which it is safe. It is not a `positions/0` entry for
+  # exactly that reason - a position is something a profile can allow back
+  # - and it sits beside `session.terminated`'s `reason` instead.
+  #
+  # `class`, `kind`, `span`, `location`, `location_kind`, and `content_path`
+  # are never touched here: `class` and `kind` are closed discriminators,
+  # `content_path`'s integers are `c_index` values, and the rest is location
+  # data - the categories the moduledoc's "What is never projected" section
+  # already covers.
   @spec project_error(map(), Profile.t()) :: map()
-  defp project_error(error, profile), do: project_source_field(error, "expression", profile)
+  defp project_error(error, profile) do
+    error
+    |> project_source_field("expression", profile)
+    |> replace_present("reason", fn _reason -> @redacted end)
+  end
 
   @spec project_position(term(), Profile.position(), Profile.t()) :: term()
   defp project_position(value, position, %Profile{allow_positions: allowed}) do

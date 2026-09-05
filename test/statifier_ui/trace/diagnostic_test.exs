@@ -583,4 +583,50 @@ defmodule StatifierUI.Trace.DiagnosticTest do
       assert resolved == naive
     end
   end
+
+  # ADR-0014's peeling rule at the unit level: the normalizer tests cover
+  # the two arms end to end, and these cover the wrapper's own edges, which
+  # no live chart reaches.
+  describe "reason_object/4 - peeling {:nested_content, _, _}" do
+    test "content_path keeps the wrappers in outermost-first order" do
+      wrapped = {:nested_content, 7, {:nested_content, 2, {:nested_content, 9, :boom}}}
+
+      assert Diagnostic.reason_object(wrapped, nil, nil, nil) == %{
+               "class" => "reason",
+               "kind" => "boom",
+               "reason" => ":boom",
+               "content_path" => [7, 2, 9]
+             }
+    end
+
+    test "an unwrapped term carries no content_path at all" do
+      object = Diagnostic.reason_object({:system_variable, "_event"}, nil, nil, nil)
+
+      refute Map.has_key?(object, "content_path")
+      assert object["kind"] == "system_variable"
+    end
+
+    test "a :nested_content tuple whose index is not a c_index is an ordinary tagged tuple" do
+      # `content_path`'s integers are promised to be `session.start`
+      # contents-table indexes, so a wrapper that cannot supply one is not
+      # peeled into a path that would be lying about them.
+      object = Diagnostic.reason_object({:nested_content, "two", :boom}, nil, nil, nil)
+
+      refute Map.has_key?(object, "content_path")
+      assert object["kind"] == "nested_content"
+      assert object["reason"] == ~s({:nested_content, "two", :boom})
+    end
+
+    test "a wrapped %Evaluator.Error{} comes back as the expression arm" do
+      error =
+        evaluate!(compile!(@entity_guard) |> Statifier.Machine.transition(0) |> Map.fetch!(:cond))
+
+      object = Diagnostic.reason_object({:nested_content, 1, error}, nil, nil, nil)
+
+      assert object["class"] == "expression"
+      assert object["expression"] == "amount < limit"
+      assert object["content_path"] == [1]
+      refute Map.has_key?(object, "reason")
+    end
+  end
 end
