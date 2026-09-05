@@ -1,9 +1,10 @@
 # ADR-0012: Trace projection and redaction
 
 Status: accepted (2026-08-26)
-Amendment status: **proposed** (2026-08-27, sui-0of); **accepted** (2026-08-29, sui-hmn: the three implementation rulings, accepted under the operator campaign-015 direction-agent gate grant, PR 55) - see "Amendment
-proposed" below; the accepted text is unchanged and stays authoritative
-until the amendment is read and accepted.
+Amendment status: **accepted** (2026-09-05, campaign-029; proposed 2026-08-27, sui-0of); **accepted** (2026-08-29, sui-hmn: the three implementation rulings, accepted under the operator campaign-015 direction-agent gate grant, PR 55) - see "Amendment
+proposed" below; the accepted text is unchanged, and the sui-0of
+substitution is recorded rather than applied to the Decision's "Located
+positions" passage.
 
 Extends ADR-0005 additively: one new reserved value shape, one new
 `session.start` field, and a producer-side transform. No type is added,
@@ -12,7 +13,8 @@ version stays `1` - see "Versioning decision" below.
 
 ## Amendment proposed 2026-08-27 (sui-0of): canonical example domains
 
-*Proposed, not accepted. Nothing below this section has been edited.*
+*Accepted 2026-09-05 (campaign-029); proposed 2026-08-27. Nothing below
+this section has been edited.*
 
 The fleet ruling of 2026-08-27 fixes exactly two example domains for the
 whole family - credit-card processing (accounts, budgets, transactions,
