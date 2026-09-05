@@ -53,16 +53,17 @@ defmodule StatifierUI.ExpressionTest do
 
   describe "declared paths" do
     test "lead the list - they are the entries an author cannot look up" do
-      [first, second | _rest] = Expression.completions(["order.total", "customer.tier"])
+      [first, second | _rest] =
+        Expression.completions(["authorization.amount_cents", "card.brand"])
 
       assert first == %{
-               label: "order.total",
-               insert: "order.total",
+               label: "authorization.amount_cents",
+               insert: "authorization.amount_cents",
                kind: "path",
                detail: "declared path"
              }
 
-      assert second.insert == "customer.tier"
+      assert second.insert == "card.brand"
     end
 
     test "no candidates is a shorter list, not a different one" do
@@ -77,10 +78,10 @@ defmodule StatifierUI.ExpressionTest do
     end
 
     test "keeps the declared paths and drops the grammar" do
-      assert Expression.completions(["order.total"]) == [
+      assert Expression.completions(["authorization.amount_cents"]) == [
                %{
-                 label: "order.total",
-                 insert: "order.total",
+                 label: "authorization.amount_cents",
+                 insert: "authorization.amount_cents",
                  kind: "path",
                  detail: "declared path"
                }
@@ -95,10 +96,10 @@ defmodule StatifierUI.ExpressionTest do
 
   describe "datalist/1" do
     test "keeps what a native datalist can filter on" do
-      kept = Expression.completions(["order.total"]) |> Expression.datalist()
+      kept = Expression.completions(["authorization.amount_cents"]) |> Expression.datalist()
       insertions = Enum.map(kept, & &1.insert)
 
-      assert "order.total" in insertions
+      assert "authorization.amount_cents" in insertions
       assert "contains" in insertions
       assert "len(" in insertions
     end
@@ -145,9 +146,9 @@ defmodule StatifierUI.ExpressionTest do
       assert dotted.path == "card.brand"
       assert dotted.segments == [root: "card", property: "brand"]
 
-      assert {:ok, [bracketed], nil} = Expression.simple("cart['items'] contains 'gift'")
-      assert bracketed.path == "cart['items']"
-      assert bracketed.segments == [root: "cart", key: "items"]
+      assert {:ok, [bracketed], nil} = Expression.simple("account['tags'] contains 'vip'")
+      assert bracketed.path == "account['tags']"
+      assert bracketed.segments == [root: "account", key: "tags"]
     end
 
     test "a relative date is a value like any other, so a form can offer a window control" do
@@ -316,7 +317,7 @@ defmodule StatifierUI.ExpressionTest do
     end
 
     test "every path parses back to the segments it was rendered from" do
-      for path <- ["status", "card.brand", "cart['items']", "signup.created_at"] do
+      for path <- ["status", "card.brand", "account['tags']", "signup.created_at"] do
         assert {:ok, [row], nil} = Expression.simple(path <> " == 'active'")
         assert row.path == path
 
@@ -332,7 +333,7 @@ defmodule StatifierUI.ExpressionTest do
             "plan == true",
             "step in ['payment', 'review']",
             "signup.created_at < 30d ago",
-            "cart['items'] contains 'gift'"
+            "account['tags'] contains 'vip'"
           ] do
         assert {:ok, [row], nil} = Expression.simple(source)
 
@@ -412,7 +413,7 @@ defmodule StatifierUI.ExpressionTest do
     test "segments/1 reads a declared path with predicator's own parser" do
       assert Expression.segments("status") == {:ok, [root: "status"]}
       assert Expression.segments("card.brand") == {:ok, [root: "card", property: "brand"]}
-      assert Expression.segments("cart['items']") == {:ok, [root: "cart", key: "items"]}
+      assert Expression.segments("account['tags']") == {:ok, [root: "account", key: "tags"]}
     end
 
     test "segments/1 refuses a string that is not a path" do

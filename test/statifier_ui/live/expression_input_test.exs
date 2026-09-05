@@ -15,8 +15,8 @@ defmodule StatifierUI.Live.ExpressionInputTest do
     field: :a_view_model_field_this_component_never_reads,
     id: "sb-field-node1-cond",
     name: "config[cond]",
-    value: "order.total > 10",
-    candidates: ["order.total", "customer.tier"]
+    value: "authorization.amount_cents > 10",
+    candidates: ["authorization.amount_cents", "card.brand"]
   }
 
   defp seam_html(overrides \\ %{}) do
@@ -29,7 +29,7 @@ defmodule StatifierUI.Live.ExpressionInputTest do
 
       assert html =~ ~s(id="sb-field-node1-cond")
       assert html =~ ~s(name="config[cond]")
-      assert html =~ ~s(value="order.total &gt; 10")
+      assert html =~ ~s(value="authorization.amount_cents &gt; 10")
     end
 
     test "ignores :field entirely - reading it would mean depending on sb" do
@@ -69,8 +69,8 @@ defmodule StatifierUI.Live.ExpressionInputTest do
       [_all, json] = Regex.run(~r/data-completions="([^"]*)"/, html)
       completions = json |> unescape() |> JSON.decode!()
 
-      assert %{"insert" => "order.total", "kind" => "path"} =
-               Enum.find(completions, &(&1["insert"] == "order.total"))
+      assert %{"insert" => "authorization.amount_cents", "kind" => "path"} =
+               Enum.find(completions, &(&1["insert"] == "authorization.amount_cents"))
 
       assert Enum.any?(completions, &(&1["kind"] == "comparison"))
       assert length(completions) == length(Expression.completions(@seam.candidates))
@@ -93,7 +93,7 @@ defmodule StatifierUI.Live.ExpressionInputTest do
 
       assert html =~ ~s(list="sb-field-node1-cond-completions")
       assert html =~ ~s(<datalist id="sb-field-node1-cond-completions">)
-      assert html =~ ~s(<option value="order.total">)
+      assert html =~ ~s(<option value="authorization.amount_cents">)
       assert html =~ ~s(<option value="contains">)
     end
 
@@ -101,7 +101,7 @@ defmodule StatifierUI.Live.ExpressionInputTest do
       html = seam_html(%{hook: nil})
 
       refute html =~ "phx-hook"
-      assert html =~ ~s(<option value="order.total">)
+      assert html =~ ~s(<option value="authorization.amount_cents">)
     end
   end
 
