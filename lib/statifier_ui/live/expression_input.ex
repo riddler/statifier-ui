@@ -89,9 +89,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     grammar's own phrases, delivered by `StatifierUI.Expression.operators/1` as
     the `:label` beside the writer's `:lexeme` - so this module no longer makes
     them. `display_label/1` still lowercases a word-shaped lexeme, but the
-    grammar's phrases are not word-shaped, so it is inert for operator labels;
-    whether it has any remaining caller is sui-ne0's question, not this
-    module's.
+    grammar's phrases are already display-cased - the only word-shaped one,
+    `contains`, is already lowercase - so it is a no-op for operator labels.
+    It is still called, on every operator option this module renders; what it
+    should become now that it changes nothing, and whether its own `@doc`
+    below should still describe casing `IN` down to `in`, are sui-ne0's
+    questions rather than this module's.
 
     ## Two affordances, and the second one is optional
 
