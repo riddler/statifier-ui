@@ -331,11 +331,21 @@ defmodule StatifierUI.Live.ExpressionInputTest do
       assert html =~ ~s(value="step IN [&#39;payment&#39;]")
     end
 
-    test "display_label/1 is the only place a label is cased" do
-      assert ExpressionInput.display_label("IN") == "in"
-      assert ExpressionInput.display_label("CONTAINS") == "contains"
-      assert ExpressionInput.display_label(">=") == ">="
-      assert ExpressionInput.display_label("!==") == "!=="
+    test "no operator option is re-cased: every one is the grammar's phrase verbatim" do
+      html = picklist_html("amount >= 500", ["amount"])
+
+      # Operator options are the only ones carrying the grammar's one-line
+      # description as a title, which is what separates them from the path and
+      # value selects in the same rendered form.
+      rendered =
+        ~r{<option[^>]*\btitle="[^"]*"[^>]*>\s*([^<]*?)\s*</option>}
+        |> Regex.scan(html)
+        |> Enum.map(fn [_all, label] -> label end)
+
+      grammar = Enum.map(StatifierUI.Expression.operators(:integer), & &1.label)
+
+      assert grammar != []
+      assert Enum.sort(rendered) == Enum.sort(grammar)
     end
   end
 
