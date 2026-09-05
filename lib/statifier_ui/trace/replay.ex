@@ -145,6 +145,12 @@ defmodule StatifierUI.Trace.Replay do
     * anything `StatifierUI.Trace.Manifest.build/3` or
       `StatifierUI.Trace.Normalizer.normalize/2` returns.
 
+  A `:skip` from `StatifierUI.Trace.Normalizer.normalize/2` is not one of
+  these. It means the engine emitted a trace effect the v1 wire format
+  deliberately does not carry, the fold moves to the next element, and no
+  `seq` is consumed - fail-closed (decision 5) applies to `{:error, _}`
+  and is untouched.
+
   ## Examples
 
       iex> {:ok, machine} = Statifier.compile(~s(<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="a"><state id="a"/></scxml>))
@@ -261,8 +267,17 @@ defmodule StatifierUI.Trace.Replay do
         ctx = %{session: session, seq: seq, machine: machine, source: source}
 
         case Normalizer.normalize(input, ctx) do
-          {:ok, message} -> {:cont, {:ok, [chokepoint(message, opts) | messages], seq + 1}}
-          {:error, _reason} = error -> {:halt, error}
+          {:ok, message} ->
+            {:cont, {:ok, [chokepoint(message, opts) | messages], seq + 1}}
+
+          # `seq` is deliberately not advanced - see the subscriber's clause of the
+          # same shape. Parity with it is what ADR-0017 decision 3 asks for, and a
+          # skipped effect must not shift the numbering on either side.
+          :skip ->
+            {:cont, {:ok, messages, seq}}
+
+          {:error, _reason} = error ->
+            {:halt, error}
         end
       end)
 

@@ -523,8 +523,20 @@ defmodule StatifierUI.Trace.Subscriber do
     ctx = %{session: state.session, seq: state.seq, machine: state.machine, source: state.source}
 
     case Normalizer.normalize(input, ctx) do
-      {:ok, message} -> buffer_and_fanout(state, message)
-      {:error, reason} -> record_normalize_error(state, effect_tag(input), reason)
+      {:ok, message} ->
+        buffer_and_fanout(state, message)
+
+      # An engine trace effect the v1 vocabulary does not carry
+      # (`StatifierUI.Trace.Normalizer`'s "Skipped trace effects"). No message,
+      # so nothing to buffer or fan out; not a failure, so no diagnostic; and
+      # `seq` stays where it is, because `seq` numbers the messages this
+      # subscriber emitted, not the effects it saw. Advancing it here would
+      # leave a hole in a stream a consumer checks for contiguity.
+      :skip ->
+        state
+
+      {:error, reason} ->
+        record_normalize_error(state, effect_tag(input), reason)
     end
   end
 

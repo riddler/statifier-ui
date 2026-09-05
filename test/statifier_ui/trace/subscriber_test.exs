@@ -163,6 +163,62 @@ defmodule StatifierUI.Trace.SubscriberTest do
     end
   end
 
+  describe "a guarded transition (sui-9fs)" do
+    # statifier 2.5.0 emits a `Statifier.Effect.Trace.CondsEvaluated` for the
+    # round that evaluates `ready`. The v1 vocabulary carries no message for
+    # it, so `StatifierUI.Trace.Normalizer.normalize/2` answers `:skip` and
+    # this subscriber passes over it. The regression this guards is the one
+    # the bead reported: the effect used to come back
+    # `{:error, {:unknown_effect, _}}`, which counted as an error and left a
+    # gap where a consumer expects contiguity.
+    @guarded """
+    <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="a" version="1.0" datamodel="predicator">
+        <datamodel>
+            <data id="ready" expr="true"/>
+        </datamodel>
+        <state id="a">
+            <transition event="go" cond="ready" target="b"/>
+            <transition event="go" target="c"/>
+        </state>
+        <state id="b"/>
+        <state id="c"/>
+    </scxml>
+    """
+
+    # 16 messages for @guarded driven with one "go": seq 0 (session.start)
+    # through seq 15 (the driven macrostep's trace.macrostep_stable). One
+    # more than @two_state's 15, and the extra one is the
+    # effect.datamodel_change that initializing `ready` produces - @two_state
+    # declares no datamodel. The skipped CondsEvaluated adds none.
+    @guarded_full_seq 16
+
+    test "records no error and leaves seq contiguous" do
+      machine = SessionCase.compile!(@guarded)
+      {sub, session} = SessionCase.start_early!(machine, "sess_guarded")
+      Session.send_event(session, "go")
+      stats = SessionCase.wait_for_seq(sub, @guarded_full_seq)
+
+      messages = Subscriber.messages(sub)
+
+      # The guard really did run: the round that evaluated `ready` is the one
+      # that selected the cond'd transition, and the run reached its stable
+      # configuration.
+      last = List.last(messages)
+      assert last.type == "trace.macrostep_stable"
+      # State index 2 is "b" - the cond'd target. The guard was evaluated,
+      # answered enabled, and the run took that branch rather than the
+      # unguarded fallback into "c".
+      assert last.payload["configuration"] == [0, 2]
+      assert length(messages) == @guarded_full_seq
+      assert Enum.map(messages, & &1.seq) == Enum.to_list(0..(@guarded_full_seq - 1))
+      assert stats.seq == @guarded_full_seq
+
+      assert stats.errors == 0
+      assert stats.dropped == 0
+      assert stats.diagnostics == []
+    end
+  end
+
   describe "capacity overflow" do
     test "drops oldest and leaves a seq gap plus a non-zero dropped count" do
       machine = SessionCase.compile!(@two_state)

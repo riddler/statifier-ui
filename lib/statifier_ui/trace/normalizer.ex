@@ -50,6 +50,26 @@ defmodule StatifierUI.Trace.Normalizer do
   and `put_value/3` generalize the rule (decision 5) by treating `nil` and
   `:undefined` alike as absence for those fields, applied uniformly instead
   of remembered clause by clause.
+
+  ## Skipped trace effects
+
+  `normalize/2` has a third answer, `:skip`, for an engine trace effect the
+  v1 wire format deliberately does not carry. It is not a failure and it is
+  not an unknown effect: the set is closed, named in
+  `@skipped_trace_effects`, and every member has been looked at and ruled
+  out of v1 on purpose. Today the set is
+  `Statifier.Effect.Trace.CondsEvaluated` alone - statifier 2.5.0's guard
+  seam, emitted once per selection round that evaluated a written `cond`.
+  The vocabulary has no guard-evaluation message to map it onto, and
+  inventing one is a wire-format change with an ADR in front of it (sui-e41
+  will add `trace.conds_evaluated`), so until then the producer passes over
+  the effect rather than refusing the stream it appears in. Refusing it is
+  what this skip replaces: a chart with a single guarded transition used to
+  fail the whole offline replay on its first branch.
+
+  The fallthrough that answers `{:error, {:unknown_effect, _}}` is
+  untouched, and deliberately so - a trace effect nobody has considered
+  still refuses.
   """
 
   alias Statifier.Effect.Autoforward
@@ -104,6 +124,11 @@ defmodule StatifierUI.Trace.Normalizer do
           | {:halted, :done | :cancelled | :budget_exhausted}
           | {:unroutable, Statifier.Effect.t()}
 
+  # The trace payload modules `normalize/2` answers `:skip` for, listed in
+  # one place so the set is readable without reading the clauses. See this
+  # module's "Skipped trace effects" section for why each member is here.
+  @skipped_trace_effects [Trace.CondsEvaluated]
+
   @types [
     "trace.event_dequeued",
     "trace.transitions_selected",
@@ -152,8 +177,16 @@ defmodule StatifierUI.Trace.Normalizer do
   know, rather than skipping it - a new engine effect appearing silently is
   exactly what ADR-0005's Consequences warn a drift test must catch. It is
   the caller's job to decide what to do with the error.
+
+  Returns `:skip` for an engine trace effect the wire format deliberately
+  does not carry - the closed `@skipped_trace_effects` set, today
+  `Statifier.Effect.Trace.CondsEvaluated` alone. `:skip` is not a failure:
+  the effect produced no message because v1 has no message for it, so a
+  caller consumes no `seq` for it, records no error, and carries on. See
+  this module's "Skipped trace effects" section. A caller matching only
+  `{:ok, _}` and `{:error, _}` needs a third clause.
   """
-  @spec normalize(input(), ctx()) :: {:ok, Message.t()} | {:error, term()}
+  @spec normalize(input(), ctx()) :: {:ok, Message.t()} | :skip | {:error, term()}
   def normalize({:effect, effect}, ctx), do: normalize(effect, ctx)
 
   def normalize({:halted, reason}, ctx) when reason in [:done, :cancelled, :budget_exhausted] do
@@ -206,7 +239,8 @@ defmodule StatifierUI.Trace.Normalizer do
            {String.t(), non_neg_integer() | nil, non_neg_integer() | nil, non_neg_integer() | nil,
             map()}
 
-  @spec decompose(Statifier.Effect.t(), ctx()) :: {:ok, decomposed()} | {:error, term()}
+  @spec decompose(Statifier.Effect.t(), ctx()) ::
+          {:ok, decomposed()} | :skip | {:error, term()}
   defp decompose({:trace, payload}, ctx), do: trace_message(payload, ctx)
   defp decompose({:log, payload}, ctx), do: core_message(payload, ctx)
   defp decompose({:done, payload}, ctx), do: core_message(payload, ctx)
@@ -224,7 +258,7 @@ defmodule StatifierUI.Trace.Normalizer do
 
   # -- The nine trace.* payloads ---------------------------------------------
 
-  @spec trace_message(struct(), ctx()) :: {:ok, decomposed()} | {:error, term()}
+  @spec trace_message(struct(), ctx()) :: {:ok, decomposed()} | :skip | {:error, term()}
   defp trace_message(%Trace.EventDequeued{} = p, ctx) do
     with {:ok, event_obj} <- event(p.event, ctx) do
       payload = %{"event" => event_obj, "from" => Atom.to_string(p.from)}
@@ -281,6 +315,11 @@ defmodule StatifierUI.Trace.Normalizer do
       {:ok, {"trace.finalize_autoforward", p.macrostep, p.microstep, p.round, payload}}
     end
   end
+
+  # Named, never open-ended: the guard matches only the modules
+  # `@skipped_trace_effects` lists, so the fallthrough below still refuses a
+  # trace effect this module has never seen.
+  defp trace_message(%module{}, _ctx) when module in @skipped_trace_effects, do: :skip
 
   defp trace_message(payload, _ctx),
     do: {:error, {:unknown_effect, {:trace, payload.__struct__}}}

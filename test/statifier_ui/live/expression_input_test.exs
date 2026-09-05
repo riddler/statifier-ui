@@ -303,7 +303,12 @@ defmodule StatifierUI.Live.ExpressionInputTest do
 
       [_all, json] = Regex.run(~r/data-escapes="([^"]*)"/, html)
 
-      assert json |> unescape() |> JSON.decode!() == [["'", "\\'"]]
+      # Backslash first, then quote: predicator 9.4.0's writer escapes both,
+      # and the order here is the order a consumer applies them in. The
+      # literal is what the writer actually produced when it was last
+      # measured, not a rule about what it ought to do - a writer change
+      # moves this line, which is the point of the test's name.
+      assert json |> unescape() |> JSON.decode!() == [["\\", "\\\\"], ["'", "\\'"]]
     end
 
     test "a number is spelled bare, so its template wraps in nothing" do

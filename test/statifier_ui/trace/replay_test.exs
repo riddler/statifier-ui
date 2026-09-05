@@ -43,6 +43,30 @@ defmodule StatifierUI.Trace.ReplayTest do
 
   @fixture_path Path.join([__DIR__, "..", "..", "support", "trace", "two_state.jsonl"])
 
+  # A branching chart: statifier 2.5.0 emits a
+  # `Statifier.Effect.Trace.CondsEvaluated` for the selection round that
+  # evaluates `ready`, and the v1 wire format carries no message for it. The
+  # golden below is what proves the whole offline path survives that -
+  # before `normalize/2` learned to answer `:skip`, `from_events/4` failed
+  # closed on the first branch and produced no stream at all (sui-9fs).
+  # Off `<invoke>` and `<send target="#_internal">` for the same reason the
+  # two-state chart is: a plain byte comparison.
+  @guarded """
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="a" version="1.0" datamodel="predicator">
+      <datamodel>
+          <data id="ready" expr="true"/>
+      </datamodel>
+      <state id="a">
+          <transition event="go" cond="ready" target="b"/>
+          <transition event="go" target="c"/>
+      </state>
+      <state id="b"/>
+      <state id="c"/>
+  </scxml>
+  """
+
+  @guarded_fixture_path Path.join([__DIR__, "..", "..", "support", "trace", "guarded.jsonl"])
+
   @minimal """
   <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="a" version="1.0">
       <state id="a"/>
@@ -97,6 +121,53 @@ defmodule StatifierUI.Trace.ReplayTest do
       # ADR-0017 decision 4: there is no process offline and no exit to
       # observe, so the offline stream never carries this type.
       refute Enum.any?(rest, &(&1.type == "session.terminated"))
+    end
+  end
+
+  describe "a chart with a guarded transition" do
+    test "round-trips against the checked-in golden byte-for-byte" do
+      machine = SessionCase.compile!(@guarded)
+
+      session = SessionCase.start_recorded!(machine, "sess_guarded")
+      Session.send_event(session, "go")
+      SessionCase.wait_for_macrostep(session, 1)
+
+      {:ok, recording} = Session.recording(session)
+
+      assert {:ok, messages} =
+               Replay.from_events(
+                 Recording.machine(recording),
+                 Recording.opts(recording),
+                 Recording.entries(recording)
+               )
+
+      assert Json.encode_lines(messages) == File.read!(@guarded_fixture_path)
+    end
+
+    test "skips the guard-evaluation effect without consuming a seq" do
+      machine = SessionCase.compile!(@guarded)
+
+      session = SessionCase.start_recorded!(machine, "sess_guarded")
+      Session.send_event(session, "go")
+      SessionCase.wait_for_macrostep(session, 1)
+
+      {:ok, recording} = Session.recording(session)
+
+      assert {:ok, [manifest | rest]} =
+               Replay.from_events(
+                 Recording.machine(recording),
+                 Recording.opts(recording),
+                 Recording.entries(recording)
+               )
+
+      assert %Message{type: "session.start", seq: 0} = manifest
+      assert Enum.map(rest, & &1.seq) == Enum.to_list(1..length(rest))
+
+      # The guard fired - the chart really did take the cond'd transition -
+      # and no message in the stream reports the evaluation, because v1 has
+      # no type for it.
+      assert Enum.any?(rest, &(&1.type == "trace.entry_set"))
+      refute Enum.any?(rest, &String.contains?(&1.type, "cond"))
     end
   end
 
