@@ -2,6 +2,12 @@
 
 Status: proposed (2026-09-02, campaign-027)
 
+Amendment status: **proposed** (2026-09-05, sui-4so: Decision 2 re-argued
+against an always-present span cell, after `8119f19` falsified the "not a
+schema change" limb) - see "Amendment proposed" below; the record's text
+outside that section is unchanged, apart from one added item in the
+Implementation list.
+
 Narrows one field of `session.start`'s `data` table: `value_location` is
 emitted only when it spans a value the author actually wrote, and is
 key-absent otherwise, instead of falling back to the `<data>` element's own
@@ -9,6 +15,198 @@ span. No message type is added, removed, or renamed; no field changes its
 type or its meaning where it is present; the format version stays `1`.
 Nothing in this record ships code - the producer, `docs/wire-format.md`, and
 `manifest_test.exs` move on a separate implementing bead filed on acceptance.
+
+## Amendment proposed 2026-09-05 (sui-4so): Decision 2 re-argued against an always-present span cell
+
+*Proposed 2026-09-05. Nothing in the record above or below has been
+rewritten. This amendment makes two insertions outside its own section,
+named here rather than left for a reader to find: the amendment status line
+in the header, and item 6 of the Implementation list. No line of the record
+is edited or removed, and the record's own Status line is untouched.*
+
+**The fact that moved.** This record merged at `9942e1f` (2026-09-02
+08:31 -0600). Three and a half hours later, `8119f19` (`sui-o4e`, the
+payload-schema drift test) rewrote the presence cell for `value_location`
+in `docs/wire-format.md`. It had read *"present only when the compiler
+recorded a span for the element's value"*. It now reads, and reads on
+`main` today at `docs/wire-format.md:398`, *"always - the written value's
+span when the element wrote `expr` or `src`, the element's own span
+otherwise; see below"*. That commit's message calls the conditional cell
+stale and says the table *"now says always"*.
+
+Two passages of the record are stated against the old cell: the Context
+bullet under "What the format already says" (*"Conditional, in the
+published schema, since the table existed"*) and, load-bearingly, the
+second limb of Decision 2. Read the Context bullet as a statement true on
+this record's own date. Decision 2 is re-argued below, and the
+re-argument - not the paragraph it replaces - is what a flip to `accepted`
+blesses.
+
+### 1. The "not a schema change" limb is retracted
+
+Decision 2's second bold claim, *"It is also not a schema change"*, is
+false today, and so is the reasoning under it. The published schema now
+calls `value_location` always-present. Under Option B the producer stops
+emitting it on the child-content and bare variants, so the change removes a
+key the schema promises. That is a schema change: a narrowing of a
+published presence contract.
+
+The direction of travel in that paragraph inverts with it. The record
+argued that the producer was converging on a schema which already described
+Option B. Since `8119f19` it is the schema that has converged on the
+producer, and Option B now has to move both together - the cell and the
+producer in one commit. That is what Implementation item 2 already provides
+for, and what item 6 below makes enforceable rather than intended.
+
+The record's supporting cite moved in the same direction.
+`test/statifier_ui/trace/manifest_test.exs:419-431` still passes, because
+the key still is on every row, but the reason it gives for its own
+existence - *"The wire-format schema still documents the field as
+conditional, so this asserts the observed behavior without binding the
+format to it"* (`:423-424`) - is no longer true. Implementation item 3
+already replaces that test with its converse; it must replace that
+reasoning too rather than carry it across.
+
+### 2. The version still stays `1`, argued on the bump test directly
+
+Two things stay separated here, and the retracted limb is not one of them.
+
+**A schema change is not by itself a version bump.** ADR-0005's rule
+(`docs/adr/0005-language-neutral-trace-wire-format.md:215-222`) does not
+test for schema motion. It says consumers must ignore unknown fields and
+unknown `type`s, concludes that *additive* change is therefore not a bump,
+and then states the test itself: *"a bump means a consumer of the old
+version would misread the stream"*. Additivity is a named exemption from
+having to argue that test. Everything else - this change included - argues
+it directly. The record's first limb said exactly that, and it survives
+unchanged.
+
+**Would a consumer of the old version misread the stream?** No, and the
+answer no longer depends on what the schema said. Take the consumer the
+retracted limb could not reach: one written against today's cell, reading
+`value_location` unconditionally because the document promises it. After
+Option B it finds the key absent on the child-content and bare rows. In
+every binding of this format an absent key is a distinguishable outcome -
+`nil`, `undefined`, a missing-key error - and not a plausible wrong value.
+That consumer stops, or renders nothing, at the row where its assumption
+broke, with the field name in hand.
+
+What that same consumer does *today* is the misread. It slices `source` at
+a span equal to `location` and presents the whole `<data id="x"/>` element
+as the element's declared value, with nothing anywhere reporting a problem.
+ADR-0005's test asks which of the two is a misreading of the stream, and
+the answer is the present behaviour rather than the change.
+
+**The honest cost of the exchange.** The retracted limb claimed that no
+schema-conformant consumer was affected at all. This one concedes that
+every schema-conformant consumer is affected, and defends the change on the
+*character* of the failure rather than on its absence. That is a real
+narrowing of the argument: version `1` is now a judgement that a loud,
+localized failure is not a misreading, and no longer a deduction from a
+schema that already said so. The judgement is the thing being accepted. If
+the operator does not take it - if a promised key going missing counts as
+misreading - the honest consequence is a version bump to `2`, not a quieter
+version of Option B.
+
+**O-3 gets sharper, and stays open.** No out-of-repo consumer of the v1
+wire is known; the format still has one producer and one consumer set, both
+in this repository and both reading the compiled struct rather than the
+wire. But since `8119f19` an out-of-repo consumer written against the
+document is *entitled* to read the key unconditionally, where before the
+document told it not to. If one appears before the implementing bead lands,
+this judgement is re-argued rather than assumed.
+
+### 3. The doc cell is load-bearing now, and a test enforces it both ways
+
+`8119f19` also added
+`test/statifier_ui/trace/wire_format_payload_schema_test.exs`, which parses
+the presence column out of `docs/wire-format.md` and checks it against
+messages the producer actually builds. A field whose cell says `always`
+must be on every sample row (`:110-119`); a field whose cell is conditional
+must be observed both present *and* absent (`:121-137`), so a conditional
+cell that has quietly gone unconditional fails rather than passing
+vacuously.
+
+Three consequences for the implementing bead, none of which this record
+could have known:
+
+- Implementing Option B without restating `:398` fails the `always` test on
+  the first bare or child-content row. Implementation item 2 was written as
+  documentation hygiene; it is a hard dependency of item 1, in the same
+  commit.
+- Restating `:398` conditionally without implementing Option B fails the
+  conditional test, which needs an absent observation the producer would
+  never supply. The two edits cannot be split in either order.
+- The restated cell has to begin with a spelling the parser classifies:
+  `presence/1` (`:274-283`) accepts a cell starting `always`,
+  `present only when`, or `omitted`, and `flunk`s anything else as
+  unclassifiable.
+
+The test's samples do **not** have to move. `@rich` (`:39-55`) already
+declares `<data>` three ways - `expr`, bare, and child content - so under
+Option B the `expr` row supplies the present observation and the other two
+supply the absent one, both arms out of one sample. That is a correction to
+the falsification analysis noted on `sui-3u6`, which expected the samples to
+move with the cell.
+
+### 4. What was re-verified, and two corrections
+
+Every other cite in this record resolves on `main` at `2d5ca4d`
+(2026-09-05): the four `build_data_value/2` clauses and the two
+`data_*_location/1` helpers upstream;
+`docs/adr/0005-language-neutral-trace-wire-format.md:215-222`;
+`manifest_test.exs:345`, `:376` and `:419`, each starting exactly where
+cited; `test/support/trace/two_state.jsonl` carrying `"data":[]` with zero
+`value_location` occurrences; `lib/statifier_ui/trace/diagnostic.ex` and
+`lib/statifier_ui/datamodel_explorer/scope.ex` reading the struct with a
+nil-or-equal branch; `docs/wire-format.md:413-427`'s fallback note and
+`:423-426`'s `cond_location` contrast; `mix.lock:29` pinning statifier
+2.0.0. Nothing in that set moved, and the projection position argued in
+Decision 4 is unaffected by anything in this amendment: `value_location`
+remains a structural position, and a removed structural key still creates
+no value position.
+
+**The projection cite is three lines short, and the amendment does not
+reach far enough to fix it in place.** The Context bullet on the
+projection position cites
+`docs/adr/0012-trace-projection-and-redaction.md:305` and `:320`. The
+first is right - `:304-315` is the never-projected list, and `data` with
+its `location` and `value_location` objects sits inside it at `:307-308`.
+The second is not: `:320` is the tail of the following sentence, and the
+`data` row's four fields are named at `:322-324`. The claim holds; only
+the line number is wrong, so this is recorded here rather than repaired
+in the bullet, which this amendment does not edit.
+
+**The off-by-one reported against the producer does not reproduce.** The
+falsification analysis on `sui-3u6` placed `data_object/1` at
+`lib/statifier_ui/trace/manifest.ex:235-242` with `put_present` at
+`:241`. On `2d5ca4d` the function is at `:234-241` with `put_present` at
+`:240`, exactly as the record's Context bullet cites it. That correction
+belongs to the analysis, not to the record: the record's line numbers are
+right and need no amendment.
+
+### 5. Decision 2, as amended
+
+The recommendation is unchanged: Option B, format version `1`. The
+supporting argument is now these two limbs and only these:
+
+1. The change is **not additive**, so ADR-0005's must-ignore exemption does
+   not reach it. Unchanged from the record.
+2. The change **is a schema change**, and it is still not a version bump,
+   because ADR-0005's bump test is about misreading rather than about
+   schema motion, and a promised key going missing fails loudly at the row
+   where it is missing while the present behaviour renders a wrong value
+   silently.
+
+Limb 2 replaces the record's *"It is also not a schema change"* paragraph
+and the version-stays-`1` paragraph that rested on it. Decisions 1, 3, 4
+and 5 are unaffected: none of them cites the presence cell, and the
+per-variant table in Decision 3 describes the producer rather than the
+document.
+
+This pull request merges at `proposed`; a separate pull request flips this
+amendment's status, and the record's own Status line, to `accepted` once
+the operator has taken the judgement in limb 2 above.
 
 ## Context
 
@@ -310,6 +508,11 @@ one commit:
    `docs/wire-format.md:411-424`, already one line-range stale) and
    `lib/statifier_ui/datamodel_explorer/entry.ex:35` - are re-pointed.
 5. A `changelog.d/` fragment, since a documented wire behaviour changes.
+6. `test/statifier_ui/trace/wire_format_payload_schema_test.exs` - the
+   presence-column drift test `8119f19` added after this record merged. It
+   ties `docs/wire-format.md:398` to what the producer builds, so items 1
+   and 2 have to land in the same commit or it fails either way; see the
+   2026-09-05 amendment, section 3.
 
 `lib/statifier_ui/trace/diagnostic.ex:103` and
 `lib/statifier_ui/datamodel_explorer/scope.ex:152` need no change: both read
