@@ -17,7 +17,7 @@
 | [0013](0013-otel-correlation-in-the-wire-format.md) | OTel correlation in the trace wire format | accepted |
 | [0014](0014-non-value-error-reasons-on-the-wire.md) | Non-value error reasons on the wire | proposed |
 | [0015](0015-a-neutral-discriminator-for-exit-reasons.md) | A neutral discriminator beside session.terminated reason | proposed |
-| [0016](0016-value-location-omits-its-fallback.md) | `value_location` omits its element-span fallback | proposed |
+| [0016](0016-value-location-omits-its-fallback.md) | `value_location` omits its element-span fallback | accepted |
 | [0017](0017-an-offline-producer-for-the-wire-format.md) | An offline producer for the wire format | accepted |
 
 New ADRs: next number, same three-section format (Context, Decision,
