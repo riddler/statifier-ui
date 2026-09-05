@@ -82,12 +82,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     ## Operator labels are display, the source is not
 
-    A dropdown shows `in` where the writer spells `IN`. The label is a display
-    string and `display_label/1` is the only place one is made; the value
-    stored is always the writer's own spelling, untouched. When this package
-    re-pins to a predicator carrying `Predicator.Vocabulary`'s human labels
-    (px-84i - "is one of", "is at least"), that function becomes a lookup and
-    nothing else moves.
+    A dropdown shows `is one of` where the writer spells `IN`. The label is a
+    display string; the value stored is always the writer's own spelling,
+    untouched. Since the re-pin to a predicator carrying
+    `Predicator.Vocabulary`'s human labels (px-84i), operator labels are the
+    grammar's own phrases, delivered by `StatifierUI.Expression.operators/1` as
+    the `:label` beside the writer's `:lexeme` - so this module no longer makes
+    them. `display_label/1` still lowercases a word-shaped lexeme, but the
+    grammar's phrases are not word-shaped, so it is inert for operator labels;
+    whether it has any remaining caller is sui-ne0's question, not this
+    module's.
 
     ## Two affordances, and the second one is optional
 
