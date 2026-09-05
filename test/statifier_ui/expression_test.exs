@@ -208,10 +208,29 @@ defmodule StatifierUI.ExpressionTest do
   end
 
   describe "operator lists" do
-    test "each value kind offers only the operators a picklist can draw beside it" do
-      assert Enum.map(Expression.operators(:boolean), & &1.op) == [:equal_equal, :ne]
+    test "each value kind offers only the operators the grammar admits beside it" do
+      assert Enum.map(Expression.operators(:boolean), & &1.op) ==
+               Enum.map(Predicator.Simple.operators(:boolean), & &1.op)
+
       assert :contains in Enum.map(Expression.operators(:string), & &1.op)
       assert :gte in Enum.map(Expression.operators(:integer), & &1.op)
+
+      refute :gte in Enum.map(Expression.operators(:boolean), & &1.op),
+             "a boolean is not ordered, so ordered comparison is not offered beside one"
+    end
+
+    # `t:StatifierUI.Expression.value_kind/0` is the shape of a clause value and
+    # `Predicator.Vocabulary.value_kinds/0` is the grammar's own vocabulary. They
+    # are not the same list, and these say the translation between them is right
+    # rather than plausible.
+    test "the kinds this module names ask the grammar's own question" do
+      numbers = Enum.map(Predicator.Simple.operators(:number), & &1.op)
+
+      assert Enum.map(Expression.operators(:integer), & &1.op) == numbers
+      assert Enum.map(Expression.operators(:float), & &1.op) == numbers
+
+      assert Expression.operators(:relative_date) == Expression.operators(:date)
+      assert Expression.operators({:list, :string}) == Expression.operators({:list, nil})
     end
 
     test "membership belongs to the list side and containment to the scalar side" do
@@ -226,10 +245,11 @@ defmodule StatifierUI.ExpressionTest do
       assert Enum.map(row.operators, & &1.op) == [:in]
     end
 
-    test "an operator's detail is the grammar's own description" do
+    test "an operator carries its spelling, its display phrase, and its description" do
       gte = Expression.operators(:integer) |> Enum.find(&(&1.op == :gte))
 
-      assert gte.label == ">="
+      assert gte.lexeme == ">="
+      assert gte.label == "is at least"
       assert gte.detail == "Greater than or equal to"
     end
   end
@@ -239,25 +259,36 @@ defmodule StatifierUI.ExpressionTest do
   # own - every spelling is asked of `Predicator.Simple.to_source/1` - and
   # these tests are what say that asking worked.
   describe "the picklist half round-trips its own spellings" do
+    # Every kind `value_kind/1` can produce, so an operator offered beside a kind
+    # this module never asks about is still an operator the lexer has to accept.
     @kinds [
       :string,
       :integer,
+      :float,
       :boolean,
+      :date,
+      :datetime,
       :duration,
       :relative_date,
-      {:list, :string}
+      {:list, :string},
+      {:list, nil}
     ]
 
-    test "every operator label parses back to the operator it names" do
-      for kind <- @kinds, operator <- Expression.operators(kind) do
+    test "sui never offers an operator the lexer would reject" do
+      offered =
+        for kind <- @kinds, operator <- Expression.operators(kind), do: {kind, operator}
+
+      refute offered == [], "the kind list offered nothing, so this asserts nothing"
+
+      for {kind, operator} <- offered do
         value = if match?({:list, _member}, kind), do: "[1]", else: "1"
-        source = "amount " <> operator.label <> " " <> value
+        source = "amount " <> operator.lexeme <> " " <> value
 
         assert {:ok, [row], nil} = Expression.simple(source),
                "#{source} did not read back into the subset"
 
         assert row.op == operator.op,
-               "#{operator.label} was offered for #{inspect(operator.op)} and parsed as #{inspect(row.op)}"
+               "#{operator.lexeme} was offered for #{inspect(operator.op)} and parsed as #{inspect(row.op)}"
       end
     end
 

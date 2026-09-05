@@ -86,9 +86,15 @@ defmodule StatifierUI.Expression do
   list and its value control.
 
   A list carries the kind of its members, or `nil` when it is empty.
+
+  These are the shapes a clause value takes, which is not the vocabulary
+  `Predicator.Vocabulary.value_kinds/0` names: it has one `:number` where
+  this has `:integer` and `:float`, and no `:relative_date` at all.
+  `operators/1` translates between the two, and nothing else needs to.
   """
   @type value_kind ::
           :integer
+          | :float
           | :boolean
           | :string
           | :date
@@ -98,11 +104,23 @@ defmodule StatifierUI.Expression do
           | {:list, value_kind() | nil}
 
   @typedoc """
-  One entry in an operator dropdown: the atom to build a clause with, the
-  source spelling `Predicator.Simple.to_source/1` writes for it, and the
-  grammar's own one-line description when `Predicator.Vocabulary` is resolvable.
+  One entry in an operator dropdown, as `Predicator.Simple.operators/1`
+  answers it.
+
+  `:op` is the atom a clause is built with and `:lexeme` is the source
+  spelling `Predicator.Simple.to_source/1` writes for it - the two halves
+  that have to agree, and the reason a picklist can offer an operator
+  without spelling one itself. `:label` is the grammar's own display phrase
+  (`"is at least"` for `">="`), a UI string that is never stored, and
+  `:detail` its one-line description, or `nil` when `Predicator.Vocabulary`
+  is not resolvable.
   """
-  @type operator :: %{op: atom(), label: String.t(), detail: String.t() | nil}
+  @type operator :: %{
+          op: atom(),
+          lexeme: String.t(),
+          label: String.t(),
+          detail: String.t() | nil
+        }
 
   @typedoc "One offer in a value dropdown, as the host declared it."
   @type candidate :: %{label: String.t(), value: term()}
@@ -130,26 +148,6 @@ defmodule StatifierUI.Expression do
 
   @default_vocabulary Predicator.Vocabulary
   @default_simple Predicator.Simple
-
-  # Which operators a value of each kind can carry. This is the one thing here
-  # that is decided locally rather than read from predicator: the grammar knows
-  # every operator, but not which of them a picklist should offer beside an
-  # integer as opposed to a date. `Predicator.Simple.operators/1` (px-84i's
-  # second half) will own this table upstream; when it lands, `operators/1`
-  # below should delegate to it and this attribute should go.
-  #
-  # `:in` appears only for a list, because its right-hand side is a list, and
-  # `:contains` only beside a scalar, because its left-hand side is the
-  # collection.
-  @ordered_ops %{
-    string: [:equal_equal, :ne, :strict_eq, :strict_ne, :contains],
-    integer: [:equal_equal, :ne, :gt, :gte, :lt, :lte],
-    boolean: [:equal_equal, :ne],
-    date: [:equal_equal, :ne, :gt, :gte, :lt, :lte],
-    datetime: [:equal_equal, :ne, :gt, :gte, :lt, :lte],
-    duration: [:equal_equal, :ne, :gt, :gte, :lt, :lte],
-    relative_date: [:equal_equal, :ne, :gt, :gte, :lt, :lte]
-  }
 
   @doc """
   Every completion available to an expression field: the declared paths first,
@@ -282,34 +280,46 @@ defmodule StatifierUI.Expression do
   end
 
   @doc """
-  The operators a picklist offers beside a value of the given kind.
+  The operators a picklist offers beside a value of the given kind, read from
+  `Predicator.Simple.operators/1`.
 
-  The atom is what a clause is built with and the label is the spelling
-  `Predicator.Simple.to_source/1` writes for it, so an author who picks an
-  operator sees the same text the expression will carry. `:detail` is the
-  grammar's own one-line description, or `nil` when `Predicator.Vocabulary` is
-  not resolvable.
+  Eligibility is the grammar's answer, not this module's: which operators are
+  worth offering beside a date as opposed to a number is decided by the
+  `:value_kinds` predicator stamps on its own operator entries, so an operator
+  the lexer would reject - or one the grammar does not admit for this kind of
+  value - cannot be offered here. Until px-84i landed that function there was
+  a table here instead, and ADR-0007's 2026-09-04 amendment named it as the
+  one local exception; delegating closes it.
+
+  `:op` builds the clause, `:lexeme` is the spelling the expression will
+  carry, `:label` is the display phrase, and `:detail` is the grammar's
+  one-line description, or `nil` when `Predicator.Vocabulary` is not
+  resolvable.
 
   Empty when `Predicator.Simple` is absent, for the same reason `simple/2`
-  answers `:outside`: there is nothing truthful to offer.
+  answers `:outside`: there is nothing truthful to offer. A kind that is not a
+  `t:value_kind/0` raises, which is upstream's own stance - an empty list
+  would say "no operators here" about a kind that does not exist.
 
   ## Examples
 
       iex> StatifierUI.Expression.operators(:boolean) |> Enum.map(& &1.op)
-      [:equal_equal, :ne]
+      [:equal_equal, :strict_eq, :ne, :strict_ne, :contains]
 
-      iex> StatifierUI.Expression.operators({:list, :string}) |> Enum.map(& &1.label)
+      iex> StatifierUI.Expression.operators({:list, :string}) |> Enum.map(& &1.lexeme)
       ["IN"]
 
-      iex> StatifierUI.Expression.operators(:integer) |> Enum.map(& &1.label)
-      ["==", "!=", ">", ">=", "<", "<="]
+      iex> StatifierUI.Expression.operators(:integer) |> Enum.find(&(&1.op == :gte))
+      %{op: :gte, lexeme: ">=", label: "is at least", detail: "Greater than or equal to"}
 
   """
   @spec operators(value_kind()) :: [operator()]
   def operators(value_kind) do
     if simple_available?() do
-      module = simple_module()
-      Enum.map(ops_for(value_kind), &operator(module, &1))
+      value_kind
+      |> vocabulary_kind()
+      |> simple_module().operators()
+      |> Enum.map(&operator/1)
     else
       []
     end
@@ -361,7 +371,8 @@ defmodule StatifierUI.Expression do
 
     Code.ensure_loaded?(module) and
       function_exported?(module, :from_source, 1) and
-      function_exported?(module, :to_source, 1)
+      function_exported?(module, :to_source, 1) and
+      function_exported?(module, :operators, 1)
   end
 
   @doc """
@@ -538,7 +549,7 @@ defmodule StatifierUI.Expression do
       value: value,
       value_kind: kind,
       value_source: value_source(module, op, value),
-      operators: Enum.map(ops_for(kind), &operator(module, &1)),
+      operators: kind |> vocabulary_kind() |> module.operators() |> Enum.map(&operator/1),
       candidates: value_candidates(candidates, path)
     }
   end
@@ -586,10 +597,9 @@ defmodule StatifierUI.Expression do
     |> String.replace_prefix(prefix, "")
   end
 
-  @spec operator(module(), atom()) :: operator()
-  defp operator(module, op) do
-    label = operator_label(module, op)
-    %{op: op, label: label, detail: lexeme_detail(label)}
+  @spec operator(%{op: atom(), lexeme: String.t(), label: String.t()}) :: operator()
+  defp operator(%{op: op, lexeme: lexeme, label: label}) do
+    %{op: op, lexeme: lexeme, label: label, detail: lexeme_detail(lexeme)}
   end
 
   @spec lexeme_detail(String.t()) :: String.t() | nil
@@ -602,14 +612,27 @@ defmodule StatifierUI.Expression do
     end
   end
 
-  @spec ops_for(value_kind()) :: [atom()]
-  defp ops_for({:list, _member_kind}), do: [:in]
-  defp ops_for(kind), do: Map.get(@ordered_ops, kind, [])
+  # The two vocabularies name the same kinds differently, so asking upstream
+  # its own question needs its own word for the kind. This is a translation,
+  # not a second eligibility table - it names no operator, and adding one here
+  # would be the duplication delegating removed.
+  #
+  # `:integer` and `:float` are both `:number`, which is the kind predicator's
+  # evaluator orders. `:relative_date` has no vocabulary kind of its own and
+  # is a date-valued scalar, compared chronologically like one, so it asks the
+  # date question - the same operators the local table already gave it.
+  @spec vocabulary_kind(value_kind()) :: atom()
+  defp vocabulary_kind({:list, _member_kind}), do: :list
+  defp vocabulary_kind(:integer), do: :number
+  defp vocabulary_kind(:float), do: :number
+  defp vocabulary_kind(:relative_date), do: :date
+  defp vocabulary_kind(kind), do: kind
 
   @spec value_kind(term()) :: value_kind()
   defp value_kind({:list, []}), do: {:list, nil}
   defp value_kind({:list, [first | _rest]}), do: {:list, value_kind(first)}
   defp value_kind({:integer, _value}), do: :integer
+  defp value_kind({:float, _value}), do: :float
   defp value_kind({:boolean, _value}), do: :boolean
   defp value_kind({:string, _value, _style}), do: :string
   defp value_kind({:date, _value}), do: :date

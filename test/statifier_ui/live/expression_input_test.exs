@@ -323,11 +323,11 @@ defmodule StatifierUI.Live.ExpressionInputTest do
   end
 
   describe "labels are display, source is not" do
-    test "a word operator reads lowercase and stores the writer's spelling" do
+    test "an operator reads as the grammar's phrase and stores the writer's spelling" do
       html =
         picklist_html("step in ['payment']", ["step"], %{"step" => ["payment"]})
 
-      assert html =~ ">\n          in\n        <"
+      assert html =~ ">\n          is one of\n        <"
       assert html =~ ~s(value="step IN [&#39;payment&#39;]")
     end
 
