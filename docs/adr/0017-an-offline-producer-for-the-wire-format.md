@@ -1,6 +1,6 @@
 # ADR-0017: An offline producer for the wire format
 
-Status: proposed (2026-09-05, campaign-030)
+Status: accepted (2026-09-05, campaign-030; proposed 2026-09-05, campaign-030)
 
 Adds a **second producer** of the v1 trace wire format beside
 `StatifierUI.Trace.Subscriber`: a pure function that turns a persisted
