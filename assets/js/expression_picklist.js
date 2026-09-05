@@ -24,7 +24,8 @@
 // Writing works exactly as the completion popup's does: the string goes into
 // the same named <input> the text mode edits, and a bubbling `input` event
 // makes the host's own form change event fire. The server re-renders the rows
-// from the new source, so there is nothing to keep in sync here.
+// from the new source, and one thing does have to be put back afterwards - see
+// `resync` for the control whose patch LiveView deliberately skips.
 
 export const StatifierUIExpressionPicklist = {
   mounted() {
@@ -44,11 +45,13 @@ export const StatifierUIExpressionPicklist = {
 
     this.el.setAttribute("data-picklist-hook", "attached");
     this.apply();
+    this.resync();
   },
 
   updated() {
     this.el.setAttribute("data-picklist-hook", "attached");
     this.apply();
+    this.resync();
     this.restoreFocus();
   },
 
@@ -199,6 +202,42 @@ export const StatifierUIExpressionPicklist = {
     // The host's form owns the change event, exactly as it does for a typed
     // character and for a completion.
     input.dispatchEvent(new Event("input", { bubbles: true }));
+  },
+
+  // -- the selection across a patch ----------------------------------------
+
+  // LiveView refuses to patch a `<select>` that has focus unless it can tell
+  // the option list changed, and for these controls it usually cannot: the
+  // operator row offers every operator over the same remainder, so picking a
+  // different one leaves the SET of option values identical and only moves
+  // which one is marked. The patch is skipped, the `selected` attributes stay
+  // where they were, and the control keeps painting the operator the author
+  // replaced - the hook's own `restoreFocus` is what leaves it focused, so
+  // this lands on exactly the control the author just used.
+  //
+  // Reading the marked option back would not help, because in that case the
+  // attributes are the stale thing. What is never stale is the source: it
+  // arrives on the named input, and an option's value IS the whole source
+  // choosing it produces, so the option to select is the one that spells what
+  // the server just rendered. No new vocabulary, and nothing to keep in sync
+  // between patches.
+  resync() {
+    const input = this.el.querySelector("[data-expression-source]");
+    if (!input) return;
+
+    // The attribute is the server's value; the property may hold text the
+    // author is still typing, which is the text mode's business, not a row's.
+    const source = input.getAttribute("value");
+    if (source === null) return;
+
+    // A multi-select is left alone: its options carry list fragments rather
+    // than whole sources, and LiveView skips it while focused precisely so an
+    // author's part-made selection survives the round trip.
+    this.el.querySelectorAll("select[data-role]:not([multiple])").forEach((select) => {
+      const match = Array.from(select.options).find((option) => option.value === source);
+
+      if (match && !match.selected) match.selected = true;
+    });
   },
 
   // -- focus across a patch ------------------------------------------------
