@@ -342,16 +342,15 @@ defmodule StatifierUI.Trace.ManifestTest do
       end
     end
 
-    test "value_location is present as a span, not a string, on both rows" do
+    test "value_location is present as a span, not a string, on expr-written rows" do
       machine = compile!(@all_content_kinds)
       {:ok, message} = Manifest.build(machine, "sess_1")
 
       # Both <data> elements in @all_content_kinds are written with an
-      # `expr` attribute, so the compiler records the attribute value's
-      # span and value_location is present on every row here. A chart
-      # producing a nil value_location is not exercised in this file - the
-      # location_object_or_nil(nil) branch is already covered by
-      # cond_location in the transitions table.
+      # `expr` attribute, so each has a written value span distinct from
+      # its own span and value_location is present on every row here. The
+      # omitted arm - an element written with neither `expr` nor `src` -
+      # is exercised by the four-variant test below.
       for row <- message.payload["data"] do
         assert %{
                  "start_line" => _,
@@ -373,12 +372,13 @@ defmodule StatifierUI.Trace.ManifestTest do
       end
     end
 
-    test "value_location spans the written value for expr and src, and falls back to the element's own span otherwise" do
-      # Pins the fallback `docs/wire-format.md`'s `data` table documents: an
-      # element written with neither `expr` nor `src` has no distinct value
-      # span, so `value_location` equals `location` and a consumer slicing
-      # `source` at it gets the whole element rather than a value. The four
-      # rows below are the four value sources `Machine.Data` distinguishes.
+    test "value_location spans the written value for expr and src, and is omitted otherwise" do
+      # Pins the absence `docs/wire-format.md`'s `data` table documents
+      # (ADR-0016): an element written with neither `expr` nor `src` has no
+      # distinct value span, so the producer omits `value_location` rather
+      # than falling back to the element's own span, and a present key
+      # always spans a written value. The four rows below are the four
+      # value sources `Machine.Data` distinguishes.
       source = """
       <?xml version="1.0" encoding="UTF-8"?>
       <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="a" version="1.0" datamodel="predicator">
@@ -407,26 +407,41 @@ defmodule StatifierUI.Trace.ManifestTest do
         refute rows[id]["value_location"] == rows[id]["location"]
       end
 
-      # No written value: value_location falls back to the element's own
-      # span. Equality with "location" is the signal the doc tells a
-      # consumer to test before treating a slice as a value.
+      # No written value: the key is absent, so presence alone tells a
+      # consumer whether a slice would be a value. The element is still
+      # locatable through this row's "location".
       for id <- ~w(fromChild bare) do
-        assert rows[id]["value_location"] == rows[id]["location"]
-        assert slice(source, rows[id]["value_location"]) =~ ~r/\A<data id="#{id}"/
+        refute Map.has_key?(rows[id], "value_location")
+        assert slice(source, rows[id]["location"]) =~ ~r/\A<data id="#{id}"/
       end
     end
 
-    test "value_location is present on every row - the compiler has no nil clause" do
-      # `Statifier.Machine.Data`'s type admits nil, but every
-      # `build_data_value/2` clause upstream returns a location, so the
-      # producer's put_present/3 branch is defensive rather than reachable.
-      # The wire-format schema still documents the field as conditional, so
-      # this asserts the observed behavior without binding the format to it.
-      machine = compile!(@all_content_kinds)
-      {:ok, message} = Manifest.build(machine, "sess_1")
+    test "value_location is omitted on every row of a chart that writes no values" do
+      # The converse of the row above: `Statifier.Machine.Data`'s type
+      # admits nil, but every `build_data_value/2` clause upstream returns a
+      # location, so on a chart whose elements write no value every row's
+      # value_location equals its location and the producer drops all of
+      # them. Absence, not a nil clause upstream, is what makes the
+      # wire-format field conditional.
+      source = """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="a" version="1.0" datamodel="predicator">
+          <datamodel>
+              <data id="fromChild">42</data>
+              <data id="bare" />
+          </datamodel>
+          <state id="a" />
+      </scxml>
+      """
+
+      machine = compile!(source)
+      {:ok, message} = Manifest.build(machine, "sess_1", source: source)
+
+      assert length(message.payload["data"]) == 2
 
       for row <- message.payload["data"] do
-        assert Map.has_key?(row, "value_location")
+        refute Map.has_key?(row, "value_location")
+        assert is_map(row["location"])
       end
     end
 

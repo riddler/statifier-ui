@@ -402,12 +402,12 @@ block):
 | d_index | integer | always |
 | id | string | always - SCXML requires `id` on `<data>` |
 | location | location object | always - the `<data>` element's own span |
-| value_location | location object | always - the written value's span when the element wrote `expr` or `src`, the element's own span otherwise; see below |
+| value_location | location object | omitted when the element wrote no value - present as the written value's span when the element wrote `expr` or `src`; see below |
 
 This table is deliberately **identity only**: it resolves a `d_index` to
 an id and a source span, and carries no representation of the element's
 declared value. A consumer wanting to display the declared value reads
-it out of `source` at `value_location`, subject to the fallback below; a
+it out of `source` at `value_location` when the row carries one; a
 consumer wanting a *runtime* value reads `session.datamodel` for the
 starting snapshot and the datamodel-change messages after it. The
 compiled value itself is an expression program, a compile error, or an
@@ -417,20 +417,19 @@ value field later would be an additive change and therefore not a
 version bump (ADR-0005), so this document commits to the narrow shape
 now rather than to an encoding it would have to keep.
 
-**`value_location` is not always a value span, and a consumer must check
-before slicing.** It spans the element's *written* value only when the
-element has one to point at: the `expr` attribute's value for an
-`expr`-written element, the `src` attribute's value for a `src`-written
-one. An element written with neither - a bare `<data id="x"/>`, or one
-whose value is child content - has no distinct value span, and
-`value_location` falls back to the `<data>` element's own span, equal to
-this row's `location`. So a consumer slicing `source` at
-`value_location` must compare it against `location` first: when the two
-are equal there is no value span, and the slice is the whole element
-(`<data id="x"/>`), not a value. This is the one place `value_location`
-parts company with a transition's `cond_location`, which is *absent*
-when there is no guard rather than falling back, and therefore always
-spans a guard when present.
+**`value_location` is absent when there is no written value, and its
+presence is the whole check a consumer makes.** It spans the element's
+*written* value only: the `expr` attribute's value for an `expr`-written
+element, the `src` attribute's value for a `src`-written one. An element
+written with neither - a bare `<data id="x"/>`, or one whose value is
+child content - has no distinct value span, and the producer omits the
+key rather than falling back to the `<data>` element's own span. So a
+consumer slicing `source` at `value_location` needs no comparison
+against `location`: a present `value_location` always spans a written
+value, and an absent one says there is none to show. This is the same
+spelling a transition's `cond_location` uses, which is likewise absent
+rather than falling back; the two still differ in what the absence
+*means* - no guard there, no distinct value span here.
 
 **A location object** is always all six fields, and is either wholly
 present or wholly absent - there is no partial location:

@@ -17,7 +17,7 @@ defmodule StatifierUI.DatamodelExplorer.Scope do
   `:undefined` and `declared_source` carries the declared expression
   *text*, sliced from the `:source` option, only when one was given and
   `value_location` differs from `location`
-  (`docs/wire-format.md:335-348`'s guard: when the two are equal there is
+  (`docs/wire-format.md:420-432`'s guard: when the two are equal there is
   no value span and the slice would be the whole element).
 
   ## Tier 2a - system variables
