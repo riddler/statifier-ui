@@ -155,6 +155,14 @@ Read before making design decisions:
 - `docs/research/260816-sui-kua-gui-research-and-direction.md` - the research
   that led to this repo existing, and the source the ADRs cite
 
+Changing the record is itself gated. Any PR that touches `docs/adr/` is
+reviewed by one fresh cold direction agent, and nothing else satisfies that
+gate; its verdict tuple - the verdict word, the finding count, and which
+pass it was - is recorded on the bead. Only an unqualified verdict merges,
+or the operator's own substance ruling on a qualified one. A decision
+record merges at **proposed**; flipping it to **accepted** is a separate PR
+through the same gate.
+
 ## Build & Test
 
 ```bash
