@@ -7,10 +7,12 @@ verdict under the operator campaign-026 grant, PR 68; drafted 2026-09-01
 as proposed) - see "Amendment accepted" below; the accepted text outside
 that section is unchanged.
 
-Amendment status: **proposed** (2026-09-04, sui-gcm: a picklist is a
+Amendment status: **accepted** (2026-09-05, sui-gcm: a picklist is a
 rendering of the expression string, and the component owns no second
-representation) - see "Amendment proposed" below; the accepted text
-outside that section is unchanged, as is the sui-qay amendment above it.
+representation, on the unqualified direction-agent verdict under the
+operator campaign-029 grant; drafted 2026-09-04 as proposed) - see
+"Amendment accepted" below; the accepted text outside that section is
+unchanged, as is the sui-qay amendment above it.
 
 ## Amendment accepted 2026-09-02 (sui-qay): attribute-level stamping, and the layering gap is closed
 
@@ -76,12 +78,18 @@ so the renderer is built against it rather than retrofitted - the same
 reason the accepted text wrote down `data-state-index` before there was an
 SVG to put it on.
 
-## Amendment proposed 2026-09-04 (sui-gcm): a picklist is a rendering of the expression string, and the component owns no second representation
+## Amendment accepted 2026-09-05 (sui-gcm): a picklist is a rendering of the expression string, and the component owns no second representation
 
-*Proposed 2026-09-04. Nothing outside this section has been edited, and
-no Status line elsewhere in this record has been changed. This lands at
-`proposed`; it flips to accepted only by a separate, gated pull request
-that moves the Status line above and nothing else.*
+*Accepted 2026-09-05, drafted 2026-09-04. Nothing outside this section has
+been edited, and no Status line elsewhere in this record has been changed.
+It landed at `proposed` and flipped by the separate, gated pull request its
+draft called for. That draft promised the request would move the Status
+line and nothing else; the request that flipped it moved four things, named
+here rather than left for a reader to find - this section's heading, the
+header's amendment status line, this marker, and one sentence below, which
+the flipping bead directed be scoped to the grammar's spellings. The
+2026-09-05 note's preamble was re-tensed with them. No clause of the
+argument was edited, added or removed.*
 
 The expression-editing component grows a picklist mode: an author editing
 a `cond` can be shown a row of field / operator / value dropdowns instead
@@ -156,9 +164,9 @@ working condition is broken.
 The operator, path, and value **spellings on every row are derived by
 round-tripping through `Predicator.Simple.to_source/1`**, not read from a
 table maintained here. That is the mechanism by which this package holds
-no second copy of the grammar: an operator a picklist offers is spelled
-the way predicator itself writes it, so what the author picks and what the
-expression carries cannot drift. It is the same discipline
+no second copy of the grammar's spellings: an operator a picklist offers
+is spelled the way predicator itself writes it, so what the author picks
+and what the expression carries cannot drift. It is the same discipline
 `Predicator.Vocabulary` already imposes on the completion half, applied to
 the picklist half.
 
@@ -202,12 +210,12 @@ representation will not drift from the source, not a drift into one.
 
 ### Note 2026-09-05 (sui-94o): the named local exception is closed
 
-*A note, not an amendment. Nothing above or below it has been edited, and
-neither Status line in this record has been changed - the sui-gcm amendment
-is still at `proposed`, and it flips only by its own gated pull request.
-This note annotates that proposed amendment's text, so its standing rides
-with it: if the amendment is not accepted, what this note records about the
-local exception it named goes with it.*
+*A note, not an amendment. When it landed, nothing above or below it had
+been edited and neither Status line in this record had been changed - the
+sui-gcm amendment was still at `proposed`, and it flipped only by its own
+gated pull request. This note annotates that amendment's text, so its
+standing rides with it: if the amendment had not been accepted, what this
+note records about the local exception it named would have gone with it.*
 
 The paragraph above headed "One thing is decided locally, and it is named
 here as the exception it is" describes a table in `StatifierUI.Expression`
