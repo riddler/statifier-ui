@@ -10,6 +10,29 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into a version section at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [0.6.1] 2026-09-05
+
+A hotfix. `StatifierUI.Trace.Normalizer.normalize/2` refused statifier 2.5's
+`Statifier.Effect.Trace.CondsEvaluated`, which meant no chart with a guarded
+transition could be inspected from a persisted trace; the normalizer now
+skips it, and the `statifier` floor rises to `~> 2.5`. A caller matching only
+`{:ok, _}` and `{:error, _}` on `normalize/2` needs a `:skip` clause.
+
+### Changed
+
+- Raises the `statifier` floor to `~> 2.5`.
+- `StatifierUI.Trace.Normalizer.normalize/2` has a third return, `:skip`, for
+  an engine trace effect the v1 wire format deliberately does not carry. A
+  caller matching only `{:ok, _}` and `{:error, _}` needs a clause for it;
+  neither a message nor a `seq` is produced.
+
+### Fixed
+
+- `StatifierUI.Trace.Normalizer.normalize/2` no longer refuses statifier
+  2.5's `Statifier.Effect.Trace.CondsEvaluated`, so a chart with a guarded
+  transition can be replayed through `StatifierUI.Trace.Replay.from_events/4`
+  instead of failing closed on its first branch.
+
 ## [0.6.0] 2026-09-05
 
 A failure becomes something the wire format can carry, and a trace can be
