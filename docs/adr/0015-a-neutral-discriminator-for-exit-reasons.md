@@ -501,3 +501,56 @@ emits `reason` alone.
   `2071776`, the commit that merged `sui-4lr` / ADR-0014 and the commit this
   branch is cut from. ADR-0014 was already on `main` when this branch was
   created, so its README index row is inherited rather than merged around.
+
+- **Note, 2026-09-05 (campaign-030, `sui-77a`): the record's citations
+  re-resolved against `main` at `9592f0e`.** PR 97's direction review left
+  finding 3 open - two citations had drifted a few lines. Re-resolving them
+  today showed the drift is wider than those two, because `docs/wire-format.md`
+  gained roughly forty lines above the `session.terminated` section since
+  `2071776`. The cited lines themselves are **not** edited in place; this Note
+  is the correction, and the table below is what a reader should follow. Every
+  citation not listed here was re-checked and still resolves to the text this
+  record claims for it (`subscriber.ex:404`, `:598`, `:593-608`;
+  `projection.ex:91`; `message.ex:48`; `live.ex:534-536`;
+  `wire-format.md:188`; `0005-language-neutral-trace-wire-format.md:55-56`,
+  `:215-218` and `:217-218` (the last lies inside the range before it, and
+  ADR-0005 has not moved at all); and three of the
+  four test citations under "Golden-fixture impact" -
+  `projection_test.exs:457-459`, `subscriber_test.exs:264-281` and
+  `projection_consumers_test.exs:139-170`. The fourth drifted and is in the
+  table).
+
+  | File | What the record cites it for | As written | At `9592f0e` |
+  |---|---|---|---|
+  | `lib/statifier_ui/trace/normalizer.ex` | the `{:halted, reason}` clause of `normalize/2` | `:152-153` | `:159-160` |
+  | `lib/statifier_ui/trace/normalizer.ex` | `Atom.to_string/1` in that same clause | `:153` | `:160` |
+  | `lib/statifier_ui/trace/normalizer.ex` | the `input()` type's closed halted set | `:97` | `:104` |
+  | `lib/statifier_ui/event_log/markdown.ex` | `footer_line/1`'s two `session.terminated` clauses | `:147-154` | `:150-157` (sentinel clause `:150-153`, string clause `:155-157`) |
+  | `lib/statifier_ui/trace/projection.ex` | the moduledoc's "What is never projected" list | `:88-104` | `:79-109`; the `kind` and `type` discriminators clause specifically at `:87` |
+  | `lib/statifier_ui/trace/projection.ex` | `project_payload("session.terminated", ...)` | `:393-399` | `:398-405` (`:393-399` now begins inside the `session.start` clause, which ends at `:396`) |
+  | `docs/wire-format.md` | `session.halted`'s `reason` presence rule | `:940` | `:978` |
+  | `docs/wire-format.md` | `session.terminated`'s `reason` row | `:956` | `:994` |
+  | `docs/wire-format.md` | the "human-readable string, not structured data to branch on" paragraph | `:958-960` | `:996-998` |
+  | `docs/wire-format.md` | the projection paragraph for `session.terminated`'s `reason` | `:962-967` | `:1000-1005` |
+  | `docs/wire-format.md` | "nothing a v1 consumer previously read correctly is now read incorrectly" | `:996-998` | `:1034-1035` (the companion citation at `:188` is unchanged) |
+  | `docs/wire-format.md` | the ADR-0012 position table row for `session.terminated` | `:1054` | `:1097` |
+  | `docs/wire-format.md` | `session.unroutable` wrapping under a `kind` key | `:1056-1058` | `:1099-1100` |
+  | `docs/wire-format.md` | the `session.terminated` field table and prose, as an implementation target | `:949-967` | `:987-1005` |
+  | `docs/adr/0012-trace-projection-and-redaction.md` | the position table row for `session.terminated` | `:270` | `:273` |
+  | `docs/adr/0012-trace-projection-and-redaction.md` | the paragraph making `session.terminated`'s `reason` the one JSON-type change | `:289-297` | `:292-300` |
+  | `test/statifier_ui/trace/projection_drift_test.exs` | the `session.terminated` message in the drift corpus | `:139` | `:172` |
+
+  Two consequences worth stating. First, the drift is positional only: every
+  claim this record makes about the code and the format still holds at
+  `9592f0e`, so the argument is unaffected and the Decision stands as written.
+  One premise did move and is recorded here rather than left to be found: the
+  "Golden-fixture impact" section says the repository has one golden trace, and
+  there are now two - `test/support/trace/foreach_error.jsonl` was added by
+  `0db2e1b` with ADR-0014's implementation, beside
+  `test/support/trace/two_state.jsonl`. The conclusion that section draws is
+  unaffected, because the second golden also contains **zero**
+  `session.terminated` messages, so no golden bytes move under this record
+  either.
+  Second, `session.terminated`'s implementation target moved but did not
+  change shape - the field table and its two paragraphs are still the whole
+  surface an implementing bead touches in `docs/wire-format.md`.
