@@ -10,6 +10,84 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into a version section at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [0.7.0] 2026-09-05
+
+A minor. The wire vocabulary grows to 25 types with
+`trace.conds_evaluated`, which carries a selection round's guard outcomes
+so a guarded chart's stream can say why a branch fired; `session.start`'s
+`data` rows stop falling back to the element's own span for
+`value_location`; `StatifierUI.Trace.Replay.recording/3` becomes public
+surface; and the `predicator` floor rises to `~> 9.4`. The wire format
+version stays `1`. A consumer that asserts the vocabulary size rather
+than reading it re-pins 24 to 25 when it takes `~> 0.7`.
+
+### Added
+
+- `trace.conds_evaluated`, a new trace message carrying a selection round's
+  guard outcomes: one entry per evaluation, with the guarded transition's
+  `t_index`, an `outcome` of `"enabled"`, `"disabled"` or `"error"`, and, on
+  `"error"`, the same `reason` error object an `error.execution` event
+  carries. Entries are in the engine's walk order, so the *n*th `"error"`
+  entry pairs with the *n*th `error.execution` the round raised. A guarded
+  chart's stream can now say why a branch fired or failed instead of showing
+  two identical timelines (ADR-0018).
+
+  Under a projected stream the entry's `reason.reason` is redacted
+  unconditionally and its `reason.expression` follows `allow_source`, exactly
+  as on an event's error object; `t_index` and `outcome` are never projected.
+
+  Before this, the producer skipped the engine's guard-evaluation effect
+  rather than mapping it, so the outcomes reached no consumer at all.
+
+- `StatifierUI.Trace.Replay.recording/3`, which builds the
+  `Statifier.Session.Recording` a host's stored inputs describe and returns
+  it. It is the fold `from_events/4` already ran to reach its own recording,
+  now reachable on its own - for `Statifier.Replay.run/1` directly, for
+  `Statifier.Session.Recording.to_binary/1`, or to compare against a
+  recording you already hold. An unrecognized entry shape is
+  `{:error, {:unknown_entry, entry}}`, the same fail-closed answer
+  `from_events/4` gives; `:trace` and `:session_id` are not checked here,
+  because they are requirements of the message stream rather than of the
+  recording.
+
+  `docs/ops-embedding.md`'s "From a persisted event log" now carries the
+  table saying which stored row becomes which of the six entry shapes, and
+  states the rule a fired delayed send turns on: it is
+  `{:timer, send_id, event, routes}`, never `{:event, event, routes}`,
+  because only the timer shape draws the pending-timer credit the `send_id`
+  matches. Naming a firing as an event costs the
+  `{:unscheduled_timer_firing, send_id}` check and leaves the credit
+  outstanding for a later cancel to move into the raced pool.
+
+### Changed
+
+- The wire vocabulary is 25 types, up from 24. The format **version stays
+  `1`**: a new `type` is additive, and ADR-0005's must-ignore-unknown rule
+  means a consumer that has never heard of `trace.conds_evaluated` skips it.
+  The conformance clause's MUST list is unchanged - it names the nine
+  Appendix D phase-boundary `trace.*` types, and this one is a seam inside
+  selection, so it joins the MAY half beside the `effect.*` families.
+
+  Nothing breaks at runtime, but a consumer that *asserts* the vocabulary
+  size rather than reading it fails until it is re-pinned: an embedder
+  pinning 24 types today moves to 25 when it takes `~> 0.7`.
+
+- `session.start`'s `data` rows omit `value_location` when the `<data>`
+  element wrote no value, instead of falling back to the element's own span.
+  A consumer that compared the two spans before slicing `source` can now test
+  for the key's presence instead; one that sliced without comparing stops
+  getting the whole element's text presented as a value. The wire format
+  version stays 1.
+
+- The predicator requirement is `~> 9.4`, up from `~> 9.2`: a host on 9.2 or
+  9.3 has to move up, and gets `Predicator.Simple.value_kind/1`, which
+  `StatifierUI.Expression` now asks what kind a clause value is instead of
+  keeping its own table.
+- `StatifierUI.Expression.simple_available?/0` also requires the resolved
+  `:predicator_simple` module to export `value_kind/1`. A host that points that
+  key at its own module has a fourth function to provide; every published
+  predicator at the new floor already carries it.
+
 ## [0.6.1] 2026-09-05
 
 A hotfix. `StatifierUI.Trace.Normalizer.normalize/2` refused statifier 2.5's
