@@ -80,8 +80,8 @@ defmodule StatifierUI.Trace.Diagnostic do
   The wire `error` object for a **non-value reason** term - ADR-0014's
   `class: "reason"` arm, and the terms it peels on the way there.
 
-  `term` is `Statifier.Interpreter.Content.raise_execution_error/4`'s
-  unconstrained `reason`, which reaches an `error.execution` or
+  `term` is the unconstrained `reason` `Statifier.Interpreter.Content`
+  raises an execution error with, which reaches an `error.execution` or
   `error.communication` event's `data` as a tagged tuple, a bare atom, or
   anything else at all. Three things happen to it here, in this order:
 
@@ -172,8 +172,9 @@ defmodule StatifierUI.Trace.Diagnostic do
 
   Dispatches on `origin` and, for content, on the content struct itself -
   never on a generic `Map.get(node, :location) || Map.get(node, :node_location)`
-  reflection, the same posture `StatifierUI.Trace.Manifest.content_location/1`
-  takes and for the same reason: that fallback is silently wrong for
+  reflection, the same posture `StatifierUI.Trace.Manifest`'s own
+  content-location dispatch takes and for the same reason: that fallback
+  is silently wrong for
   `Statifier.Machine.Content.Assign`, whose `:location` is a path-expression
   *string*, not a span.
 

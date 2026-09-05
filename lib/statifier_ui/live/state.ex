@@ -80,7 +80,7 @@ defmodule StatifierUI.Live.State do
       macrostep has stabilized in view, typically
       `Statifier.Session.snapshot/1`'s (default `[]`).
     * `:selection` - where to start; `:live` (default) or `{:macrostep, n}`.
-    * `:stats` - a `StatifierUI.Trace.Subscriber.stats/0` snapshot for the
+    * `:stats` - a `t:StatifierUI.Trace.Subscriber.stats/0` snapshot for the
       status pane. A persisted stream has none, and the pane says so.
   """
   @spec new(Machine.t(), keyword()) :: t()
@@ -125,7 +125,7 @@ defmodule StatifierUI.Live.State do
   end
 
   @doc """
-  Records a fresh `StatifierUI.Trace.Subscriber.stats/0` snapshot for the
+  Records a fresh `t:StatifierUI.Trace.Subscriber.stats/0` snapshot for the
   status pane.
   """
   @spec put_stats(t(), Subscriber.stats()) :: t()
