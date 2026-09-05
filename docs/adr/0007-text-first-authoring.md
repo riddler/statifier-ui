@@ -282,6 +282,18 @@ comparisons, `>`, `>=`, `<`, `<=`, before the equalities. That is
 user-visible in the dropdown, and it is the same handing over: the grammar
 orders its own operators.
 
+**Note, 2026-09-05 (sui-l3y).** The re-ordering sentence above is scoped to
+every kind that has ordered comparisons, because it is the ordered
+comparisons moving ahead of the equalities that reorders what a kind was
+already offered. Those are the kinds whose grammar question is `:number`,
+`:string`, `:date`, `:datetime` or `:duration` - `:string`, `:integer`,
+`:float`, `:date`, `:datetime`, `:duration` and `:relative_date` in this
+package's names. It does not hold for the other two rows of the table
+above: `:boolean` has no ordered comparisons, so its `==` still precedes
+its `!=`, and `{:list, _}` offers `IN` and nothing else. Both still gain
+exactly what the table records they gain; this Note scopes the ordering
+claim and nothing else.
+
 Display labels move with the same delegation. An operator entry now carries
 `:lexeme` - the spelling `to_source/1` writes, which is what a clause is
 built from - alongside `:label`, the grammar's own display phrase. That
