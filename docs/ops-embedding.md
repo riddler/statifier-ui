@@ -143,6 +143,58 @@ opening configuration so the diagram has something to draw:
 State.new(machine, messages: messages, initial_configuration: [0, 1])
 ```
 
+## From a persisted event log
+
+A host that stored the session's own event log rather than the trace stream
+has no messages to decode - it has the inputs the run was driven by.
+`StatifierUI.Trace.Replay.from_events/4` produces the message list from
+those, offline, with no session process and no clock (ADR-0017):
+
+```elixir
+def mount(%{"run_id" => run_id}, _session, socket) do
+  {machine, initialize_opts, events} = MyApp.Runs.load_log!(run_id)
+
+  {:ok, messages} =
+    StatifierUI.Trace.Replay.from_events(machine, initialize_opts, events)
+
+  {:ok, assign(socket, :trace, State.new(machine, messages: messages))}
+end
+```
+
+It takes the compiled chart; the session options the recorded run was made
+under, in `Statifier.Session.Recording.new/3`'s vocabulary (`:session_id`,
+`:trace`, `:datamodel`, `:max_macrostep_rounds`, `:routes`, `:invoke_types`,
+`:invoke_handlers`); the persisted log, as
+`t:Statifier.Session.Recording.entry/0` values in the session's serialized
+input order; and its own emission options: `:source`, `:fixtures`,
+`:parent_session`, `:invokeid`, `:projection` and `:otel_context`, which are
+the subscriber's emission options and no others. There is no `:capacity`, no
+`:listeners` and no `:name` - a buffer, a fan-out and a process name are
+process concerns, and this is a function.
+
+Two things about the contract decide what a host has to store:
+
+- **`:trace` has to be true in the recorded options.** A recording defaults
+  the flag to `false`, and a run made without it completes normally while
+  emitting no `trace.*` messages at all, so the producer refuses rather than
+  hand back a stream the recorded run never produced:
+  `{:error, {:initialize_opts, :trace_disabled}}`.
+- **It fails closed.** The first failure returns `{:error, reason}` and no
+  partial list, because a partial list returned as `{:ok, messages}` cannot
+  be told apart from a whole one. `:session_id` has to be a binary
+  (`{:initialize_opts, :missing_session_id}`), an entry shape it does not
+  know is `{:unknown_entry, entry}`, and whatever the engine's replay, the
+  manifest builder or the normalizer returns comes back unwrapped.
+
+What comes out is the same list `StatifierUI.Trace.Subscriber` produces from
+a live session: the same message types in the same order, with the same
+`seq` values and the same payload bytes under
+`StatifierUI.Trace.Json.encode_lines/1`. The one absence is
+`session.terminated` - there is no process offline and no exit to observe,
+so an offline stream ends where the entry list ends. Everything downstream
+of `new/2` is unchanged, because it is the same message list the sections
+above hand it.
+
 ## Laying it out yourself
 
 `ops_view/1` is an arrangement, nothing more. A host that wants its own
@@ -187,6 +239,12 @@ export const Mermaid = {
 The element also carries the drawn configuration as `data-configuration` (a
 space-separated list of the engine's document-order state indexes), so your
 own code - or a test - can read what is highlighted without parsing Mermaid.
+
+The same value is readable server-side: `StatifierUI.Live.State.configuration/1`
+is the configuration the current selection implies, so a host that draws its
+own diagram reads it in `render/1` and follows the scrubber without touching
+the pane. It is the read behind `data-configuration`, not a second answer to
+it.
 
 ADR-0008's client-side elkjs SVG renderer is the eventual full-fidelity
 diagram and is not built yet. When it is, it replaces this pane's body and

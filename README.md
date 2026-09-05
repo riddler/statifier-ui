@@ -224,7 +224,7 @@ edit can render it directly:
   id="rule-cond"
   name="rule[cond]"
   value={@cond}
-  candidates={["order.total", "customer.tier"]}
+  candidates={["authorization.amount_cents", "card.brand"]}
 />
 ```
 
