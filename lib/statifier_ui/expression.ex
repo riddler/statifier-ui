@@ -288,7 +288,7 @@ defmodule StatifierUI.Expression do
   `:value_kinds` predicator stamps on its own operator entries, so an operator
   the lexer would reject - or one the grammar does not admit for this kind of
   value - cannot be offered here. Until px-84i landed that function there was
-  a table here instead, and ADR-0007's 2026-09-04 amendment named it as the
+  a table here instead, and ADR-0007's proposed 2026-09-04 amendment named it as the
   one local exception; delegating closes it.
 
   `:op` builds the clause, `:lexeme` is the spelling the expression will
@@ -597,7 +597,12 @@ defmodule StatifierUI.Expression do
     |> String.replace_prefix(prefix, "")
   end
 
-  @spec operator(%{op: atom(), lexeme: String.t(), label: String.t()}) :: operator()
+  @spec operator(%{
+          :op => atom(),
+          :lexeme => String.t(),
+          :label => String.t(),
+          optional(atom()) => term()
+        }) :: operator()
   defp operator(%{op: op, lexeme: lexeme, label: label}) do
     %{op: op, lexeme: lexeme, label: label, detail: lexeme_detail(lexeme)}
   end
@@ -620,7 +625,10 @@ defmodule StatifierUI.Expression do
   # `:integer` and `:float` are both `:number`, which is the kind predicator's
   # evaluator orders. `:relative_date` has no vocabulary kind of its own and
   # is a date-valued scalar, compared chronologically like one, so it asks the
-  # date question - the same operators the local table already gave it.
+  # date question. That pairing is what the local table did too - it gave
+  # `:relative_date` and `:date` identical rows - so mapping the two together
+  # preserves it. The answer itself is wider than either of those rows now,
+  # because it is the grammar's.
   @spec vocabulary_kind(value_kind()) :: atom()
   defp vocabulary_kind({:list, _member_kind}), do: :list
   defp vocabulary_kind(:integer), do: :number
