@@ -554,30 +554,38 @@ defmodule StatifierUI.Expression do
     }
   end
 
-  # Every spelling below is asked of `Predicator.Simple.to_source/1` rather
-  # than written out here, so a picklist never shows text the writer would not
-  # produce. That is the same rule the completion half follows for lexemes: one
-  # copy of the grammar, and it lives in predicator.
+  # Every spelling below is asked of predicator rather than written out here,
+  # so a picklist never shows text the writer would not produce: a path and a
+  # value through `Predicator.Simple.to_source/1`, an operator through the
+  # `:lexeme` its `operators/1` entry carries, which upstream holds to being
+  # the spelling `to_source/1` renders. That is the same rule the completion
+  # half follows for lexemes: one copy of the grammar, and it lives in
+  # predicator.
   @spec clause_source(module(), {[tuple()], atom(), term()}) :: String.t()
   defp clause_source(module, clause) do
     module |> struct(connective: nil, clauses: [clause]) |> module.to_source()
   end
 
+  # One lookup, not a round-trip: the entry already carries the spelling, so
+  # rendering a probe clause only to split it back apart would be asking the
+  # writer a question the vocabulary has already answered.
   @spec operator_label(module(), atom()) :: String.t()
   defp operator_label(module, op) do
-    [_root, label | _rest] =
-      module
-      |> clause_source({[{:root, "x"}], op, probe_value(op)})
-      |> String.split(" ", parts: 3)
+    %{lexeme: lexeme} =
+      op
+      |> probe_kind()
+      |> module.operators()
+      |> Enum.find(&(&1.op == op))
 
-    label
+    lexeme
   end
 
-  # `:in` is the one operator whose right-hand side must be a list, so the
-  # probe clause it is spelled through carries one.
-  @spec probe_value(atom()) :: term()
-  defp probe_value(:in), do: {:list, [{:integer, 0}]}
-  defp probe_value(_op), do: {:integer, 0}
+  # `:in` is the one operator whose right-hand side must be a list, so the list
+  # kind is the one that offers it; every other operator in the subset is
+  # offered for numbers, which is the kind the probe clause used to carry.
+  @spec probe_kind(atom()) :: atom()
+  defp probe_kind(:in), do: :list
+  defp probe_kind(_op), do: :number
 
   @spec path_source(module(), [tuple()]) :: String.t()
   defp path_source(module, segments) do
