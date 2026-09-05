@@ -200,6 +200,72 @@ not forbid a future structured storage format for expressions; if that day
 comes it is a superseding record that must answer why a second
 representation will not drift from the source, not a drift into one.
 
+### Note 2026-09-05 (sui-94o): the named local exception is closed
+
+*A note, not an amendment. Nothing above or below it has been edited, and
+neither Status line in this record has been changed - the sui-gcm amendment
+is still at `proposed`, and it flips only by its own gated pull request.*
+
+The paragraph above headed "One thing is decided locally, and it is named
+here as the exception it is" describes a table in `StatifierUI.Expression`
+holding which operators a picklist offers beside a value of each kind, and
+names the condition under which it goes: `Predicator.Simple.operators/1`
+owning that question upstream. **That function landed (px-84i), and the
+table is gone.** `StatifierUI.Expression.operators/1` now asks predicator,
+which answers from the `:value_kinds` its own vocabulary stamps on its
+operator entries. The paragraph's reasoning is not revised - it was correct
+when written, and it named exactly the condition that has now been met.
+
+Two things follow that the paragraph did not anticipate, and both are
+recorded here rather than left to the code to imply:
+
+- **The delegation is not behaviour-preserving, and the grammar's answer is
+  the right one.** The local table offered a boolean only `==` and `!=` and
+  reserved `CONTAINS` for strings; predicator admits equality for every
+  scalar kind and `CONTAINS` beside any scalar, because `contains` takes its
+  collection on the *left*. The wider lists are the grammar's judgement, and
+  taking them is the point of delegating - a package that kept the narrower
+  list would be holding the judgement it just handed over.
+
+The claim is scoped per value kind, so it is written out per value kind
+rather than asserted once. `ops` is the operator set offered beside a
+value of that kind; `->` reads "the local table, then the grammar's
+answer". Every kind `t:StatifierUI.Expression.value_kind/0` admits appears,
+including the two it names that the vocabulary does not.
+
+| This package's kind | It asks the grammar for | What changed |
+|---|---|---|
+| `:string` | `:string` | gains `>`, `>=`, `<`, `<=` - the evaluator orders strings, so ordered comparison beside one is meaningful |
+| `:integer` | `:number` | gains `===`, `!==`, `CONTAINS` |
+| `:float` | `:number` | new kind; same answer as `:integer`, and only reachable on a predicator that admits float literals to the subset |
+| `:boolean` | `:boolean` | gains `===`, `!==`, `CONTAINS`; still no ordered comparison, which the vocabulary excludes on purpose |
+| `:date` | `:date` | gains `===`, `!==`, `CONTAINS` |
+| `:datetime` | `:datetime` | gains `===`, `!==`, `CONTAINS` |
+| `:duration` | `:duration` | gains `===`, `!==`, `CONTAINS` |
+| `:relative_date` | `:date` | gains `===`, `!==`, `CONTAINS`; the vocabulary names no kind of its own for it |
+| `{:list, _}` | `:list` | unchanged - `IN` and nothing else |
+
+Two of those rows are the reason `CONTAINS` widened at all: `contains`
+takes its collection on the **left**, so the value beside it is a scalar
+of any kind, and the local table's confinement of it to strings was the
+judgement being handed over rather than a fact about the grammar.
+- **A kind translation remains, and it is not the exception returning.**
+  `Predicator.Vocabulary.value_kinds/0` names seven kinds; this package's
+  `t:StatifierUI.Expression.value_kind/0` names the shapes a clause value
+  takes, which has `:integer` and `:float` where the vocabulary has
+  `:number`, and `:relative_date`, which the vocabulary does not name at all.
+  Translating between two names for one thing is not a second eligibility
+  table: it names no operator, so it cannot offer one predicator would not.
+  That `:relative_date` has no vocabulary kind is an upstream gap worth
+  closing there rather than working around here.
+
+Display labels move with the same delegation. An operator entry now carries
+`:lexeme` - the spelling `to_source/1` writes, which is what a clause is
+built from - alongside `:label`, the grammar's own display phrase. That
+split is what lets a dropdown read "is one of" while the stored source stays
+`IN`, and it is the accepted text's rule unchanged: **the spelling is still
+the writer's, and only the writer's.**
+
 ## Context
 
 Every authoring tool for statecharts has to answer one question first: what
