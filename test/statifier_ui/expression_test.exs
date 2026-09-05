@@ -234,6 +234,18 @@ defmodule StatifierUI.ExpressionTest do
       assert Expression.operators({:list, :string}) == Expression.operators({:list, nil})
     end
 
+    # A relative date has no vocabulary kind of its own, so it borrows one, and
+    # which one it borrows is now predicator's answer rather than a row here.
+    # The answer moved from `:date` to `:datetime`; these say the move is inert
+    # by holding the two operator lists identical, entry for entry, not merely
+    # equal in their `:op` atoms.
+    test "a relative date borrows the kind predicator resolves it to" do
+      assert Predicator.Simple.value_kind({:relative_date, [{1, "d"}], :ago}) == :datetime
+
+      assert Predicator.Simple.operators(:datetime) == Predicator.Simple.operators(:date)
+      assert Expression.operators(:relative_date) == Expression.operators(:datetime)
+    end
+
     test "membership belongs to the list side and containment to the scalar side" do
       assert Enum.map(Expression.operators({:list, :string}), & &1.op) == [:in]
       refute :in in Enum.map(Expression.operators(:string), & &1.op)
@@ -252,6 +264,65 @@ defmodule StatifierUI.ExpressionTest do
       assert gte.lexeme == ">="
       assert gte.label == "is at least"
       assert gte.detail == "Greater than or equal to"
+    end
+  end
+
+  # `t:StatifierUI.Expression.value_kind/0` names three things more finely than
+  # `Predicator.Vocabulary` does - `:integer` and `:float` where the grammar has
+  # one `:number`, and `:relative_date`, which it does not name at all - and a
+  # list carries its member kind. Everything else is
+  # `Predicator.Simple.value_kind/1`'s own answer rather than a table in this
+  # package, and these enumerate the subset's tags so a scalar the grammar
+  # renames cannot drift past unnoticed.
+  describe "what kind a value is" do
+    @finer %{
+      {:integer, 5} => :integer,
+      {:float, 1.5} => :float,
+      {:relative_date, [{30, "d"}], :ago} => :relative_date
+    }
+
+    @scalar_sources [
+      "x == 'a'",
+      "x == 5",
+      "x == 1.5",
+      "x == true",
+      "x == #2026-01-01#",
+      "x == #2026-01-01T10:00:00Z#",
+      "x == 3d",
+      "x == 30d ago"
+    ]
+
+    test "every scalar tag reads as the kind predicator reports for it" do
+      for source <- @scalar_sources do
+        assert {:ok, [row], nil} = Expression.simple(source),
+               "#{source} did not read back into the subset"
+
+        expected = Map.get(@finer, row.value, Predicator.Simple.value_kind(row.value))
+
+        assert row.value_kind == expected,
+               "#{source} read as #{inspect(row.value_kind)}, not #{inspect(expected)}"
+      end
+    end
+
+    test "the tag list above is the whole scalar side of the subset" do
+      tags =
+        for source <- @scalar_sources do
+          {:ok, [row], nil} = Expression.simple(source)
+          elem(row.value, 0)
+        end
+
+      assert Enum.sort(tags) ==
+               [:boolean, :date, :datetime, :duration, :float, :integer, :relative_date, :string]
+    end
+
+    test "a list is its member's kind, and predicator sees only the list" do
+      assert {:ok, [members], nil} = Expression.simple("x in ['a']")
+      assert members.value_kind == {:list, :string}
+      assert Predicator.Simple.value_kind(members.value) == :list
+
+      assert {:ok, [empty], nil} = Expression.simple("x in []")
+      assert empty.value_kind == {:list, nil}
+      assert Predicator.Simple.value_kind(empty.value) == :list
     end
   end
 

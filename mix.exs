@@ -84,11 +84,14 @@ defmodule StatifierUI.MixProject do
 
       # Declared directly, not left to arrive through statifier, because lib/
       # calls Predicator.* itself: the expectations runner and
-      # `StatifierUI.Expression`'s completion source. 9.2 is the floor because
-      # `Predicator.Simple` and its per-value-kind `operators/1` landed there
-      # and `StatifierUI.Expression` reads both; `Predicator.Vocabulary`
-      # (px-15q), which the completion source reads, arrived in 9.1.
-      {:predicator, "~> 9.2"},
+      # `StatifierUI.Expression`'s completion source. 9.4 is the floor because
+      # `Predicator.Simple.value_kind/1` landed there and
+      # `StatifierUI.Expression` asks it what kind a clause value is rather
+      # than keeping a table of its own; the `Predicator.Simple` the same
+      # module reads for `operators/1` arrived in 9.2 and
+      # `Predicator.Vocabulary` (px-15q), which the completion source reads,
+      # in 9.1.
+      {:predicator, "~> 9.4"},
 
       # Both integrations are optional: the package is a component library, and
       # a Livebook host has no reason to pull LiveView, or the reverse. Anything
