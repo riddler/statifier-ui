@@ -2,12 +2,14 @@
 
 Status: accepted (2026-08-16)
 Amendment status: **accepted** (2026-09-05, campaign-029) - see below; the
-accepted text below the amendment is unedited, and its illustrations read
-through the amendment's substitution table.
+amendment's substitution table was applied to the accepted text's named
+sites on 2026-09-05 (sui-bzg), under the operator ruling of that date.
 
 ## Amendment proposed 2026-08-27 (sui-0of): canonical example domains
 
-*Accepted 2026-09-05. Nothing below this section has been edited.*
+*Accepted 2026-09-05. The substitutions proposed below were applied to the
+four sites the table names on 2026-09-05 (sui-bzg); nothing else below this
+section has been edited.*
 
 The fleet ruling of 2026-08-27 fixes exactly two example domains for the
 whole family - credit-card processing (accounts, budgets, transactions,
@@ -89,13 +91,13 @@ artifact per chart, consumed as one struct, powering all four features above.
 **Shape.** A fixture bundle is two maps:
 
 - **Scenarios**: named example datamodels - each a name (for example
-  `"gold-tier-user"`) mapped to a complete example of the host-supplied
-  datamodel for that situation.
+  `"within-budget-account"`) mapped to a complete example of the
+  host-supplied datamodel for that situation.
 - **Events**: example events keyed by event name, each carrying a sample
-  `_event.data` payload (for example `"payment.success"` mapped to
-  `{"amount": 1999, "currency": "USD"}`). One sample payload per event name;
-  multiple samples per event is a possible later extension, not part of this
-  contract.
+  `_event.data` payload (for example `"authorize.approved"` mapped to
+  `{"amount_cents": 1999, "currency": "USD"}`). One sample payload per event
+  name; multiple samples per event is a possible later extension, not part of
+  this contract.
 
 **Types are inferred shapes from example values**, not a declared schema
 language. An example is concrete and immediately evaluable - the explorer
@@ -112,11 +114,11 @@ need materializes, never a prerequisite for using fixtures at all.
   code can build examples from its own factories or fixtures rather than
   duplicating them.
 - **A JSON sidecar next to the chart** for corpus and CLI use: a chart at
-  `payment.scxml` may carry `payment.fixtures.json` beside it. The sidecar is
-  a JSON object with a `"version"` field (initially `1`) and `"scenarios"`
-  and `"events"` keys matching the shape above. The loader parses it into
-  the **same struct** the behaviour returns; every consumer downstream of the
-  loader is indifferent to which path the data arrived by.
+  `authorization.scxml` may carry `authorization.fixtures.json` beside it. The
+  sidecar is a JSON object with a `"version"` field (initially `1`) and
+  `"scenarios"` and `"events"` keys matching the shape above. The loader
+  parses it into the **same struct** the behaviour returns; every consumer
+  downstream of the loader is indifferent to which path the data arrived by.
 
 Naming these modules is intent, not description: no fixture code exists in
 `lib/` yet (the repository is a scaffold), and the first consumer is the
@@ -161,7 +163,7 @@ all must still lint clean on tiers 1 and 2.
 
 - Four features draw from one artifact, so authoring effort amortizes: a
   host that writes fixtures once gets the explorer tree, context-sensitive
-  completions (`_event.data.` inside `<transition event="payment.success">`
+  completions (`_event.data.` inside `<transition event="authorize.approved">`
   completes from that event's fixture), a safe keystroke-by-keystroke
   scratchpad (predicator evaluation is pure and sandboxed, per ADR-0002's
   adopted premises), and a populated event palette.
