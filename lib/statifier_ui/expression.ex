@@ -41,11 +41,15 @@ defmodule StatifierUI.Expression do
   Collapsing the middle one into an error would tell an author their working
   condition is broken.
 
-  `Predicator.Simple` degrades exactly as `Predicator.Vocabulary` does, through
-  `Application.get_env(:statifier_ui, :predicator_simple, Predicator.Simple)`
-  and a `Code.ensure_loaded?/1` guard. A host on an older predicator gets
-  `:outside` for every source string, which is the answer that makes the
-  component fall back to its plain text input.
+  `Predicator.Simple` is resolved the way `Predicator.Vocabulary` is, through
+  `Application.get_env(:statifier_ui, :predicator_simple, Predicator.Simple)`,
+  but the guard on it is wider than a `Code.ensure_loaded?/1`:
+  `simple_available?/0` also requires the resolved module to export
+  `from_source/1`, `to_source/1` and `operators/1`. A host on an older
+  predicator - or one that points that key at a module missing any of the
+  three - gets `:outside` for every source string, an empty operator list, and
+  `:error` from the three writing functions, which is the answer that makes
+  the component fall back to its plain text input.
 
   ## Shape
 
@@ -133,6 +137,12 @@ defmodule StatifierUI.Expression do
   so a renderer can hand an edited row straight back to
   `Predicator.Simple.to_ast/1`; `:path`, `:op_label`, and `:value_source` are
   the same three things spelled the way the source spells them.
+
+  `:op_label` is therefore a source spelling, which is the one place in this
+  module where "label" means the opposite of what it means next door: on
+  `t:operator/0` `:label` is the grammar's display phrase and `:lexeme` is the
+  spelling. A dropdown draws `t:operator/0`'s `:label`; `:op_label` is what
+  the expression carries.
   """
   @type row :: %{
           path: String.t(),
@@ -239,10 +249,12 @@ defmodule StatifierUI.Expression do
   no entry gets an empty list and the renderer falls back to a free-text value
   control.
 
-  When the resolved predicator has no `Predicator.Simple`, every source string
-  answers `:outside`. That is a degraded answer rather than a wrong one: the
-  component renders the text input it would render for an unsupported
-  expression.
+  When `simple_available?/0` is false - the resolved predicator has no
+  `Predicator.Simple`, or the module the `:predicator_simple` key points at
+  does not export all three of `from_source/1`, `to_source/1` and
+  `operators/1` - every source string answers `:outside`. That is a degraded
+  answer rather than a wrong one: the component renders the text input it
+  would render for an unsupported expression.
 
   ## Examples
 
@@ -288,17 +300,20 @@ defmodule StatifierUI.Expression do
   `:value_kinds` predicator stamps on its own operator entries, so an operator
   the lexer would reject - or one the grammar does not admit for this kind of
   value - cannot be offered here. Until px-84i landed that function there was
-  a table here instead, and ADR-0007's proposed 2026-09-04 amendment named it as the
-  one local exception; delegating closes it.
+  a table here instead, and ADR-0007's 2026-09-04 amendment - accepted
+  2026-09-05 - named it as the one local exception; delegating closes it.
 
   `:op` builds the clause, `:lexeme` is the spelling the expression will
   carry, `:label` is the display phrase, and `:detail` is the grammar's
   one-line description, or `nil` when `Predicator.Vocabulary` is not
   resolvable.
 
-  Empty when `Predicator.Simple` is absent, for the same reason `simple/2`
-  answers `:outside`: there is nothing truthful to offer. A kind that is not a
-  `t:value_kind/0` raises, which is upstream's own stance - an empty list
+  Empty when `simple_available?/0` is false, for the same reason `simple/2`
+  answers `:outside`: there is nothing truthful to offer. An atom the `@spec`
+  does not admit is handed to upstream unchanged rather than rejected here, so
+  one that happens to name a `Predicator.Vocabulary` kind - `:number`,
+  `:list` - gets the grammar's answer for that kind, and any other atom raises
+  there. The raise is upstream's own stance and the right one: an empty list
   would say "no operators here" about a kind that does not exist.
 
   ## Examples
@@ -353,11 +368,21 @@ defmodule StatifierUI.Expression do
   end
 
   @doc """
-  Whether the resolved predicator exposes `Predicator.Simple`.
+  Whether the resolved predicator exposes a usable `Predicator.Simple`.
 
   The counterpart to `vocabulary_available?/0`, and the same distinction: a
   component stamps it so a host can tell "this expression is outside the
   subset" from "this predicator cannot answer the question".
+
+  Usable is three exports, not one loaded module: `from_source/1`,
+  `to_source/1` and `operators/1` all have to be there. Under the `~> 9.2`
+  requirement that is inert, since every admitted predicator carries all
+  three; it is a host overriding `:predicator_simple` that the condition
+  measures, and a stub exporting two of the three reads as unavailable. Every
+  function this guard gates then degrades together: `simple/2` to `:outside`,
+  `operators/1` to `[]`, and `source/2`, `value_source/2` and `segments/1` to
+  `:error`. A picklist is lost silently, so a host stubbing this module is
+  stubbing the whole surface.
 
   ## Examples
 
