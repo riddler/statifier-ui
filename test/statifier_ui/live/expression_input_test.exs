@@ -382,6 +382,85 @@ defmodule StatifierUI.Live.ExpressionInputTest do
     end
   end
 
+  # LiveView will not patch a `<select>` that has focus unless it can see the
+  # option list change, and picking a different operator leaves the set of
+  # option values identical - so the control the author just used is exactly
+  # the one whose `selected` attributes go stale (sui-ivh). The hook repairs it
+  # from the source rather than from those attributes, which is only possible
+  # while the property below holds.
+  describe "the selection is recoverable from the source alone (sui-ivh)" do
+    test "every single-choice control offers the current source, and marks it" do
+      for source <- [
+            "plan == 'pro'",
+            "status == 'active' AND amount >= 500",
+            "risk >= 70 OR verdict == 'review'"
+          ] do
+        controls =
+          source
+          |> picklist_html(["plan", "status", "amount", "risk", "verdict"])
+          |> picklist_controls()
+          |> Enum.reject(& &1.multiple?)
+
+        assert controls != []
+
+        for control <- controls do
+          values = Enum.map(control.options, & &1.value)
+          marked = Enum.filter(control.options, & &1.selected?)
+
+          assert source in values,
+                 "the #{control.role} control offers no option spelling #{inspect(source)}"
+
+          assert [%{value: ^source}] = marked,
+                 "the #{control.role} control marks #{inspect(Enum.map(marked, & &1.value))}"
+        end
+      end
+    end
+
+    test "a multi-select is the exception the hook leaves alone" do
+      controls =
+        "step IN ['payment']"
+        |> picklist_html(["step"], %{"step" => ["payment", "review"]})
+        |> picklist_controls()
+
+      assert [multi] = Enum.filter(controls, & &1.multiple?)
+
+      # Its options are list fragments, not whole sources, so the source-match
+      # the other controls are repaired by does not apply to this one.
+      refute Enum.any?(multi.options, &(&1.value == "step IN ['payment']"))
+      assert Enum.any?(multi.options, &(&1.value == "'payment'" and &1.selected?))
+    end
+  end
+
+  # The rendered controls, read back the way a browser would see them. Parsing
+  # is regex rather than a DOM library because the toolchain here deliberately
+  # carries neither Node nor an HTML parser (see CLAUDE.md).
+  defp picklist_controls(html) do
+    ~r/<select(?<attrs>[^>]*)>(?<body>.*?)<\/select>/s
+    |> Regex.scan(html, capture: :all_names)
+    |> Enum.map(fn [attrs, body] ->
+      %{
+        role: attribute(attrs, "data-role"),
+        multiple?: attrs =~ "multiple",
+        options: options(body)
+      }
+    end)
+  end
+
+  defp options(body) do
+    ~r/<option(?<attrs>[^>]*)>/
+    |> Regex.scan(body, capture: :all_names)
+    |> Enum.map(fn [attrs] ->
+      %{value: unescape(attribute(attrs, "value")), selected?: attrs =~ " selected"}
+    end)
+  end
+
+  defp attribute(attrs, name) do
+    case Regex.run(~r/#{name}="(?<value>[^"]*)"/, attrs, capture: :all_names) do
+      [value] -> value
+      nil -> nil
+    end
+  end
+
   defp picklist_html(value, candidates, value_candidates \\ %{}) do
     seam_html(%{value: value, candidates: candidates, value_candidates: value_candidates})
   end
