@@ -1,6 +1,6 @@
 # ADR-0018: A wire message for guard evaluation
 
-Status: proposed (2026-09-05, campaign-031)
+Status: accepted (2026-09-05, campaign-031; proposed 2026-09-05, campaign-031)
 
 Adds one type to the v1 trace wire format: `trace.conds_evaluated`, the
 mapping of statifier 2.5.0's `Statifier.Effect.Trace.CondsEvaluated`. It
@@ -13,6 +13,13 @@ mapping clause, the schema section, the golden and the drift-test counts
 move on `sui-e41`, which is filed and blocked on this record. This record
 merges at **proposed**; flipping it to accepted after `sui-e41` lands is a
 separate gated change (`sui-3or`).
+
+**Note, 2026-09-05 (campaign-031, `sui-3or`):** that separate change is the one
+carrying this Note. The Status line above now reads `accepted`; `sui-e41` landed
+on `main` at `ac93c18` and the 0.7.0 prep at `6beea9f`. The sentence above stands
+as written and is historical: it describes the state at the recording pull
+request, not the record's state today. Added by addition rather than by
+rewording, so the flip removes no line but the status text.
 
 ## Context
 
@@ -382,6 +389,13 @@ and it flips only by its own gated pull request (`sui-3or`), after the
 section above; it touches no numbered decision, and every decision 1-6
 landed as written.*
 
+**Note, 2026-09-05 (campaign-031, `sui-3or`):** that gated pull request has
+landed, and the Status line now reads `accepted`. The paragraph above stands as
+written and is historical: it describes the state at the recording pull request.
+Its two substantive claims are unaffected by the flip - nothing above or below
+the `sui-51o` note was edited by it, and every numbered decision 1-6 was
+re-verified against `main` before this flip.
+
 `sui-e41` implemented this record on `main` at `ac93c18` (PR 126). Two
 statements in this section describe the implementation rather than decide
 it, and both went stale when it landed. They are recorded here rather than
@@ -462,6 +476,13 @@ landed. That ordering is this repository's convention for a record that
 decides a wire-format shape before the shape exists: ADR-0016 and ADR-0017
 each merged at proposed and were flipped in a later, separately gated
 change (`9942e1f` then `9592f0e`; `0f3c083` then `35a388a`).
+
+**Note, 2026-09-05 (campaign-031, `sui-3or`):** the flip landed in the pull
+request that carries this Note, and the Status line above reads `accepted`. The
+paragraph above stands as written and is historical. The check it asks for was
+performed against `main` at `6beea9f`: every numbered decision 1-6 holds as
+written, and the two Implementation bullets that did not are the ones the
+`sui-51o` note above already records.
 
 The two engine facts this record leans on hardest - that no entry exists
 for a `cond`-less transition, and that no message exists for a round that
