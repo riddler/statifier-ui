@@ -45,9 +45,9 @@ defmodule StatifierUI.Expression do
   `Application.get_env(:statifier_ui, :predicator_simple, Predicator.Simple)`,
   but the guard on it is wider than a `Code.ensure_loaded?/1`:
   `simple_available?/0` also requires the resolved module to export
-  `from_source/1`, `to_source/1` and `operators/1`. A host on an older
-  predicator - or one that points that key at a module missing any of the
-  three - gets `:outside` for every source string, an empty operator list, and
+  `from_source/1`, `to_source/1`, `operators/1` and `value_kind/1`. A host on
+  an older predicator - or one that points that key at a module missing any of
+  the four - gets `:outside` for every source string, an empty operator list, and
   `:error` from the three writing functions, which is the answer that makes
   the component fall back to its plain text input.
 
@@ -251,8 +251,8 @@ defmodule StatifierUI.Expression do
 
   When `simple_available?/0` is false - the resolved predicator has no
   `Predicator.Simple`, or the module the `:predicator_simple` key points at
-  does not export all three of `from_source/1`, `to_source/1` and
-  `operators/1` - every source string answers `:outside`. That is a degraded
+  does not export all four of `from_source/1`, `to_source/1`, `operators/1`
+  and `value_kind/1` - every source string answers `:outside`. That is a degraded
   answer rather than a wrong one: the component renders the text input it
   would render for an unsupported expression.
 
@@ -374,11 +374,13 @@ defmodule StatifierUI.Expression do
   component stamps it so a host can tell "this expression is outside the
   subset" from "this predicator cannot answer the question".
 
-  Usable is three exports, not one loaded module: `from_source/1`,
-  `to_source/1` and `operators/1` all have to be there. Under the `~> 9.2`
-  requirement that is inert, since every admitted predicator carries all
-  three; it is a host overriding `:predicator_simple` that the condition
-  measures, and a stub exporting two of the three reads as unavailable. Every
+  Usable is four exports, not one loaded module: `from_source/1`,
+  `to_source/1`, `operators/1` and `value_kind/1` all have to be there. Under
+  the `~> 9.4` requirement that is inert, since every admitted predicator
+  carries all four; it is a host overriding `:predicator_simple` that the
+  condition measures, and a stub exporting three of the four reads as
+  unavailable - which is why the fourth joined the guard when this module
+  started asking upstream what kind a value is. Every
   function this guard gates then degrades together: `simple/2` to `:outside`,
   `operators/1` to `[]`, and `source/2`, `value_source/2` and `segments/1` to
   `:error`. A picklist is lost silently, so a host stubbing this module is
@@ -397,7 +399,8 @@ defmodule StatifierUI.Expression do
     Code.ensure_loaded?(module) and
       function_exported?(module, :from_source, 1) and
       function_exported?(module, :to_source, 1) and
-      function_exported?(module, :operators, 1)
+      function_exported?(module, :operators, 1) and
+      function_exported?(module, :value_kind, 1)
   end
 
   @doc """
@@ -656,30 +659,36 @@ defmodule StatifierUI.Expression do
   # would be the duplication delegating removed.
   #
   # `:integer` and `:float` are both `:number`, which is the kind predicator's
-  # evaluator orders. `:relative_date` has no vocabulary kind of its own and
-  # is a date-valued scalar, compared chronologically like one, so it asks the
-  # date question. That pairing is what the local table did too - it gave
-  # `:relative_date` and `:date` identical rows - so mapping the two together
-  # preserves it. The answer itself is wider than either of those rows now,
-  # because it is the grammar's.
+  # evaluator orders. `:relative_date` has no vocabulary kind of its own, and
+  # which one it borrows is upstream's answer rather than this module's: a
+  # relative date resolves to a `DateTime.t()` there, so `value_kind/1` reads
+  # a relative-date value as `:datetime`. Asking it with a probe value keeps
+  # the pairing on the side that decides it - the local table said `:date`,
+  # and `:date` and `:datetime` carry the same operators, so what changes here
+  # is where the answer comes from, not what it is.
+  @relative_date_probe {:relative_date, [{1, "d"}], :ago}
+
   @spec vocabulary_kind(value_kind()) :: atom()
   defp vocabulary_kind({:list, _member_kind}), do: :list
   defp vocabulary_kind(:integer), do: :number
   defp vocabulary_kind(:float), do: :number
-  defp vocabulary_kind(:relative_date), do: :date
+  defp vocabulary_kind(:relative_date), do: simple_module().value_kind(@relative_date_probe)
   defp vocabulary_kind(kind), do: kind
 
+  # Only the tags this module reads more finely than the grammar does are
+  # written out: a list carries its member kind so a renderer can pick the
+  # member's control, and `:integer`, `:float` and `:relative_date` are the
+  # three distinctions `t:value_kind/0` keeps that `Predicator.Vocabulary` does
+  # not make. Every other tag is upstream's own answer, asked rather than
+  # restated, so a scalar the grammar gains does not need a row here to be
+  # read.
   @spec value_kind(term()) :: value_kind()
   defp value_kind({:list, []}), do: {:list, nil}
   defp value_kind({:list, [first | _rest]}), do: {:list, value_kind(first)}
   defp value_kind({:integer, _value}), do: :integer
   defp value_kind({:float, _value}), do: :float
-  defp value_kind({:boolean, _value}), do: :boolean
-  defp value_kind({:string, _value, _style}), do: :string
-  defp value_kind({:date, _value}), do: :date
-  defp value_kind({:datetime, _value}), do: :datetime
-  defp value_kind({:duration, _units}), do: :duration
   defp value_kind({:relative_date, _units, _direction}), do: :relative_date
+  defp value_kind(value), do: simple_module().value_kind(value)
 
   @spec candidate(candidate() | String.t()) :: candidate()
   defp candidate(%{label: label, value: value}), do: %{label: label, value: value}
