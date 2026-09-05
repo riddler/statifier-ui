@@ -92,6 +92,14 @@ the relay - the operator's own words authorizing that campaign, not the
 subagent's sense of being authorized. A subagent that cannot quote them
 reports and stops. (Recorded 2026-09-05 by the operator, campaign 029.)
 
+A relay unlocks nothing the rows above forbid outright: closing a mirrored
+bead whose other half has not landed, and a release - a tag, a
+`mix hex.publish`, a GitHub release - stay forbidden however the consent
+arrives. The two recorded exceptions below are the only widenings, and a
+relay does not widen either past its own row: the version bump stays a
+release-bead bump with no tag and no publish, and the campaign merge stays a
+merge of one PR meeting every condition its consent names.
+
 A version bump is the recorded exception: on a release bead the operator has
 named (in the campaign plan or their own words), the bump commit is release
 prep, not a release. (Recorded 2026-08-27 by the operator, campaign 008.)
