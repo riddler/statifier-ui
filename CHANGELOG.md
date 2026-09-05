@@ -10,6 +10,57 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into a version section at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [0.6.0] 2026-09-05
+
+A failure becomes something the wire format can carry, and a trace can be
+produced without a live run. `StatifierUI.Trace.Replay.from_events/4` builds
+the v1 wire format from a persisted event log, so a finished session can be
+inspected offline. The wire `error` object gains a discriminated reason arm,
+which is what lets an `error.execution` or `error.communication` event reach
+a consumer at all instead of being dropped in normalization.
+`StatifierUI.Live.ExpressionInput.display_label/1` is removed; the grammar's
+display phrases replaced the only work it did.
+
+### Added
+
+- `StatifierUI.Trace.Replay.from_events/4` produces the v1 trace wire format
+  from a persisted session event log, with no live `Statifier.Session`, no
+  process, and no clock - the same message stream
+  `StatifierUI.Trace.Subscriber` produces from a live run, `session.terminated`
+  excepted. A recording made without `trace: true` is refused rather than
+  replayed into a silently `trace.*`-free stream. See ADR-0017.
+- The wire `error` object gains a `class` discriminator (`"expression"` or
+  `"reason"`), and on the reason arm a `kind` token derived from the term's
+  tag, a human-readable `reason` string, and a `content_path` naming the
+  enclosing `<if>` or `<foreach>` when the failure was raised inside one.
+  Adding fields is not a format version bump, so the format version stays
+  `1`. See ADR-0014 and `docs/wire-format.md`.
+
+### Changed
+
+- `error.reason` is redacted under every projection profile, beside
+  `session.terminated`'s `reason`: it is `inspect/1` of a whole engine term
+  and can embed a datamodel value verbatim. `class`, `kind`, and
+  `content_path` are never projected.
+
+### Removed
+
+- `StatifierUI.Live.ExpressionInput.display_label/1`. It lowercased a
+  word-shaped lexeme so a dropdown could read `in` where the decompiler wrote
+  `IN`. Since operator labels became the grammar's own display phrases,
+  delivered by `StatifierUI.Expression.operators/1`, every label it could be
+  handed was already display-cased and it returned its argument unchanged.
+  Operator options now carry the grammar's phrase verbatim, which leaves one
+  spelling of a display phrase in the system and it is the vocabulary's.
+
+### Fixed
+
+- A `trace.event_dequeued` for an `error.execution` or `error.communication`
+  event now reaches a consumer. The engine puts an unconstrained reason term
+  in those events' data, which is not a value, so the whole message used to
+  fail to normalize and be dropped - the inspector showed a run in which the
+  failure simply was not there.
+
 ## [0.5.0] 2026-09-05
 
 Operator eligibility moves to the grammar. `StatifierUI.Expression` asks
