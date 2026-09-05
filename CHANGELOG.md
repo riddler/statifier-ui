@@ -10,6 +10,47 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into a version section at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [0.5.0] 2026-09-05
+
+Operator eligibility moves to the grammar. `StatifierUI.Expression` asks
+`Predicator.Simple.operators/1` which operators a value kind admits instead of
+answering from a table of its own, so a picklist offers what the grammar
+offers and lists it in the grammar's order. An operator entry now carries the
+source spelling and the display phrase separately, which is the one migration
+in this release.
+
+### Added
+
+- `StatifierUI.Expression`'s `t:value_kind/0` gains `:float`, so a float-valued
+  clause is offered the operators a number is offered once the resolved
+  predicator admits float literals to the subset.
+
+### Changed
+
+- `StatifierUI.Expression.operators/1` reads per-value-kind eligibility from
+  `Predicator.Simple.operators/1` instead of a table kept here, so the
+  operators offered beside a value are the ones the grammar admits for that
+  kind. Every scalar kind but `:string` now also offers `===`, `!==` and
+  `CONTAINS`, which `:string` already offered, and a string gains the ordered
+  comparisons.
+- Each entry `StatifierUI.Expression.operators/1` returns gains `:lexeme`, the
+  source spelling the expression will carry, and its `:label` is now the
+  grammar's display phrase (`"is at least"` for `">="`) rather than the
+  spelling. Read `:lexeme` where you were reading `:label` to build source
+  text; nothing stored changes, since a row is still written back through
+  `Predicator.Simple.to_source/1`.
+- `StatifierUI.Live.ExpressionInput`'s operator dropdown shows those phrases.
+  The `value` attribute on every option is unchanged: it is still the writer's
+  own untouched output.
+
+### Fixed
+
+- A picklist control now shows the choice that was just made. LiveView skips
+  patching a `<select>` that has focus when the option list is unchanged, so
+  after an operator, field or connective edit the control kept displaying the
+  previous selection until the field was re-rendered from scratch; the hook now
+  restores it from the source string the server rendered.
+
 ## [0.4.0] 2026-09-04
 
 Structured authoring reaches the expression field. `StatifierUI.Expression`
