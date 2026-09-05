@@ -86,13 +86,24 @@ Whether the release is major, minor or patch is not decided here - the version
 is explicit input to the skill. The fragments' headings are evidence for that
 judgement, not a rule that computes it.
 
-## There is no second version carrier
+## The second version carrier is in `docs/`, not in `lib/`
 
-Nothing in `lib/` or `docs/` carries the package version a second time. The
-version lives once, as `@version` at the top of `mix.exs`, and
-`version: @version` in `project/0` reads it from there. There is no
-compiler-style stamped constant here and no parity assertion in the suite, so
-the recipe's `version_file` edit is the whole of the version bump.
+Nothing in `lib/` carries the package version a second time. In code the
+version lives once, as `@version` at the top of `mix.exs`, with
+`version: @version` in `project/0` reading it from there. There is no
+compiler-style stamped constant here and no parity assertion in the suite.
+
+`docs/` is the exception, and it is a prose carrier rather than a code one:
+`docs/ops-embedding.md` shows a host's `deps` entry, and that snippet pins
+`statifier_ui` in the same major/minor form the README does. Step B below
+moves it, and the table at the end lists it.
+
+The sentence that used to sit here said `docs/` carried no version at all.
+That was wrong for as long as the snippet sat five minors behind the version
+file, which is how long it took `sui-2wc` to find it: a recipe asserting that
+a carrier does not exist is the one claim a release worker will not think to
+check behind. The same rotting-reference class `sui-040`, `px-jci` and
+`sb-0id2` fixed in the sibling recipes, arrived at from the other direction.
 
 One near-miss is worth naming so it is not rediscovered as a bug every
 release: `assets/package.json` has a `"version"` field that does **not** track
@@ -131,6 +142,31 @@ a mistake to correct back. That has happened once - the 0.2.0 prep bumped the
 version file without bumping the pin, and the following prep carried the pin
 across two minors in a single edit. The two carriers have agreed since.
 
+## Step B: the docs install pin
+
+Placed with the recipe's `readme_pin` edit, in the same commit.
+
+`docs/ops-embedding.md`'s `## What you need` snippet carries the same
+`{:statifier_ui, "~> X.Y"}` pin the README does, and the recipe's `readme_pin`
+step reaches `README.md` only. So this one is moved by hand, to the same
+major/minor, in the same pass as the README pin.
+
+Resolve all three carriers by content when you read this, never by a line
+number:
+
+```bash
+grep -n 'statifier_ui, "~>' docs/ops-embedding.md   # the docs pin
+grep -n 'statifier_ui, "~>' README.md               # the README pin
+grep -n '@version "' mix.exs                        # the version they track
+```
+
+They should agree on major and minor. Nothing in the suite asserts that, so
+this step is the whole of what keeps them together - unlike the compiler
+carrier a sibling repo has, a docs pin left behind takes no gate red. As with
+the README pin, a pin found several minors behind goes straight to the current
+major/minor in one move rather than stepping one release at a time; that is
+the recipe repairing drift, not a mistake to correct back.
+
 ## The files a release commit touches
 
 Exactly these, and a release commit that touches anything else is wrong:
@@ -139,6 +175,7 @@ Exactly these, and a release commit that touches anything else is wrong:
 |---|---|
 | `mix.exs` | the recipe's `version_file` |
 | `README.md` | the recipe's `readme_pin` |
+| `docs/ops-embedding.md` | step B |
 | `CHANGELOG.md` | step A |
 | `changelog.d/*.md` (deleted) | step A |
 
