@@ -2,9 +2,9 @@
 
 Status: accepted (2026-08-26)
 Amendment status: **accepted** (2026-09-05, campaign-029; proposed 2026-08-27, sui-0of); **accepted** (2026-08-29, sui-hmn: the three implementation rulings, accepted under the operator campaign-015 direction-agent gate grant, PR 55) - see "Amendment
-proposed" below; the accepted text is unchanged, and the sui-0of
-substitution is recorded rather than applied to the Decision's "Located
-positions" passage.
+proposed" below; the sui-0of substitution was applied to the Decision's
+"Located positions" passage on 2026-09-05 (sui-bzg), under the operator
+ruling of that date.
 
 Extends ADR-0005 additively: one new reserved value shape, one new
 `session.start` field, and a producer-side transform. No type is added,
@@ -13,8 +13,9 @@ version stays `1` - see "Versioning decision" below.
 
 ## Amendment proposed 2026-08-27 (sui-0of): canonical example domains
 
-*Accepted 2026-09-05 (campaign-029); proposed 2026-08-27. Nothing below
-this section has been edited.*
+*Accepted 2026-09-05 (campaign-029); proposed 2026-08-27. The substitution
+proposed below was applied to the Decision's "Located positions" passage on
+2026-09-05 (sui-bzg); nothing else below this section has been edited.*
 
 The fleet ruling of 2026-08-27 fixes exactly two example domains for the
 whole family - credit-card processing (accounts, budgets, transactions,
@@ -365,16 +366,16 @@ prefix**, written as arrays of segments in the same encoding
 `effect.datamodel_change.location_path` already uses:
 
 ```
-allow_paths: [["order", "status"], ["user", "tier"]]
+allow_paths: [["authorization", "status"], ["account", "currency"]]
 ```
 
 A prefix matches a write when it matches the write's leading segments, so
-`["order"]` allows the whole `order` subtree and `["order", "status"]`
-allows one leaf. The same prefixes apply to `session.datamodel`, whose
-keys are the first segment of every path. That is why the datamodel
-allowlist is expressed by path and not by variable name: one expression
-covers both messages, and a host that may show `order.status` but not
-`order.total` can say so.
+`["authorization"]` allows the whole `authorization` subtree and
+`["authorization", "status"]` allows one leaf. The same prefixes apply to
+`session.datamodel`, whose keys are the first segment of every path. That
+is why the datamodel allowlist is expressed by path and not by variable
+name: one expression covers both messages, and a host that may show
+`authorization.status` but not `authorization.amount_cents` can say so.
 
 **Unlocated positions** - payloads, which have no path - are allowlisted
 by naming the position, from a closed set:
