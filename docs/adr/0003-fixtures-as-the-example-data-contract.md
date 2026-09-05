@@ -1,13 +1,13 @@
 # ADR-0003: Fixtures as the example-data contract
 
 Status: accepted (2026-08-16)
-Amendment status: **proposed** (2026-08-27, sui-0of) - see below; the
-accepted text is unchanged and stays authoritative until the amendment is
-read and accepted.
+Amendment status: **accepted** (2026-09-05, campaign-029) - see below; the
+accepted text below the amendment is unedited, and its illustrations read
+through the amendment's substitution table.
 
 ## Amendment proposed 2026-08-27 (sui-0of): canonical example domains
 
-*Proposed, not accepted. Nothing below this section has been edited.*
+*Accepted 2026-09-05. Nothing below this section has been edited.*
 
 The fleet ruling of 2026-08-27 fixes exactly two example domains for the
 whole family - credit-card processing (accounts, budgets, transactions,
