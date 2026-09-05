@@ -226,12 +226,23 @@ recorded here rather than left to the code to imply:
   collection on the *left*. The wider lists are the grammar's judgement, and
   taking them is the point of delegating - a package that kept the narrower
   list would be holding the judgement it just handed over.
+- **A kind translation remains, and it is not the exception returning.**
+  `Predicator.Vocabulary.value_kinds/0` names seven kinds; this package's
+  `t:StatifierUI.Expression.value_kind/0` names the shapes a clause value
+  takes, which has `:integer` and `:float` where the vocabulary has
+  `:number`, and `:relative_date`, which the vocabulary does not name at all.
+  Translating between two names for one thing is not a second eligibility
+  table: it names no operator, so it cannot offer one predicator would not.
+  That `:relative_date` has no vocabulary kind is an upstream gap worth
+  closing there rather than working around here.
 
-The claim is scoped per value kind, so it is written out per value kind
-rather than asserted once. `ops` is the operator set offered beside a
-value of that kind; `->` reads "the local table, then the grammar's
-answer". Every kind `t:StatifierUI.Expression.value_kind/0` admits appears,
-including the two it names that the vocabulary does not.
+The first of those two is scoped per value kind, so it is written out per
+value kind rather than asserted once. Every kind
+`t:StatifierUI.Expression.value_kind/0` admits has a row, including the
+three atoms it names that the vocabulary does not: `:integer` and
+`:float`, which are its `:number`, and `:relative_date`, which it does not
+name at all. "What changed" is the difference between the deleted table's
+answer for that kind and the grammar's.
 
 | This package's kind | It asks the grammar for | What changed |
 |---|---|---|
@@ -249,15 +260,6 @@ Two of those rows are the reason `CONTAINS` widened at all: `contains`
 takes its collection on the **left**, so the value beside it is a scalar
 of any kind, and the local table's confinement of it to strings was the
 judgement being handed over rather than a fact about the grammar.
-- **A kind translation remains, and it is not the exception returning.**
-  `Predicator.Vocabulary.value_kinds/0` names seven kinds; this package's
-  `t:StatifierUI.Expression.value_kind/0` names the shapes a clause value
-  takes, which has `:integer` and `:float` where the vocabulary has
-  `:number`, and `:relative_date`, which the vocabulary does not name at all.
-  Translating between two names for one thing is not a second eligibility
-  table: it names no operator, so it cannot offer one predicator would not.
-  That `:relative_date` has no vocabulary kind is an upstream gap worth
-  closing there rather than working around here.
 
 Display labels move with the same delegation. An operator entry now carries
 `:lexeme` - the spelling `to_source/1` writes, which is what a clause is
