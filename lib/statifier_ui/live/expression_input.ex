@@ -150,15 +150,41 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
     ## What a declaration does and does not do
 
-    A `:path_types` entry decides two things: which operators the row offers
+    A `:path_types` entry decides three things: which operators the row offers
     (asked of `StatifierUI.Expression.operators/1`, the same grammar call an
-    observed kind goes through) and which control is drawn, when the value's
-    own shape agrees with the declaration. It never rewrites the author's
-    source: the operator the source carries is always offered even when the
-    declared kind's list would drop it, the value in the source is always kept
-    and selected, and a scalar value is never handed a list control (or the
-    reverse). When the declaration and the source disagree, an advisory row
-    renders beside the clause and nothing about the source changes.
+    observed kind goes through), which control is drawn, when the value's
+    own shape agrees with the declaration, and what literal a *new* row is
+    seeded with. It never rewrites the author's source: the operator the source
+    carries is always offered even when the declared kind's list would drop it,
+    the value in the source is always kept and selected, and a scalar value is
+    never handed a list control (or the reverse). When the declaration and the
+    source disagree, an advisory row renders beside the clause and nothing
+    about the source changes.
+
+    Seeding is the one place a declaration writes rather than describes, and it
+    writes only where there was nothing: the row the "add clause" button
+    creates. A row seeded with `''` on a path declared a number would arrive
+    carrying an advisory about itself, which is a declaration telling an author
+    off for the shape it chose (sui-loj). So a declared number seeds `0`, a
+    boolean `true`, a date today, a datetime midnight today, a duration `1d`, a
+    `{:one_of, _}` its first value, and a list declaration seeds a `CONTAINS`
+    clause holding one member. A path with no declaration - and a `{:list, nil}`
+    that names no member kind - keeps the empty string this component always
+    seeded.
+
+    ## Two ways to declare, and the map wins
+
+    A host that has a datamodel *document* may hand it over as `:document`
+    instead of projecting it itself: the component asks
+    `StatifierDatamodel.Index.path_types/1` for the same `path -> kind` map
+    that record defines, and uses it wherever a `:path_types` map was not
+    supplied. A non-empty `:path_types` wins whole, because a host that
+    supplies both has said the more specific thing.
+
+    The projection's vocabulary *is* this component's `:path_types` vocabulary,
+    so nothing is translated between them - which is why
+    `t:StatifierUI.Expression.declared_kind/0` admits `:number`, the tag that
+    projection answers for a document's `integer` and `decimal` alike.
     """
 
     use Phoenix.Component
@@ -173,6 +199,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # bracketed and escaped exactly as a value of that kind would be. The
     # browser substitutes text into a gap predicator itself punched, which is
     # why no quoting rule is repeated in JavaScript.
+    # The seed a row starts life with when nothing narrower is declared: the
+    # empty single-quoted string, which is what every fresh clause held before
+    # a declaration could shape one.
+    @string_seed {:string, "", :single}
+
     @sentinel "SUIVALUESENTINEL"
     @sentinel_integer 4_294_967_291
     @list_probe_a "SUILISTPROBEA"
@@ -200,6 +231,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
         "kinds the host declares per clause path, as `%{path => kind | {:list, kind} | " <>
           "{:one_of, values}}`. A declared kind decides the operator list and the value " <>
           "control; it never rewrites the author's source."
+    )
+
+    attr(:document, :map,
+      default: nil,
+      doc:
+        "a decoded datamodel document. Its `StatifierDatamodel.Index.path_types/1` " <>
+          "projection supplies `:path_types` when the host declares none directly; " <>
+          "a non-empty `:path_types` wins over it."
     )
 
     attr(:mode, :atom,
@@ -462,6 +501,8 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Map.put_new(:candidates, [])
       |> Map.put_new(:value_candidates, %{})
       |> Map.put_new(:path_types, %{})
+      |> Map.put_new(:document, nil)
+      |> put_path_types()
       |> Map.put_new(:mode, :auto)
       |> Map.put_new(:hook, @hook)
       |> put_picklist_hook()
@@ -482,6 +523,34 @@ if Code.ensure_loaded?(Phoenix.Component) do
       default = if assigns.hook, do: @picklist_hook
 
       Map.put(assigns, :picklist_hook, Map.get(assigns, :picklist_hook) || default)
+    end
+
+    # A host may declare its paths' kinds directly, hand over the datamodel
+    # document they were declared in, or both. The document is projected
+    # through `StatifierDatamodel.Index.path_types/1` rather than read here:
+    # sd owns the document's shape, and a second reading of it in this package
+    # would be the drifting copy the completion source already refuses for the
+    # grammar. The projection's vocabulary IS the `:path_types` vocabulary -
+    # `t:StatifierUI.Expression.declared_kind/0` admits its `:number` - so
+    # nothing is translated on the way in.
+    #
+    # A non-empty `:path_types` wins whole: a host that supplies both has said
+    # the more specific thing, and merging the two per path would leave it
+    # unable to say "these paths and no others" about a document that declares
+    # more. An empty map is not a statement, so it falls through to the
+    # document.
+    @spec put_path_types(map()) :: map()
+    defp put_path_types(%{path_types: declared} = assigns) when declared != %{}, do: assigns
+
+    defp put_path_types(assigns) do
+      Map.put(assigns, :path_types, document_path_types(assigns.document))
+    end
+
+    @spec document_path_types(term()) :: map()
+    defp document_path_types(nil), do: %{}
+
+    defp document_path_types(document) do
+      document |> StatifierDatamodel.Index.index() |> StatifierDatamodel.Index.path_types()
     end
 
     @spec put_completions(map()) :: map()
@@ -521,7 +590,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
         :connective_options,
         if(picklist?, do: connective_options(rows, connective, canonical), else: [])
       )
-      |> Map.put(:add_source, picklist? && add_source(rows, connective, paths))
+      |> Map.put(
+        :add_source,
+        picklist? && add_source(rows, connective, paths, assigns.path_types)
+      )
     end
 
     @spec classify(map()) ::
@@ -922,6 +994,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    # The datamodel projection's `:number` covers both of the grammar's numeric
+    # literals, so a candidate offered beside such a path is spelled as
+    # whichever of the two it is.
+    defp term(:number, _style, value) when is_float(value), do: {:ok, {:float, value}}
+    defp term(:number, style, value), do: term(:integer, style, value)
+
     defp term(_kind, _style, _value), do: :error
 
     @spec connective_options([Expression.row()], Expression.connective(), String.t()) :: [map()]
@@ -942,18 +1020,92 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # Adding a clause is one more source string, not a row appended to a
     # model: the seed clause is written into the expression and the next
     # render reads the row back out of it.
-    @spec add_source([Expression.row()], Expression.connective(), [String.t()]) ::
+    @spec add_source([Expression.row()], Expression.connective(), [String.t()], map()) ::
             String.t() | nil
-    defp add_source(rows, connective, paths) do
+    defp add_source(rows, connective, paths, path_types) do
       seed = List.first(paths) || (List.first(rows) || %{}) |> Map.get(:path)
 
       with name when is_binary(name) <- seed,
            {:ok, segments} <- Expression.segments(name) do
-        source(rows ++ [{segments, :equal_equal, {:string, "", :single}}], connective || :and)
+        {op, value} = seed_clause(Map.get(path_types, name))
+
+        source(rows ++ [{segments, op, value}], connective || :and)
       else
         _other -> nil
       end
     end
+
+    # The seed clause for a declared kind: the operator and the literal a
+    # fresh row starts life holding.
+    #
+    # The rule is one sentence - *a new row must not be born carrying an
+    # advisory about itself* (sui-loj). A row seeded with `''` on a path the
+    # host declared a number is wrong the instant it is drawn, and the author
+    # is told so by the very declaration that should have shaped it. So every
+    # kind whose literal this component can write gets its own seed, and the
+    # operator is chosen with it: `CONTAINS` for a list declaration, because
+    # it is the one operator whose expected kind on a declared list is a
+    # member of it (`IN` expects a list *of* the declaration), and `==` for
+    # every scalar, which `Predicator.Simple.operators/1` offers beside all of
+    # them.
+    #
+    # The seeds are the emptiest value of each kind that can still be spelled:
+    # zero, `true`, the empty string, today, midnight today, one day. A seed is
+    # a starting point an author overwrites, not a guess at their data.
+    #
+    # THE FALLBACK: an unrecognised declaration, and a `{:list, nil}` whose
+    # declaration names no member kind, keep today's `== ''` seed. There is no
+    # advisory-free seed for a member kind the host did not name, and inventing
+    # one would be this module guessing at a declaration rather than reading
+    # it. A path with no declaration at all takes the same branch, which is why
+    # an undeclared editor renders exactly what it rendered before.
+    @spec seed_clause(Expression.declared_kind() | nil) :: {atom(), term()}
+    defp seed_clause({:one_of, values}) do
+      case one_of_seed(values) do
+        {:ok, value} -> {:equal_equal, value}
+        :error -> {:equal_equal, @string_seed}
+      end
+    end
+
+    defp seed_clause({:list, member}) when member != nil do
+      {_op, value} = seed_clause(member)
+
+      {:contains, value}
+    end
+
+    # `:number` is the datamodel projection's tag for both `integer` and
+    # `decimal`; an integer literal is the one both can be compared against
+    # without the value advisory reading them apart.
+    defp seed_clause(kind) when kind in [:integer, :number], do: {:equal_equal, {:integer, 0}}
+    defp seed_clause(:float), do: {:equal_equal, {:float, 0.0}}
+    defp seed_clause(:boolean), do: {:equal_equal, {:boolean, true}}
+    defp seed_clause(:date), do: {:equal_equal, {:date, Date.utc_today()}}
+
+    defp seed_clause(:datetime),
+      do: {:equal_equal, {:datetime, DateTime.new!(Date.utc_today(), ~T[00:00:00])}}
+
+    defp seed_clause(:duration), do: {:equal_equal, {:duration, [{1, "d"}]}}
+    defp seed_clause(:relative_date), do: {:equal_equal, {:relative_date, [{1, "d"}], :ago}}
+    defp seed_clause(_unseedable), do: {:equal_equal, @string_seed}
+
+    # A `{:one_of, _}` row is seeded with the host's own first value, so the
+    # select beside it opens with an option selected rather than with a value
+    # the enumeration does not contain. A value that has no literal spelling -
+    # a negative integer, a tuple, a struct - falls back with the rest.
+    @spec one_of_seed([term()]) :: {:ok, term()} | :error
+    defp one_of_seed([first | _rest]), do: first |> candidate_value() |> seed_scalar()
+    defp one_of_seed(_empty), do: :error
+
+    @spec candidate_value(term()) :: term()
+    defp candidate_value(%{value: value}), do: value
+    defp candidate_value(value), do: value
+
+    @spec seed_scalar(term()) :: {:ok, term()} | :error
+    defp seed_scalar(value) when is_binary(value), do: {:ok, {:string, value, :single}}
+    defp seed_scalar(value) when is_boolean(value), do: {:ok, {:boolean, value}}
+    defp seed_scalar(value) when is_integer(value) and value >= 0, do: {:ok, {:integer, value}}
+    defp seed_scalar(value) when is_float(value), do: {:ok, {:float, value}}
+    defp seed_scalar(_unspellable), do: :error
 
     @spec remove_source([Expression.row()], Expression.connective(), non_neg_integer()) ::
             String.t() | nil

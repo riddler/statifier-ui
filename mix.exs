@@ -93,6 +93,15 @@ defmodule StatifierUI.MixProject do
       # in 9.1.
       {:predicator, "~> 9.4"},
 
+      # The datamodel document is read here rather than re-parsed: sd owns the
+      # document's shape and its path projection
+      # (`StatifierDatamodel.Index.path_types/1`), and a second reading of the
+      # same document in this package would be the drifting copy the
+      # completion source already refuses for the grammar. Pure, no runtime
+      # processes, and no dependency of its own (RQ-033-5: the Hex floor, not
+      # a git pin).
+      {:statifier_datamodel, "~> 0.1"},
+
       # Both integrations are optional: the package is a component library, and
       # a Livebook host has no reason to pull LiveView, or the reverse. Anything
       # under lib/ that touches one of these has to tolerate its absence at

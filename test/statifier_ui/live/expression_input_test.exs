@@ -641,6 +641,199 @@ defmodule StatifierUI.Live.ExpressionInputTest do
     end
   end
 
+  describe "seeding a new clause from the declaration (sui-loj)" do
+    test "a numeric path seeds a number and the new row carries no advisory" do
+      html = typed_html("amount >= 500", ["amount"], %{}, %{"amount" => :integer})
+
+      assert html =~ ~s(data-source="amount &gt;= 500 AND amount == 0")
+
+      assert add_clause_advisories(html, %{"amount" => :integer}) == []
+    end
+
+    test "every declared kind the writer can spell seeds a literal of that kind" do
+      today = Date.utc_today()
+
+      for {kind, expected} <- [
+            {:integer, "amount == 0"},
+            {:number, "amount == 0"},
+            {:float, "amount == 0.0"},
+            {:boolean, "amount == true"},
+            {:date, "amount == " <> hash() <> "#{today}" <> hash()},
+            {:duration, "amount == 1d"},
+            {:relative_date, "amount == 1d ago"},
+            {{:list, :string}, "amount CONTAINS ''"},
+            {{:list, :integer}, "amount CONTAINS 0"},
+            {{:one_of, ["active", "pending"]}, "amount == 'active'"},
+            {{:one_of, [1, 2]}, "amount == 1"}
+          ] do
+        path_types = %{"amount" => kind}
+        html = typed_html("amount >= 500", ["amount"], %{}, path_types)
+
+        assert add_clause_source(html) == "amount >= 500 AND " <> expected,
+               "#{inspect(kind)} seeded #{inspect(add_clause_source(html))}"
+
+        assert add_clause_advisories(html, path_types) == [],
+               "#{inspect(kind)} seeded a row that immediately advises about itself"
+      end
+    end
+
+    test "a datetime path seeds midnight today, which is a value and not a moment" do
+      path_types = %{"amount" => :datetime}
+      html = typed_html("amount >= 500", ["amount"], %{}, path_types)
+
+      assert add_clause_source(html) ==
+               "amount >= 500 AND amount == " <>
+                 hash() <> "#{Date.utc_today()}T00:00:00Z" <> hash()
+
+      assert add_clause_advisories(html, path_types) == []
+    end
+
+    test "an undeclared path still seeds the empty string" do
+      html = picklist_html("amount >= 500", ["amount"])
+
+      assert add_clause_source(html) == "amount >= 500 AND amount == ''"
+    end
+
+    test "a list declaring no member kind falls back to the undeclared seed" do
+      declared = typed_html("amount >= 500", ["amount"], %{}, %{"amount" => {:list, nil}})
+
+      assert add_clause_source(declared) == "amount >= 500 AND amount == ''"
+    end
+
+    test "a one_of whose first value has no literal spelling falls back too" do
+      html = typed_html("amount >= 500", ["amount"], %{}, %{"amount" => {:one_of, [-1, -2]}})
+
+      assert add_clause_source(html) == "amount >= 500 AND amount == ''"
+    end
+
+    test "a one_of of candidate maps seeds the value, not the map" do
+      html =
+        typed_html("amount >= 500", ["amount"], %{}, %{
+          "amount" => {:one_of, [%{label: "Active", value: "active"}]}
+        })
+
+      assert add_clause_source(html) == "amount >= 500 AND amount == 'active'"
+    end
+  end
+
+  describe "a datamodel document declares the kinds" do
+    @document %{
+      "version" => 1,
+      "scopes" => [
+        %{
+          "scope" => "local",
+          "entries" => [
+            %{"name" => "amount_cents", "path" => "amount_cents", "type" => "integer"},
+            %{"path" => "risk_reasons", "type" => "list", "item_type" => "string"},
+            %{
+              "path" => "card",
+              "type" => "object",
+              "fields" => [
+                %{
+                  "path" => "card.brand",
+                  "type" => "string",
+                  "one_of" => ["visa", "mastercard", "amex"]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+
+    @paths ["amount_cents", "risk_reasons", "card.brand"]
+
+    test "a document renders exactly what its own projection renders as a map" do
+      projected = StatifierDatamodel.Index.path_types(StatifierDatamodel.Index.index(@document))
+
+      # The map is not restated here: the point of the golden is that the two
+      # inputs meet, so the map half is asked of sd exactly as the component
+      # asks for it.
+      for source <- [
+            "amount_cents >= 500",
+            "card.brand == 'visa'",
+            "risk_reasons CONTAINS 'velocity' AND amount_cents >= 500"
+          ] do
+        assert document_html(source, @paths) == typed_html(source, @paths, %{}, projected),
+               "the document and its projection differed for #{inspect(source)}"
+      end
+    end
+
+    test "a document-declared number seeds a number" do
+      html = document_html("amount_cents >= 500", @paths)
+
+      assert add_clause_source(html) == "amount_cents >= 500 AND amount_cents == 0"
+    end
+
+    test "a document-declared one_of draws its select" do
+      html = document_html("card.brand == 'visa'", @paths)
+
+      assert html =~ ~s(data-declared-kind="one-of")
+      assert html =~ ~s(value="card.brand == &#39;mastercard&#39;")
+    end
+
+    test "a non-empty path_types wins over the document" do
+      html =
+        seam_html(%{
+          value: "amount_cents >= 500",
+          candidates: @paths,
+          document: @document,
+          path_types: %{"amount_cents" => :boolean}
+        })
+
+      assert html =~ ~s(data-declared-kind="boolean")
+      assert add_clause_source(html) == "amount_cents >= 500 AND amount_cents == true"
+    end
+
+    test "an empty path_types is not a statement, so the document still speaks" do
+      assert seam_html(%{
+               value: "amount_cents >= 500",
+               candidates: @paths,
+               document: @document,
+               path_types: %{}
+             }) == document_html("amount_cents >= 500", @paths)
+    end
+
+    test "no document and no map is exactly the undeclared render" do
+      assert seam_html(%{value: "amount_cents >= 500", candidates: @paths, document: nil}) ==
+               picklist_html("amount_cents >= 500", @paths)
+    end
+
+    test "something that is not a document declares nothing rather than raising" do
+      assert seam_html(%{value: "amount_cents >= 500", candidates: @paths, document: %{"a" => 1}}) ==
+               picklist_html("amount_cents >= 500", @paths)
+    end
+  end
+
+  # The date-literal delimiter, as a function so no line of this file has to
+  # carry a bare `#` inside an interpolating string.
+  defp hash, do: "#"
+
+  defp document_html(value, candidates) do
+    seam_html(%{value: value, candidates: candidates, document: @document})
+  end
+
+  # The source the add-clause button carries, unescaped the way a browser
+  # would read it back off the attribute.
+  defp add_clause_source(html) do
+    ~r/data-action="add-clause"[^>]*data-source="(?<source>[^"]*)"/
+    |> Regex.run(html, capture: :all_names)
+    |> case do
+      [source] -> unescape(source)
+      nil -> nil
+    end
+  end
+
+  # The advisories the *new* row would carry the moment it is drawn. This is
+  # sui-loj's whole question: a seed is wrong when the declaration that chose
+  # it then complains about it.
+  defp add_clause_advisories(html, path_types) do
+    {:ok, rows, _connective} =
+      html |> add_clause_source() |> Expression.simple(path_types: path_types)
+
+    rows |> List.last() |> Map.get(:advisories)
+  end
+
   defp op_labels(html) do
     ~r{<option[^>]*\btitle="[^"]*"[^>]*>\s*([^<]*?)\s*</option>}
     |> Regex.scan(html)
