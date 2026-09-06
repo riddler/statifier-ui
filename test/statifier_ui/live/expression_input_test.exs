@@ -507,6 +507,17 @@ defmodule StatifierUI.Live.ExpressionInputTest do
       assert html =~ ~s(value="status == &#39;pending&#39;")
     end
 
+    test "a one_of of floats offers every value the host enumerated" do
+      html =
+        typed_html("amount == 1.0", ["amount"], %{}, %{
+          "amount" => {:one_of, [1.0, 2.0]}
+        })
+
+      assert html =~ ~s(data-value-kind="select")
+      assert html =~ ~s(value="amount == 1.0" selected)
+      assert html =~ ~s(value="amount == 2.0")
+    end
+
     test "an integer path offers the integer operators" do
       html = typed_html("amount >= 500", ["amount"], %{}, %{"amount" => :integer})
 

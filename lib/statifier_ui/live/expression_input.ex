@@ -994,6 +994,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
       end
     end
 
+    # `:float` is not a declaration the datamodel projection ever writes - its
+    # kinds stop at `:number` - but it is a kind a row is genuinely in, because
+    # `control_kind/2` hands a `{:one_of, _}` row the kind of the value it
+    # actually holds, and a host enumerating floats gets `:float` there. Without
+    # this clause every option of such a select failed to spell itself and the
+    # list rendered with the author's own value alone (sui-p2g).
+    defp term(:float, _style, value) when is_float(value), do: {:ok, {:float, value}}
+
     # The datamodel projection's `:number` covers both of the grammar's numeric
     # literals, so a candidate offered beside such a path is spelled as
     # whichever of the two it is.
