@@ -146,6 +146,13 @@ To hand the same stream to a UI written in something other than Elixir,
 `StatifierUI.Trace.Json.encode_lines(messages)` emits it as JSON Lines in the
 language-neutral [trace wire format](docs/wire-format.md).
 
+The vocabulary that stream can carry is closed and published:
+`StatifierUI.Trace.Normalizer.types/0` returns the sorted list of every `type`
+string the format defines. It is the handle to hold and diff across upgrades -
+a consumer still ignores types it does not know, but a diff of that list is
+how it notices a new one. See the note on pinning the vocabulary in
+[ADR-0005](docs/adr/0005-language-neutral-trace-wire-format.md).
+
 ## Checking expressions
 
 Datasets and expressions are the other half of the fixtures contract

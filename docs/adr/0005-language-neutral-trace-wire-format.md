@@ -323,3 +323,37 @@ via ADR-0002). The engine is not asked to learn JSON.
   format a non-goal, and a spec next to one engine reads as that engine's
   serialization. Starting here keeps the language-neutral claim honest;
   graduation later is already the recorded path. Rejected for now.
+
+## Note (2026-09-06): the vocabulary a host pins is `Normalizer.types/0`
+
+A dated note rather than an amendment, because no clause of the decision
+moves. The format version is still `1`, the vocabulary is unchanged, no type
+is added or removed, consumers must still ignore unknown fields and unknown
+`type`s, and additive change is still not a version bump. Nothing above this
+line changes.
+
+The note exists because the Consequences above name a hazard - "a consumer
+silently skips types it does not know" - and then leave the consumer without
+a handle. The must-ignore rule makes an added type invisible by design, so a
+host that wants to *notice* one has to go looking, and the only thing this
+repository had named for that purpose was the type index table in
+`docs/wire-format.md`: a table a host reads by eye or by scraping markdown,
+not a value it can hold.
+
+**The handle.** `StatifierUI.Trace.Normalizer.types/0` returns the closed,
+sorted list of every `type` string this format defines, and it is the
+vocabulary's single definition site in code. It is public and documented;
+`docs/wire-format.md`'s type index table is asserted equal to it by
+`test/statifier_ui/trace/wire_format_spec_test.exs`, and
+`test/statifier_ui/trace/normalizer_test.exs` pins the list name by name, so
+a vocabulary change fails as a readable diff rather than as a count that
+moved. A host that cares holds that list at the version it integrated
+against and diffs it on upgrade; the CHANGELOG and this record say what a
+difference means.
+
+**What the handle is not.** It is not a version, and holding it is not a
+substitute for the must-ignore rule: a producer at a newer version may emit
+a type the held list has never heard of, and skipping that type is still the
+consumer's job. Nor does the handle change the compatibility promise - a new
+type is still additive and still not a version bump. It only makes an
+additive change legible to a consumer that wants to see it.

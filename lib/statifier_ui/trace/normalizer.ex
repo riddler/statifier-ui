@@ -170,6 +170,12 @@ defmodule StatifierUI.Trace.Normalizer do
   `Statifier.Effect.DatamodelInit`). `docs/wire-format.md`'s type index
   table is the same 25, and `test/statifier_ui/trace/wire_format_spec_test.exs`
   asserts the two sets are equal.
+
+  This is the vocabulary's public handle: a host holds this list at the
+  version it integrated against and diffs it on upgrade to notice an added
+  type, which the format's must-ignore rule otherwise makes invisible. See
+  the 2026-09-06 note in
+  `docs/adr/0005-language-neutral-trace-wire-format.md`.
   """
   @spec types() :: [String.t()]
   def types, do: Enum.sort(@types)
