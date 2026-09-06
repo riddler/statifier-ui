@@ -132,6 +132,21 @@ if Code.ensure_loaded?(Phoenix.Component) do
     | `data-clause-index` | a clause row | its position, from zero |
     | `data-role` | a picklist control | `path`, `operator`, `value`, `connective` |
     | `data-action` | a button | `add-clause`, `remove-clause`, `switch-text`, `switch-picklist` |
+    | `data-declared-kind` | a clause row | the kind the host declared for its path (`integer`, `list:string`, `one-of`, ...), absent when none |
+    | `data-advisory` | an advisory row | `value-kind` or `operator`, why it is shown |
+    | `data-severity` | an advisory row | `info` - an advisory never blocks |
+
+    ## What a declaration does and does not do
+
+    A `:path_types` entry decides two things: which operators the row offers
+    (asked of `StatifierUI.Expression.operators/1`, the same grammar call an
+    observed kind goes through) and which control is drawn, when the value's
+    own shape agrees with the declaration. It never rewrites the author's
+    source: the operator the source carries is always offered even when the
+    declared kind's list would drop it, the value in the source is always kept
+    and selected, and a scalar value is never handed a list control (or the
+    reverse). When the declaration and the source disagree, an advisory row
+    renders beside the clause and nothing about the source changes.
     """
 
     use Phoenix.Component
@@ -165,6 +180,14 @@ if Code.ensure_loaded?(Phoenix.Component) do
       doc:
         "values the host offers per clause path, as `%{path => [candidate]}`. " <>
           "Only the host knows its own value sets; a path with no entry gets a free-text control."
+    )
+
+    attr(:path_types, :map,
+      default: %{},
+      doc:
+        "kinds the host declares per clause path, as `%{path => kind | {:list, kind} | " <>
+          "{:one_of, values}}`. A declared kind decides the operator list and the value " <>
+          "control; it never rewrites the author's source."
     )
 
     attr(:mode, :atom,
@@ -226,6 +249,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             :for={clause <- @clauses}
             class="statifier-ui-expression-clause"
             data-clause-index={clause.index}
+            data-declared-kind={clause.declared_kind}
           >
             <select
               class="statifier-ui-expression-path"
@@ -320,6 +344,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
             >
               remove
             </button>
+            <p
+              :for={advisory <- clause.advisories}
+              class="statifier-ui-expression-advisory"
+              role="status"
+              data-advisory={advisory_reason(advisory.reason)}
+              data-severity={advisory.severity}
+            >
+              {advisory.message}
+            </p>
           </div>
           <div class="statifier-ui-expression-clause-controls">
             <select
@@ -412,6 +445,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Map.put_new(:value, "")
       |> Map.put_new(:candidates, [])
       |> Map.put_new(:value_candidates, %{})
+      |> Map.put_new(:path_types, %{})
       |> Map.put_new(:mode, :auto)
       |> Map.put_new(:hook, @hook)
       |> put_picklist_hook()
@@ -477,7 +511,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @spec classify(map()) ::
             {String.t(), [Expression.row()], Expression.connective(), map() | nil}
     defp classify(assigns) do
-      case Expression.simple(assigns.value, value_candidates: assigns.value_candidates) do
+      case Expression.simple(assigns.value,
+             value_candidates: assigns.value_candidates,
+             path_types: assigns.path_types
+           ) do
         {:ok, rows, connective} -> {"inside", rows, connective, nil}
         :outside -> {"outside", [], nil, nil}
         {:error, error} -> {"error", [], nil, diagnostic(error)}
@@ -533,7 +570,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
           path_options: path_options(rows, connective, canonical, index, row, paths),
           op_options: op_options(rows, connective, canonical, index, row),
           value: value_control(rows, connective, canonical, index, row),
-          remove_source: remove_source(rows, connective, index)
+          remove_source: remove_source(rows, connective, index),
+          declared_kind: declared_kind_attribute(row.declared_kind),
+          advisories: row.advisories
         }
       end)
     end
@@ -604,16 +643,16 @@ if Code.ensure_loaded?(Phoenix.Component) do
           ) :: map()
     defp value_control(rows, connective, canonical, index, row) do
       cond do
-        list_kind?(row.value_kind) and row.candidates != [] ->
+        list_kind?(row.control_kind) and row.candidates != [] ->
           multiselect(rows, connective, index, row)
 
-        list_kind?(row.value_kind) ->
+        list_kind?(row.control_kind) ->
           readonly(row)
 
         row.candidates != [] ->
           value_select(rows, connective, canonical, index, row, row.candidates)
 
-        row.value_kind == :boolean ->
+        row.control_kind == :boolean ->
           value_select(rows, connective, canonical, index, row, boolean_candidates())
 
         true ->
@@ -632,7 +671,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp value_select(rows, connective, canonical, index, row, candidates) do
       options =
         Enum.flat_map(candidates, fn candidate ->
-          with {:ok, term} <- term(row.value_kind, style(row), candidate.value),
+          with {:ok, term} <- term(row.control_kind, style(row), candidate.value),
                written when is_binary(written) <-
                  swap(rows, connective, index, &%{&1 | value: term}) do
             [%{label: candidate.label, source: written, selected: written == canonical}]
@@ -671,7 +710,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       options =
         Enum.flat_map(row.candidates, fn candidate ->
-          with {:ok, term} <- term(row.value_kind, style, candidate.value),
+          with {:ok, term} <- term(row.control_kind, style, candidate.value),
                written when is_binary(written) <- fragment(:equal_equal, term) do
             [%{label: candidate.label, fragment: written, selected: written in chosen}]
           else
@@ -758,6 +797,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @spec readonly(Expression.row()) :: map()
     defp readonly(row), do: %{kind: :readonly, text: row.value_source}
 
+    # These four measure how the current value is spelled, not what kind the
+    # host declared for its path - a hole, a wrapper, an escape table, and the
+    # text shown all describe the value that is actually there, so they read
+    # `row.value_kind` even where the control cascade above reads
+    # `row.control_kind`.
     @spec hole(Expression.value_kind(), atom()) :: term()
     defp hole(:string, style), do: {:string, @sentinel, style}
     defp hole(_kind, _style), do: {:integer, @sentinel_integer}
@@ -815,6 +859,23 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp list_kind?({:list, _member}), do: true
     defp list_kind?(_kind), do: false
 
+    # The declaration as one word, because an attribute is a string: a list
+    # says what it is a list of, and a one_of says only that it is one - the
+    # values themselves are already the options of the select beside it.
+    @spec declared_kind_attribute(Expression.declared_kind() | nil) :: String.t() | nil
+    defp declared_kind_attribute(nil), do: nil
+    defp declared_kind_attribute({:one_of, _values}), do: "one-of"
+    defp declared_kind_attribute({:list, nil}), do: "list"
+    defp declared_kind_attribute({:list, member}), do: "list:" <> to_string(member)
+    defp declared_kind_attribute(kind), do: to_string(kind)
+
+    # The atom is the module's word and the attribute is the DOM's. Spelling
+    # the two apart here keeps `data-advisory` in the same hyphenated
+    # vocabulary as `data-value-kind` and `data-error-position`.
+    @spec advisory_reason(:value_kind | :operator) :: String.t()
+    defp advisory_reason(:value_kind), do: "value-kind"
+    defp advisory_reason(:operator), do: "operator"
+
     @spec boolean_candidates() :: [map()]
     defp boolean_candidates do
       [%{label: "true", value: true}, %{label: "false", value: false}]
@@ -825,6 +886,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # renderer can hand an edited row straight back to it.
     @spec term(Expression.value_kind(), atom(), term()) :: {:ok, term()} | :error
     defp term({:list, member}, style, value), do: term(member || :string, style, value)
+
+    # A relative date has no bare-term spelling to build from - `30d ago` is a
+    # tuple in the subset's own vocabulary - so a candidate carrying one is
+    # already in the form a clause holds. This is the only pre-built value the
+    # component accepts, and it is accepted for exactly that reason.
+    defp term(_kind, _style, {:relative_date, _units, _direction} = value), do: {:ok, value}
+
     defp term(:string, style, value) when is_binary(value), do: {:ok, {:string, value, style}}
     defp term(:boolean, _style, value) when is_boolean(value), do: {:ok, {:boolean, value}}
 
