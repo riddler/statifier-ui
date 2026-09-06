@@ -301,7 +301,7 @@ defmodule StatifierUI.DiagramTest do
       source = Diagram.render(machine, [])
       lines = trimmed_lines(source)
 
-      assert "s#{left} --> s#{right} : jump [lifted: l1 -> r1]" in lines
+      assert "s#{left} --> s#{right} : jump [lifted#58; l1 -> r1]" in lines
       refute "s#{l1} --> s#{r1} : jump" in lines
     end
 
@@ -566,7 +566,7 @@ defmodule StatifierUI.DiagramTest do
       rb = index!(machine, "rb")
       lines = trimmed_lines(Diagram.render(machine, []))
 
-      assert "s#{ra} --> s#{rb} : x [lifted: ra1 -> rb2]" in lines
+      assert "s#{ra} --> s#{rb} : x [lifted#58; ra1 -> rb2]" in lines
     end
 
     test "a deeply nested compound nests to full depth with a deep initial marker" do
@@ -591,7 +591,7 @@ defmodule StatifierUI.DiagramTest do
       assert ~s(    state "top" as s#{top} {) in lines
       assert ~s(        state "mid" as s#{mid} {) in lines
       assert ~s(            state "deepc" as s#{deepc}) in lines
-      assert "        [*] --> s#{mid} : [deep: deepc]" in lines
+      assert "        [*] --> s#{mid} : [deep#58; deepc]" in lines
       assert "            [*] --> s#{deepc}" in lines
     end
   end
@@ -611,6 +611,65 @@ defmodule StatifierUI.DiagramTest do
       lines = trimmed_lines(Diagram.render(machine, []))
 
       assert "state \"(state 1)\" as s1" in lines
+    end
+  end
+
+  describe "render/2 - a colon in a transition label" do
+    @prefixed """
+        <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="idle">
+          <state id="idle">
+            <transition event="myapp:authorize" target="authorizing"/>
+          </state>
+          <state id="authorizing">
+            <transition event="myapp:capture.done" target="captured"/>
+            <transition event="myapp:capture.error" target="idle" cond="true"/>
+          </state>
+          <final id="captured"/>
+        </scxml>
+    """
+
+    # A golden, not a set of `in lines` assertions: the defect this pins was
+    # a whole source Mermaid refused to parse, so what needs pinning is the
+    # whole source. Mermaid's `stateDiagram-v2` grammar ends a transition
+    # label at the next `:` and has no quoted form for one, so a prefixed
+    # event descriptor goes out as its `#58;` entity code, which renders as
+    # a colon. Verified against Mermaid 10.9.1 in the browser (sui-jkr).
+    test "escapes a prefixed event descriptor so the source parses" do
+      assert Diagram.render(compile!(@prefixed), []) == """
+             stateDiagram-v2
+                 state "idle" as s1
+                 state "authorizing" as s2
+                 state "captured (final)" as s3
+                 [*] --> s1
+                 s1 --> s2 : myapp#58;authorize
+                 s2 --> s3 : myapp#58;capture.done
+                 s2 --> s1 : myapp#58;capture.error [cond]
+             """
+    end
+
+    test "escapes a literal hash ahead of the colon, so neither is lost" do
+      machine =
+        compile!("""
+            <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="left">
+              <state id="left" initial="l#58;1">
+                <state id="l#58;1">
+                  <transition event="myapp:authorize" target="r1"/>
+                </state>
+              </state>
+              <state id="right" initial="r1">
+                <state id="r1"/>
+              </state>
+            </scxml>
+        """)
+
+      left = index!(machine, "left")
+      right = index!(machine, "right")
+      lines = trimmed_lines(Diagram.render(machine, []))
+
+      # An entity code a chart author wrote must survive as text rather than
+      # arriving at Mermaid as a colon, so `#` is escaped ahead of `:`. The
+      # lifted marker carries a colon of its own, which is escaped too.
+      assert "s#{left} --> s#{right} : myapp#58;authorize [lifted#58; l#35;58;1 -> r1]" in lines
     end
   end
 

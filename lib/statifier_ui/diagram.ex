@@ -43,6 +43,11 @@ defmodule StatifierUI.Diagram do
   - Transitions are labeled with their event descriptors; a guarded
     transition carries a `[cond]` marker (the Machine retains the compiled
     expression, not its source text).
+  - A transition label is written with `:` escaped as Mermaid's `#58;`
+    entity code (and `#` as `#35;` ahead of it). Mermaid's grammar ends
+    the label at the next `:` and offers no quoted form for it, so a
+    prefixed event descriptor - `myapp:authorize` - would otherwise make
+    the whole source unparseable. The escape renders as a colon.
   - A **targetless** transition - spec-legal, and the way a chart runs
     executable content without changing configuration - is drawn as a
     self-edge marked `[internal]`. UML puts one inside the state's box;
@@ -251,7 +256,7 @@ defmodule StatifierUI.Diagram do
     Enum.map(initial, fn target ->
       case child_toward(machine, index, target) do
         ^target -> "#{pad}[*] --> s#{target}"
-        lifted -> "#{pad}[*] --> s#{lifted} : [deep: #{name(machine, target)}]"
+        lifted -> "#{pad}[*] --> s#{lifted} : #{escape("[deep: #{name(machine, target)}]")}"
       end
     end)
   end
@@ -322,7 +327,27 @@ defmodule StatifierUI.Diagram do
 
   @spec draw(non_neg_integer(), non_neg_integer(), String.t()) :: String.t()
   defp draw(source, target, ""), do: "#{@indent}s#{source} --> s#{target}"
-  defp draw(source, target, label), do: "#{@indent}s#{source} --> s#{target} : #{label}"
+
+  defp draw(source, target, label) do
+    "#{@indent}s#{source} --> s#{target} : #{escape(label)}"
+  end
+
+  # Mermaid's `stateDiagram-v2` grammar ends a transition line's label at
+  # the next `:`, so a colon anywhere in that label makes the whole source
+  # unparseable - which is every chart whose event descriptors carry a
+  # prefixed name (`myapp:authorize`), and every lifted edge, whose
+  # `[lifted: ...]` marker carries one of its own. A state's label is
+  # quoted and needs none of this; a transition's label has no quoted form
+  # in the grammar at all (quoting it fails to parse under Mermaid 10.9.1).
+  # Entity codes do work there, so `:` goes out as `#58;` and renders as a
+  # colon. `#` is escaped first, so a literal `#58;` written in a state id
+  # or an event name survives as text rather than becoming a colon.
+  @spec escape(String.t()) :: String.t()
+  defp escape(label) do
+    label
+    |> String.replace("#", "#35;")
+    |> String.replace(":", "#58;")
+  end
 
   @spec edge_label(Transition.t(), [String.t() | nil]) :: String.t()
   defp edge_label(transition, markers) do
