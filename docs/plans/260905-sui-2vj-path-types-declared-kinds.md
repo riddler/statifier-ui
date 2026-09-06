@@ -744,6 +744,16 @@ campaign's constraints.
       is a card-processing or signup example (`card.brand`, `amount`, `plan`,
       `step`, `status`, `created_at`, `myapp:*`).
 
+      **Machine-checked (unattended, 2026-09-05):** every identifier and
+      literal the branch adds under `lib/`, `test/` and `changelog.d/` was
+      enumerated from the diff's added lines. The example vocabulary is
+      `plan`, `status`, `amount`, `step`, `risk`, `verdict` and `created_at`,
+      and the values `'pro'`, `'active'`, `'pending'`, `'settled'`,
+      `'payment'`, `'review'` - all inside the card-processing and signup
+      domains. `card.brand` itself is not used; the one prose mention of card
+      processing is a comment on the `{:one_of, _}` reduction. No
+      foreign-domain term appears.
+
 ---
 
 ## Testing Strategy
@@ -786,21 +796,42 @@ available during planning and the plan takes the stated default.
    relative dates a date path offers and (b) the `{:one_of, _}` reduction rule,
    both of which are judgements this package makes. Default taken: no ADR
    change, and the reasoning lives in the code comments and this plan.
+
+   **Machine-checked (unattended, 2026-09-05):** the default holds in the
+   branch - `git diff origin/main -- docs/adr/` is empty, so no record was
+   touched. Whether the operator wants a Note recording the two local
+   judgements is a decision and stays open.
 2. **The offered relative-date set is a guess at a good default**
    (`1d/7d/30d/90d ago`, `7d/30d from now`). A host cannot yet override it
    except by supplying `value_candidates` for the path. Default taken: no
    override assign in this bead; if hosts want one it is a later, additive
    assign.
+
+   **Machine-checked (unattended, 2026-09-05):** no override assign exists -
+   `relative_date_candidates/0` in `lib/statifier_ui/expression.ex` is the only
+   source of the set and takes no argument. Whether the set is a good default
+   is a judgement and stays deferred.
 3. **`{:one_of, _}` with a mixed integer/float list** is reduced to `:float`,
    and an otherwise mixed list to `:string`. Default taken as recommended;
    both reach the same grammar kind (`:number`) today, so the distinction is
    only visible if predicator ever splits them.
+
+   **Machine-checked (unattended, 2026-09-05):** implemented as stated -
+   `inferred_kind/1` (`lib/statifier_ui/expression.ex`) maps a list whose kinds
+   are all in `[:integer, :float]` to `:float` and every other mixed or empty
+   list to `:string`.
 4. **The bead's acceptance wording "an integer path offers the numeric
    operators only" is not observable as written** - predicator returns the same
    operator set for `:number`, `:string`, `:date`, `:datetime` and `:duration`.
    Default taken: the test asserts equality with `Expression.operators(:integer)`
    and the discriminating cases are `:boolean` and `{:list, _}`. The operator
    may want the bead's criterion reworded.
+
+   **Machine-checked (unattended, 2026-09-05):** the substitute assertion is in
+   place - `test/statifier_ui/live/expression_input_test.exs` asserts the
+   rendered operator labels sort-equal to `Expression.operators(:integer)`, and
+   the discriminating `:boolean` case asserts the ordered comparisons are
+   absent. The rewording of the bead's criterion is the operator's call.
 5. **The bead's "no map renders exactly the 0.7.0 markup" is met modulo
    whitespace.** Any advisory element added to the template contributes
    whitespace-only text nodes even when it renders nothing (probed; see Current
@@ -809,10 +840,20 @@ available during planning and the plan takes the stated default.
    may want the bead's criterion reworded, or - if literal 0.7.0 bytes are
    required - the advisory dropped from this bead, which would remove the
    feature the bead asks for.
+
+   **Machine-checked (unattended, 2026-09-05):** the equality is asserted and
+   green - "no path_types renders exactly what the assign-less call renders"
+   holds `picklist_html/2` byte-identical to the `path_types: %{}` render and
+   to a render carrying only an unrelated declaration, over five sources
+   including a malformed one. The whitespace delta against the pre-Phase-2
+   baseline is unmeasured here and the rewording is the operator's call.
 6. **`add_source/3` still seeds a string literal** for a path declared
    `:integer`, so "add clause" on a numeric path produces `amount == ''` and an
    immediate advisory. Default taken: out of scope, recorded in "What We're NOT
    Doing"; a kind-aware seed is a separate bead.
+
+   **Machine-checked (unattended, 2026-09-05):** out of scope held -
+   `add_source` appears nowhere in `git diff origin/main..HEAD -- lib/`.
 
 ### Why no ADR amendment is required
 
