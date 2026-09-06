@@ -846,7 +846,20 @@ available during planning and the plan takes the stated default.
    holds `picklist_html/2` byte-identical to the `path_types: %{}` render and
    to a render carrying only an unrelated declaration, over five sources
    including a malformed one. The whitespace delta against the pre-Phase-2
-   baseline is unmeasured here and the rewording is the operator's call.
+   baseline is measured below, and the rewording is the operator's call.
+
+   **The delta against the pre-change 0.7.0 render, measured (unattended,
+   2026-09-05):** the 0.7.0 output was captured from this branch's base before
+   any edit, over seven sources, and compared against the same seven rendered
+   now. The renders are **not** byte-identical and are identical once
+   whitespace is normalised. The delta is exactly `+7` bytes per drawn clause
+   row - `+7` for each single-clause source, `+14` for the two-clause one, and
+   `+0` for both sources that draw no clause rows at all (one outside the
+   subset, one that does not parse), for `+42` over the seven. That is the
+   static whitespace HEEx emits around the advisory `:for` when it renders
+   nothing, and it is the whole difference: no attribute, no element, and no
+   text the 0.7.0 render did not carry. `data-declared-kind` contributes
+   nothing to it, because HEEx omits an attribute whose value is `nil`.
 6. **`add_source/3` still seeds a string literal** for a path declared
    `:integer`, so "add clause" on a numeric path produces `amount == ''` and an
    immediate advisory. Default taken: out of scope, recorded in "What We're NOT
