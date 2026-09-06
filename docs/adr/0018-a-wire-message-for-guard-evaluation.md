@@ -550,20 +550,31 @@ moduledoc section in `lib/statifier_ui/trace/normalizer.ex` is corrected
 to say this, in the same pull request as this note; the note above is
 left as written, as a note.
 
-**Cites deliberately not repointed.** The Implementation section's
-locators into `normalizer.ex` (`:130`, `:132-157`, `:322`), its two
-`:skip`-arm locators (`lib/statifier_ui/trace/subscriber.ex:535` and
-`lib/statifier_ui/trace/replay.ex:276`, the arms the `sui-51o` note above
-records as gone), and the "Today" column of decision 6's table all
-describe the code as it stood *before* `sui-e41` landed. They are
-historical by construction - the `sui-51o` note is what records that they
-went stale - and repointing them at today's lines would make them name
-text they do not describe.
+**Cites deliberately not repointed.** Three groups describe the code as it
+stood *before* `sui-e41` landed, and are historical by construction:
+
+- the Context section's account of what `sui-9fs` did, which cites
+  `normalizer.ex:130` and `:322` for the skip set and the clause that
+  answered `:skip`, and `:54-72` for the moduledoc's "Skipped trace
+  effects" section - a set, a clause and a section none of which still
+  exist, which is exactly what that account is about;
+- the Implementation section, which reuses `:130` and `:322`, adds
+  `:132-157`, and takes two `:skip`-arm locators into
+  `lib/statifier_ui/trace/subscriber.ex:535` and
+  `lib/statifier_ui/trace/replay.ex:276` - the arms the `sui-51o` note
+  above records as gone;
+- the "Today" column of decision 6's table, which is a before-column by
+  construction.
+
+Repointing any of them at today's lines would make them name text they do
+not describe.
 
 Every other `path:line` in this record was machine-checked against `main`
 at `7c14f79` as amended by this pull request, and resolves to the text it
-is cited for. Two resolve loosely rather than exactly: decision 4's
-`lib/statifier_ui/trace/projection.ex:354-358` and `:436-441` each open on
-a blank line and carry the clause they cite one line further down. That is
-a wrapping artefact, not a slide, and is recorded here rather than
-repointed.
+is cited for. Two of decision 4's `lib/statifier_ui/trace/projection.ex`
+ranges resolve loosely rather than exactly. `:354-358` opens on a blank
+line, so the `effect.budget_exhausted` clause it cites starts at `:355`.
+`:436-441` opens two lines into the comment above the clause and closes on
+a blank line, so the `project_evaluation/2` clause it cites sits at
+`:438-440`. Both ranges contain what they cite; that is a wrapping
+artefact, not a slide, and is recorded here rather than repointed.
