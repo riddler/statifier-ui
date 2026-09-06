@@ -407,6 +407,30 @@ The selectors that carry a state worth branching on:
 | `.statifier-ui-expression-input[data-hook]` | `attached` once the hook has upgraded the field; absent means the `<datalist>` fallback is what the reader has |
 | `.statifier-ui-expression-input[data-vocabulary]` | `true` when the grammar half of the completion list resolved |
 
+The expression field's picklist mode adds a second family. The component
+renders it only when the host wires the picklist hook, so a text-only field
+has none of it on the page. The wrapper row above carries the mode itself:
+`data-mode` is `picklist` or `text`, beside `data-subset` and
+`data-clause-count`.
+
+| Selector | What it is |
+| --- | --- |
+| `.statifier-ui-expression-picklist` | the clause list; `hidden` while the field is in text mode |
+| `.statifier-ui-expression-clause[data-clause-index]` | one clause row, numbered from zero; `data-declared-kind` is the kind the host declared for its path, absent when none |
+| `.statifier-ui-expression-path[data-role]` | `path` - the field select |
+| `.statifier-ui-expression-operator[data-role]` | `operator` - the comparison select |
+| `.statifier-ui-expression-value[data-value-kind]` | `select`, `multiselect`, `text`, or `readonly` - the control the clause's value kind chose; its `data-role` is `value` |
+| `.statifier-ui-expression-remove[data-action]` | `remove-clause` |
+| `.statifier-ui-expression-connective[data-role]` | `connective` - how the clauses join |
+| `.statifier-ui-expression-add[data-action]` | `add-clause` |
+| `.statifier-ui-expression-advisory[data-advisory]` | `value-kind` or `operator`, why the row is advised; `data-severity` is `info` and an advisory never blocks |
+| `.statifier-ui-expression-text` | the text-mode wrapper, `hidden` while the field is in picklist mode |
+| `.statifier-ui-expression-error[data-error-position]` | the parse error, and the offset in the source it points at |
+| `.statifier-ui-expression-switch[data-action]` | `switch-text` or `switch-picklist`; `aria-pressed` says which mode is on |
+
+`StatifierUI.Live.ExpressionInput`'s moduledoc carries the same surface read
+from the attribute side rather than the class side.
+
 Two of the surfaces a host styles are built by the hook at runtime rather
 than rendered by a component, so they appear in no HEEx template and are
 easy to miss until the popup opens over an unstyled `<ul>`:
@@ -424,6 +448,8 @@ The remaining classes are structural and carry no state of their own:
 
 `.statifier-ui-counts`, `.statifier-ui-diagnostic`, `.statifier-ui-diagram`,
 `.statifier-ui-effect`, `.statifier-ui-effects`, `.statifier-ui-event-log`,
+`.statifier-ui-expression-clause-controls`,
+`.statifier-ui-expression-modes`,
 `.statifier-ui-log-error`, `.statifier-ui-log-footer`,
 `.statifier-ui-log-session`, `.statifier-ui-log-truncated`,
 `.statifier-ui-macrostep`, `.statifier-ui-macrostep-summary`,
