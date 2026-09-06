@@ -585,3 +585,57 @@ line, so the `effect.budget_exhausted` clause it cites starts at `:355`.
 a blank line, so the `project_evaluation/2` clause it cites sits at
 `:438-440`. Both ranges contain what they cite; that is a wrapping
 artefact, not a slide, and is recorded here rather than repointed.
+
+### Note 2026-09-06 (`sui-761`): decision 6's Site column of locators
+
+*A note, not an amendment. Nothing above it has been edited: no numbered
+decision, no table row, no sentence of the `sui-u30` note above it, and not
+the Status line. It completes that note's cite inventory with the four
+locators in decision 6's table that the inventory does not name, and
+corrects one line of that note's carve-out list. The `sui-51o`, `sui-3or`
+and `sui-u30` notes above stand as written.*
+
+**Decision 6's table has two columns doing different jobs.** Its "Today"
+column quotes the pre-`sui-e41` text, and is a before-column by
+construction - that is the third carve-out group in the `sui-u30` note
+above, and it stands. Its **Site** column is not a before-column: it is a
+column of locators, and `sui-e41` (`ac93c18`) moved every one of them that
+points into a file it touched. The `sui-u30` note's inventory names none of
+them. Its third carve-out group covers them in substance, in that it
+declares the table an account of the code before `sui-e41`; the gap is that
+the inventory never says where the four Site locators resolve. This is that
+wording. Checked against `main` at `94a0b89`:
+
+| Cited above as | Resolves today at | The cited text |
+|---|---|---|
+| `lib/statifier_ui/trace/normalizer.ex:132-157` (`@types`) | `lib/statifier_ui/trace/normalizer.ex:134-160` | the `@types` attribute, opening bracket through closing bracket - 25 entries today against the 24 its "Today" column counts |
+| `test/statifier_ui/trace/normalizer_test.exs:718-721` | `test/statifier_ui/trace/normalizer_test.exs:800-803` | `test "returns exactly 25 sorted, unique type strings"` through `assert length(types) == 25` |
+| `docs/wire-format.md:1387-1388` (type index) | `docs/wire-format.md:1446-1448` | "25 rows: 10 `trace.*` ... 10 `effect.*`, and 5 `session.*`" |
+| `docs/wire-format.md:533` (schemas heading) | `docs/wire-format.md:535` | "The ten `trace.*` schemas" |
+
+Three of the four slid by a constant - `+2`, `+82` and `+2` in the order
+above. The type-index range is the exception: the sentence ran two lines
+before `sui-e41` and runs three after it, because the counts it carries got
+longer, so a two-line range answers with a three-line one.
+
+The table's remaining two rows need nothing here. `docs/wire-format.md:1425`
+is repointed to `:1485` in the `sui-u30` note's own table, and `:20` and
+`:9` are the two the paragraph beneath that table already treats - `:9`
+still resolves, and `:20` resolves as a locator only, the words quoted from
+it being the pre-`sui-e41` wording. With the four rows above, every locator
+in decision 6's table is now accounted for.
+
+**One cite is filed under the wrong section.** The `sui-u30` note's second
+carve-out group opens "the Implementation section, which reuses `:130` and
+`:322`, adds `:132-157`". `:132-157` is not an Implementation cite. Above
+this note the record cites `normalizer.ex:132-157` in exactly one place,
+decision 6's table - the only other occurrence being the carve-out sentence
+just quoted; the Implementation section's normalizer locators are `:322`
+and `:130` and no others, beside its two `:skip`-arm locators into
+`lib/statifier_ui/trace/subscriber.ex:535` and
+`lib/statifier_ui/trace/replay.ex:276`. That carve-out group is correct for
+the four locators it does own, and holds for them: they describe a set, a
+clause, a moduledoc section and two `:skip` arms that no longer exist, which
+is what those passages are about. `:132-157` is not one of them - it points
+at an attribute that still exists, and so is repointed in the table above
+rather than carved out.
