@@ -499,13 +499,16 @@ slid under later commits, records the ones this pull request itself moved,
 and corrects one description of a compiler warning. The `sui-51o` and
 `sui-3or` notes above stand as written.*
 
-**Three cites that slid.** The prose citing them is unchanged and still
-correct; only the line numbers moved, under `sui-sih` (which edited
-`docs/wire-format.md`) and `sui-if3` (which edited
-`lib/statifier_ui/trace/replay.ex` after the `sui-51o` note merged).
+**Five cites that slid.** The prose citing them is unchanged and still
+correct; only the line numbers moved, under `sui-e41` (`ac93c18`, which
+took `docs/wire-format.md` from 1458 lines to 1518) and `sui-if3`
+(`41b26ed`, which added to `lib/statifier_ui/trace/replay.ex` after the
+`sui-51o` note merged).
 
 | Cited above as | Resolves today at | The cited text |
 |---|---|---|
+| `docs/wire-format.md:906`, decision 3, the origin table's `"transition"` row | `docs/wire-format.md:964` | "the platform raised the event about a transition's own `cond`" |
+| `docs/wire-format.md:890-895`, decision 5, the versioning precedent | `docs/wire-format.md:948-953` | "unlike `session.datamodel`, which kept version 1 because its type string was already reserved" |
 | `docs/wire-format.md:1425`, decision 6's table, the "still nine" row | `docs/wire-format.md:1485` | "envelope, the nine `trace.*` type names, the `session.start` role" |
 | `lib/statifier_ui/trace/replay.ex:272-275`, the `sui-51o` note | `lib/statifier_ui/trace/replay.ex:345-348` | the four-line comment standing where the `:skip` arm was |
 | `lib/statifier_ui/trace/replay.ex:128-129`, the `sui-51o` note | `lib/statifier_ui/trace/replay.ex:167-168` | "ten of the format's twenty-five types missing, silently" |
@@ -548,12 +551,19 @@ to say this, in the same pull request as this note; the note above is
 left as written, as a note.
 
 **Cites deliberately not repointed.** The Implementation section's
-locators into `normalizer.ex` (`:130`, `:132-157`, `:322`) and the "Today"
-column of decision 6's table describe the file as it stood *before*
-`sui-e41` landed. They are historical by construction - the `sui-51o` note
-is what records that they went stale - and repointing them at today's
-lines would make them name text they do not describe.
+locators into `normalizer.ex` (`:130`, `:132-157`, `:322`), its two
+`:skip`-arm locators (`lib/statifier_ui/trace/subscriber.ex:535` and
+`lib/statifier_ui/trace/replay.ex:276`, the arms the `sui-51o` note above
+records as gone), and the "Today" column of decision 6's table all
+describe the code as it stood *before* `sui-e41` landed. They are
+historical by construction - the `sui-51o` note is what records that they
+went stale - and repointing them at today's lines would make them name
+text they do not describe.
 
 Every other `path:line` in this record was machine-checked against `main`
 at `7c14f79` as amended by this pull request, and resolves to the text it
-is cited for.
+is cited for. Two resolve loosely rather than exactly: decision 4's
+`lib/statifier_ui/trace/projection.ex:354-358` and `:436-441` each open on
+a blank line and carry the clause they cite one line further down. That is
+a wrapping artefact, not a slide, and is recorded here rather than
+repointed.
