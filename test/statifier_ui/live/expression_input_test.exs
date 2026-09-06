@@ -201,6 +201,27 @@ defmodule StatifierUI.Live.ExpressionInputTest do
       refute outside =~ ~s(data-action="switch-picklist")
     end
 
+    test "the modes container separates the switches on a page with no stylesheet" do
+      html = picklist_html("plan == 'pro'", ["plan"])
+
+      [_, modes] = String.split(html, ~s(class="statifier-ui-expression-modes"), parts: 2)
+      [attributes, buttons] = String.split(modes, ">", parts: 2)
+
+      # HEEx drops the whitespace between two adjacent elements, so without a
+      # rule on the container the two buttons abut (sui-aln). The default is
+      # layout only - nothing a host's palette has to reconcile.
+      assert attributes =~ "display: inline-flex"
+      assert attributes =~ "gap: 0.5rem"
+
+      # Both switches are siblings inside that one container, so the rule
+      # reaches both.
+      [switches, _] = String.split(buttons, "</div>", parts: 2)
+
+      assert [_, _] = Regex.scan(~r/class="statifier-ui-expression-switch"/, switches)
+      assert switches =~ ~s(data-action="switch-text")
+      assert switches =~ ~s(data-action="switch-picklist")
+    end
+
     test "the author's text is never rewritten - the input still carries it verbatim" do
       html = picklist_html("plan=='pro'", ["plan"])
 
