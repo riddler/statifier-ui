@@ -62,6 +62,16 @@ defmodule StatifierUI.Inspector do
   `selection_note/2` says which macrostep it was carried from - a carried
   configuration is never presented as a measured one.
 
+  ## The configuration as state ids (sui-hq0)
+
+  `active_configuration_ids/2` answers the same configuration as
+  `active_configuration/2`, resolved through the stream's own
+  `session.start` manifest into the chart's ids, and `active_invokes/2`
+  does the same for the invocations live at that point. Both are pure
+  reads a host can call from a `render/1` to drive a diagram of its own
+  without parsing the manifest itself; both refuse with
+  `{:error, :no_manifest}` on a stream that carries none.
+
   ## Linking out to a trace (sui-4w2)
 
   Every fold function also takes `:deep_link`, the host's APM URL template
@@ -78,6 +88,7 @@ defmodule StatifierUI.Inspector do
   alias StatifierUI.Diagram
   alias StatifierUI.EventLog
   alias StatifierUI.EventLog.DeepLink
+  alias StatifierUI.EventLog.Labels
   alias StatifierUI.Trace.Message
   alias StatifierUI.Trace.Subscriber
 
@@ -129,6 +140,99 @@ defmodule StatifierUI.Inspector do
     case Keyword.get(opts, :selection, :live) do
       {:macrostep, n} -> selected_configuration(messages, n, opts)
       _live -> live_configuration(messages, opts)
+    end
+  end
+
+  @doc """
+  The configuration `active_configuration/2` answers, as state IDs.
+
+  The indexes that function returns are the wire format's own document-order
+  positions, which mean nothing outside the stream that produced them. A host
+  that draws its own diagram - the debugger canvas in a block editor, say -
+  works in the chart's ids, so this resolves them through the stream's own
+  `session.start` manifest and hands back the names.
+
+  The resolution rule is `StatifierUI.EventLog.Labels.state/2`, the one the
+  event log already renders indexes with: a state's `"id"`, `"<scxml>"` for
+  the synthesized root, and `"#<index>"` for a state the document left
+  anonymous. There is no second answer to what an index is called.
+
+  A stream carrying no `session.start` returns `{:error, :no_manifest}`
+  rather than a list of `"#<index>"` strings. That is the late-attach case
+  (`StatifierUI.Trace.Subscriber` emits no manifest when it joins a session
+  that already has one), and a caller marking a canvas needs to know it got
+  no names rather than to mark nothing and call it an empty configuration.
+  `active_configuration/2` still answers the indexes there.
+
+  Nothing here re-derives a configuration or parses the manifest itself:
+  both halves are reads of what the engine already stamped.
+
+  ## Examples
+
+      iex> {:ok, machine} =
+      ...>   Statifier.compile(~s(<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="pending"><state id="pending"/><state id="authorized"/></scxml>))
+      iex> {:ok, manifest} = StatifierUI.Trace.Manifest.build(machine, "sess_ops")
+      iex> StatifierUI.Inspector.active_configuration_ids([manifest], initial_configuration: [1])
+      {:ok, ["pending"]}
+
+      iex> StatifierUI.Inspector.active_configuration_ids([], initial_configuration: [1])
+      {:error, :no_manifest}
+  """
+  @spec active_configuration_ids([Message.t()], [opt()]) ::
+          {:ok, [String.t()]} | {:error, :no_manifest}
+  def active_configuration_ids(messages, opts \\ []) do
+    with {:ok, labels} <- manifest_labels(messages) do
+      {:ok, Enum.map(active_configuration(messages, opts), &Labels.state(labels, &1))}
+    end
+  end
+
+  @doc """
+  The invocations live at the point `opts[:selection]` names, as
+  `{state_id, invoke_type | nil}` - the invoke half of
+  `active_configuration_ids/2`.
+
+  An invocation is live from the `effect.invoke` that started it until the
+  `effect.cancel_invoke` that ends it, both of which the engine stamps with
+  the owning `state_index` (`docs/wire-format.md`). Nothing else is inferred:
+  a stream that never reached the `<invoke>` seam answers `{:ok, []}`, and
+  the pairing is by `invoke_id`, the format's own identity for an
+  invocation. The list is in start order.
+
+  ## What the second element is, and is not
+
+  The wire format defines **no outcome field for an invocation** - its only
+  `outcome` is `trace.conds_evaluated`'s guard discriminator - so this pair's
+  second element is the `invoke_type` an `effect.invoke` carries, `nil` when
+  the `<invoke>` element set neither `type` nor `typeexpr`. A caller wanting
+  to know how an invocation *ended* reads the `done.invoke.*` event in the
+  event log; answering that here would mean this module deciding what
+  "finished" means, which is the engine's call and not a read (ADR-0002's
+  inherited clause).
+
+  `{:error, :no_manifest}` for the same reason and in the same case as
+  `active_configuration_ids/2`.
+
+  ## Examples
+
+      iex> {:ok, machine} =
+      ...>   Statifier.compile(~s(<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="pending"><state id="pending"/></scxml>))
+      iex> {:ok, manifest} = StatifierUI.Trace.Manifest.build(machine, "sess_ops")
+      iex> StatifierUI.Inspector.active_invokes([manifest])
+      {:ok, []}
+  """
+  @spec active_invokes([Message.t()], [opt()]) ::
+          {:ok, [{String.t(), String.t() | nil}]} | {:error, :no_manifest}
+  def active_invokes(messages, opts \\ []) do
+    with {:ok, labels} <- manifest_labels(messages) do
+      invocations =
+        messages
+        |> in_view(opts)
+        |> live_invocations()
+        |> Enum.map(fn {state_index, invoke_type} ->
+          {Labels.state(labels, state_index), invoke_type}
+        end)
+
+      {:ok, invocations}
     end
   end
 
@@ -244,6 +348,52 @@ defmodule StatifierUI.Inspector do
       {:ok, log} -> EventLog.Markdown.render(log, markdown_opts(opts))
       {:error, reason} -> "**Event log unavailable:** `#{inspect(reason)}`"
     end
+  end
+
+  # -- Manifest-resolved reads (sui-hq0) -----------------------------------
+
+  # One `session.start` is all a stream ever carries, and `EventLog.Labels`
+  # already knows how to read its tables; the only thing added here is the
+  # refusal, which `Labels.from_log/1` deliberately does not have (it
+  # degrades to bare indexes for the event log's own rendering).
+  @spec manifest_labels([Message.t()]) :: {:ok, Labels.t()} | {:error, :no_manifest}
+  defp manifest_labels(messages) do
+    case Enum.find(messages, &(&1.type == "session.start")) do
+      nil -> {:error, :no_manifest}
+      manifest -> {:ok, Labels.from_manifest(manifest)}
+    end
+  end
+
+  # A selection cuts the stream at the end of macrostep `n`, exactly as the
+  # configuration reads do. A message with no `macrostep` stamp - the
+  # manifest, `session.datamodel` - is session-level and stays in view.
+  @spec in_view([Message.t()], [opt()]) :: [Message.t()]
+  defp in_view(messages, opts) do
+    case Keyword.get(opts, :selection, :live) do
+      {:macrostep, n} -> Enum.filter(messages, &(is_nil(&1.macrostep) or &1.macrostep <= n))
+      _live -> messages
+    end
+  end
+
+  # Start order preserved, so a caller rendering two spinners renders them in
+  # the order the engine started them. `effect.invoke` and
+  # `effect.cancel_invoke` are the only two messages that open and close an
+  # invocation's life.
+  @spec live_invocations([Message.t()]) :: [{non_neg_integer(), String.t() | nil}]
+  defp live_invocations(messages) do
+    messages
+    |> Enum.reduce([], fn
+      %Message{type: "effect.invoke", payload: payload}, live ->
+        live ++
+          [{payload["invoke_id"], {payload["state_index"], payload["invoke_type"]}}]
+
+      %Message{type: "effect.cancel_invoke", payload: payload}, live ->
+        List.keydelete(live, payload["invoke_id"], 0)
+
+      _other, live ->
+        live
+    end)
+    |> Enum.map(fn {_invoke_id, invocation} -> invocation end)
   end
 
   # -- Selection plumbing --------------------------------------------------

@@ -179,6 +179,32 @@ defmodule StatifierUI.Live.State do
     Inspector.active_configuration(state.messages, opts(state))
   end
 
+  @doc """
+  The configuration the current selection implies, as state IDS rather than
+  wire indexes - `StatifierUI.Inspector.active_configuration_ids/2` over the
+  messages this read model holds.
+
+  This is the read a host drawing its own diagram wants: the indexes
+  `configuration/1` answers are positions in the stream that produced them,
+  while a host works in the chart's ids. `{:error, :no_manifest}` when the
+  stream carries no `session.start` to resolve through (the late-attach
+  case); `configuration/1` still answers indexes there.
+
+  ## Examples
+
+      iex> {:ok, machine} =
+      ...>   Statifier.compile(~s(<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="pending"><state id="pending"/><state id="authorized"/></scxml>))
+      iex> {:ok, manifest} = StatifierUI.Trace.Manifest.build(machine, "sess_ops")
+      iex> machine
+      ...> |> StatifierUI.Live.State.new(messages: [manifest], initial_configuration: [1])
+      ...> |> StatifierUI.Live.State.configuration_ids()
+      {:ok, ["pending"]}
+  """
+  @spec configuration_ids(t()) :: {:ok, [String.t()]} | {:error, :no_manifest}
+  def configuration_ids(%__MODULE__{} = state) do
+    Inspector.active_configuration_ids(state.messages, opts(state))
+  end
+
   @doc "How the current selection resolved - see `StatifierUI.Inspector.resolution/2`."
   @spec resolution(t()) ::
           :live

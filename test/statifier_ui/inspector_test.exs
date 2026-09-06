@@ -4,8 +4,15 @@ defmodule StatifierUI.InspectorTest do
   alias Statifier.Session
   alias StatifierUI.Inspector
   alias StatifierUI.Test.Support.Trace.SessionCase
+  alias StatifierUI.Trace.Json
   alias StatifierUI.Trace.Message
   alias StatifierUI.Trace.Subscriber
+
+  doctest StatifierUI.Inspector
+
+  # The checked-in golden capture of `@two_state`, the same bytes
+  # `StatifierUI.Trace.GoldenTraceTest` compares against.
+  @golden_path Path.join([__DIR__, "..", "support", "trace", "two_state.jsonl"])
 
   @two_state """
   <?xml version="1.0" encoding="UTF-8"?>
@@ -250,6 +257,146 @@ defmodule StatifierUI.InspectorTest do
              ] = Inspector.points(messages)
     end
   end
+
+  describe "active_configuration_ids/2" do
+    test "over the golden stream the ids are the manifest's own names, at every macrostep" do
+      {:ok, messages} = Json.decode_lines(File.read!(@golden_path))
+
+      # Read the names straight off the manifest's `states` table rather
+      # than through `EventLog.Labels`, so this asserts the acceptance
+      # property and not that one module agrees with itself.
+      names = manifest_names(messages)
+      points = Inspector.points(messages)
+
+      assert points != []
+
+      for %{macrostep: n} <- points do
+        opts = [selection: {:macrostep, n}]
+
+        assert {:ok, ids} = Inspector.active_configuration_ids(messages, opts)
+        assert ids == Enum.map(Inspector.active_configuration(messages, opts), &names[&1])
+        assert ids != []
+      end
+
+      assert {:ok, live_ids} = Inspector.active_configuration_ids(messages)
+      assert live_ids == Enum.map(Inspector.active_configuration(messages), &names[&1])
+      assert live_ids == ["<scxml>", "b"]
+    end
+
+    test "the initial configuration resolves the same way, before any macrostep" do
+      {:ok, [manifest | _rest]} = Json.decode_lines(File.read!(@golden_path))
+
+      assert Inspector.active_configuration_ids([manifest], initial_configuration: [0, 1]) ==
+               {:ok, ["<scxml>", "a"]}
+    end
+
+    test "a stream carrying no session.start refuses rather than answering bare indexes" do
+      {:ok, messages} = Json.decode_lines(File.read!(@golden_path))
+      late_attach = Enum.reject(messages, &(&1.type == "session.start"))
+
+      # The indexes are still answerable - only the names are not.
+      assert Inspector.active_configuration(late_attach) == [0, 2]
+      assert Inspector.active_configuration_ids(late_attach) == {:error, :no_manifest}
+      assert Inspector.active_configuration_ids([]) == {:error, :no_manifest}
+    end
+  end
+
+  describe "active_invokes/2" do
+    test "a stream that never reached the invoke seam has none" do
+      {:ok, messages} = Json.decode_lines(File.read!(@golden_path))
+
+      assert Inspector.active_invokes(messages) == {:ok, []}
+    end
+
+    test "an invocation is live from its effect.invoke until its effect.cancel_invoke" do
+      {:ok, [manifest | _rest]} = Json.decode_lines(File.read!(@golden_path))
+
+      started = manifest_and(manifest, [invoke_message(1, "inv-1", "myapp:authorize", 2)])
+
+      cancelled =
+        manifest_and(manifest, [
+          invoke_message(1, "inv-1", "myapp:authorize", 2),
+          cancel_message(2, "inv-1", 3)
+        ])
+
+      assert Inspector.active_invokes(started) == {:ok, [{"a", "myapp:authorize"}]}
+      assert Inspector.active_invokes(cancelled) == {:ok, []}
+    end
+
+    test "an invocation whose element set no type carries nil, and start order is kept" do
+      {:ok, [manifest | _rest]} = Json.decode_lines(File.read!(@golden_path))
+
+      messages =
+        manifest_and(manifest, [
+          invoke_message(1, "inv-1", "myapp:authorize", 2),
+          invoke_message(2, "inv-2", nil, 1)
+        ])
+
+      assert Inspector.active_invokes(messages) ==
+               {:ok, [{"a", "myapp:authorize"}, {"<scxml>", nil}]}
+    end
+
+    test "a selection cuts the stream at that macrostep" do
+      {:ok, [manifest | _rest]} = Json.decode_lines(File.read!(@golden_path))
+
+      messages =
+        manifest_and(manifest, [
+          invoke_message(1, "inv-1", "myapp:authorize", 2),
+          cancel_message(2, "inv-1", 3)
+        ])
+
+      assert Inspector.active_invokes(messages, selection: {:macrostep, 2}) ==
+               {:ok, [{"a", "myapp:authorize"}]}
+
+      assert Inspector.active_invokes(messages, selection: {:macrostep, 3}) == {:ok, []}
+    end
+
+    test "no manifest, no names" do
+      assert Inspector.active_invokes([invoke_message(1, "inv-1", nil, 2)]) ==
+               {:error, :no_manifest}
+    end
+  end
+
+  defp manifest_names(messages) do
+    messages
+    |> Enum.find(&(&1.type == "session.start"))
+    |> Map.fetch!(:payload)
+    |> Map.fetch!("states")
+    |> Map.new(fn state -> {state["index"], state["id"] || "<" <> state["kind"] <> ">"} end)
+  end
+
+  defp manifest_and(manifest, messages), do: [manifest | messages]
+
+  defp invoke_message(seq, invoke_id, invoke_type, macrostep) do
+    payload =
+      %{"invoke_id" => invoke_id, "state_index" => state_index_for(invoke_id)}
+      |> then(fn payload ->
+        if invoke_type, do: Map.put(payload, "invoke_type", invoke_type), else: payload
+      end)
+
+    %Message{
+      type: "effect.invoke",
+      session: "sess_golden",
+      seq: seq,
+      macrostep: macrostep,
+      payload: payload
+    }
+  end
+
+  defp cancel_message(seq, invoke_id, macrostep) do
+    %Message{
+      type: "effect.cancel_invoke",
+      session: "sess_golden",
+      seq: seq,
+      macrostep: macrostep,
+      payload: %{"invoke_id" => invoke_id, "state_index" => state_index_for(invoke_id)}
+    }
+  end
+
+  # `inv-1` is owned by `a` (index 1); `inv-2` by the root, which is what
+  # gives the second tuple its `"<scxml>"` name.
+  defp state_index_for("inv-1"), do: 1
+  defp state_index_for("inv-2"), do: 0
 
   describe "active_configuration/2 under a selection" do
     test "a selected macrostep reads that macrostep's configuration, not the tip" do

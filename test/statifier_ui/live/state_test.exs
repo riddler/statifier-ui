@@ -7,6 +7,13 @@ defmodule StatifierUI.Live.StateTest do
   alias StatifierUI.Trace.Message
   alias StatifierUI.Trace.Subscriber
 
+  doctest StatifierUI.Live.State
+
+  # `docs/ops-embedding.md`'s host-draws-its-own-diagram paragraph shows
+  # `configuration_ids/1` in a runnable snippet; running it here is what
+  # keeps the ops doc from drifting from the API (sui-hq0).
+  doctest_file(Path.join([__DIR__, "..", "..", "..", "docs", "ops-embedding.md"]))
+
   # Document-order indexes: 0 scxml, 1 idle, 2 running, 3 left, 4 l1,
   # 5 l2, 6 right, 7 r1, 8 r2 - the inspector test's chart, so a
   # configuration read here is a configuration with hierarchy in it.
@@ -83,6 +90,43 @@ defmodule StatifierUI.Live.StateTest do
 
       assert String.starts_with?(source, "stateDiagram-v2")
       assert source =~ "class s2,s3,s5,s6,s8 active"
+    end
+  end
+
+  describe "configuration_ids/1" do
+    test "the tip's configuration, as the chart's own ids", %{
+      machine: machine,
+      messages: messages
+    } do
+      state = State.new(machine, messages: messages)
+
+      assert State.configuration(state) == [0, 2, 3, 5, 6, 8]
+
+      assert State.configuration_ids(state) ==
+               {:ok, ["<scxml>", "running", "left", "l2", "right", "r2"]}
+    end
+
+    test "it follows the selection, like configuration/1 does", %{
+      machine: machine,
+      messages: messages
+    } do
+      state = machine |> State.new(messages: messages) |> State.select(2)
+
+      assert State.configuration(state) == [0, 2, 3, 4, 6, 7]
+
+      assert State.configuration_ids(state) ==
+               {:ok, ["<scxml>", "running", "left", "l1", "right", "r1"]}
+    end
+
+    test "a late-attach stream refuses rather than naming indexes", %{
+      machine: machine,
+      messages: messages
+    } do
+      late_attach = Enum.reject(messages, &(&1.type == "session.start"))
+      state = State.new(machine, messages: late_attach)
+
+      assert State.configuration(state) == [0, 2, 3, 5, 6, 8]
+      assert State.configuration_ids(state) == {:error, :no_manifest}
     end
   end
 
