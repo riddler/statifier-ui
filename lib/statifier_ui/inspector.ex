@@ -131,6 +131,7 @@ defmodule StatifierUI.Inspector do
           {:initial_configuration, Enumerable.t()}
           | {:selection, selection()}
           | {:deep_link, String.t() | StatifierUI.Trace.DeepLink.t() | nil}
+          | {:active_style, StatifierUI.Diagram.active_style()}
 
   @doc """
   The configuration `messages` and `opts[:selection]` imply.
@@ -340,11 +341,17 @@ defmodule StatifierUI.Inspector do
 
   @doc """
   Mermaid `stateDiagram-v2` source for the configuration pane:
-  `StatifierUI.Diagram.render/2` over `active_configuration/2`.
+  `StatifierUI.Diagram.render/3` over `active_configuration/2`.
+
+  `opts[:active_style]` is passed through unchanged, so a host under a dark
+  theme can drop the shipped `classDef` and style the `active` class from
+  its own stylesheet - see `StatifierUI.Diagram`.
   """
   @spec diagram(Machine.t(), [Message.t()], [opt()]) :: String.t()
   def diagram(machine, messages, opts \\ []) do
-    Diagram.render(machine, active_configuration(messages, opts))
+    Diagram.render(machine, active_configuration(messages, opts),
+      active_style: Keyword.get(opts, :active_style, :default)
+    )
   end
 
   @doc """

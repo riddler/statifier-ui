@@ -62,6 +62,22 @@ defmodule StatifierUI.Diagram do
     are ignored, so a stale or empty configuration degrades to an
     unhighlighted chart rather than an error.
 
+  ## Theming the active highlight
+
+  The `active` class is styled by a `classDef` line the source carries, and
+  by default that line is the shipped light palette. A host whose chrome is
+  dark passes `active_style: :none` to `render/3`, which drops the
+  `classDef` and leaves the `class sN active` assignment: the rendered nodes
+  still carry the class, so the host's own stylesheet or Mermaid theme
+  reaches them. A host that would rather keep the styling inside the source
+  passes its own `classDef` body as a binary instead. Neither path asks a
+  host to post-process the source it was handed.
+
+  `StatifierUI.Inspector.diagram/3` takes the same option and passes it
+  through, and `StatifierUI.Live.diagram/1` takes it as an attribute. The
+  Livebook inspector (`StatifierUI.Kino`) builds its own fold options and
+  forwards none, so it always draws the default palette.
+
   ## Known limits of this projection
 
   These are accepted, not defects to file. Each is a thing the Mermaid
@@ -97,8 +113,23 @@ defmodule StatifierUI.Diagram do
 
   @indent "    "
 
-  @active_class "classDef active fill:#e0f2fe,stroke:#0284c7," <>
-                  "stroke-width:2px,color:#0c4a6e"
+  @default_active_style "fill:#e0f2fe,stroke:#0284c7,stroke-width:2px,color:#0c4a6e"
+
+  @typedoc """
+  How the `active` class is styled in the emitted source.
+
+    * `:default` - the shipped light palette, emitted as a `classDef`.
+    * `:none` - emit no `classDef` at all. The `class sN active` assignment
+      stays, so the rendered nodes still carry the class and the host's own
+      stylesheet or Mermaid theme decides how they look.
+    * a binary - the body of the `classDef`, verbatim: Mermaid style
+      declarations separated by commas, as in
+      `"fill:#0c4a6e,stroke:#38bdf8,color:#e0f2fe"`.
+  """
+  @type active_style :: :default | :none | String.t()
+
+  @typedoc "Options accepted by `render/3`."
+  @type opt :: {:active_style, active_style()}
 
   @doc """
   Renders `machine` with `configuration` highlighted, as Mermaid
@@ -108,6 +139,16 @@ defmodule StatifierUI.Diagram do
   active configuration (`MapSet.t(non_neg_integer())`) a trace message or
   `Statifier.MachineState` carries. Pass `[]` (or an empty set) for a chart
   that is not running.
+
+  ## Options
+
+    * `:active_style` - how the active-configuration highlight is styled;
+      `t:active_style/0`. Defaults to `:default`, which emits the shipped
+      light palette unchanged.
+
+  A host under a dark theme passes `:none` and styles `.active` from its own
+  stylesheet, or passes its own `classDef` body as a binary. Neither
+  requires post-processing the returned source.
 
   ## Examples
 
@@ -125,9 +166,26 @@ defmodule StatifierUI.Diagram do
       true
       iex> source =~ "class s1 active"
       true
+      iex> source =~ "classDef active"
+      true
+
+      iex> {:ok, machine} =
+      ...>   Statifier.compile(\"\"\"
+      ...>       <scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="pending">
+      ...>         <state id="pending"/>
+      ...>       </scxml>
+      ...>   \"\"\")
+      iex> source = StatifierUI.Diagram.render(machine, [1], active_style: :none)
+      iex> source =~ "class s1 active"
+      true
+      iex> source =~ "classDef"
+      false
   """
-  @spec render(Machine.t(), Enumerable.t()) :: String.t()
-  def render(%Machine{} = machine, configuration) do
+  @spec render(Machine.t(), Enumerable.t(), [opt()]) :: String.t()
+  def render(machine, configuration, opts \\ [])
+
+  def render(%Machine{} = machine, configuration, opts) when is_list(opts) do
+    style = active_style(Keyword.get(opts, :active_style, :default))
     root = Machine.at(machine, 0)
 
     lines =
@@ -135,9 +193,20 @@ defmodule StatifierUI.Diagram do
         Enum.flat_map(root.children, &declare(machine, &1, 1)) ++
         initial_lines(machine, root, 1) ++
         transition_lines(machine) ++
-        highlight_lines(machine, configuration)
+        highlight_lines(machine, configuration, style)
 
     Enum.join(lines, "\n") <> "\n"
+  end
+
+  @spec active_style(term()) :: :none | String.t()
+  defp active_style(:default), do: @default_active_style
+  defp active_style(:none), do: :none
+  defp active_style(body) when is_binary(body) and body != "", do: body
+
+  defp active_style(other) do
+    raise ArgumentError,
+          ":active_style must be :default, :none, or a Mermaid classDef body " <>
+            "as a binary, got: #{inspect(other)}"
   end
 
   # ── Declarations ──────────────────────────────────────────────────
@@ -299,8 +368,8 @@ defmodule StatifierUI.Diagram do
 
   # ── Highlighting ──────────────────────────────────────────────────
 
-  @spec highlight_lines(Machine.t(), Enumerable.t()) :: [String.t()]
-  defp highlight_lines(machine, configuration) do
+  @spec highlight_lines(Machine.t(), Enumerable.t(), :none | String.t()) :: [String.t()]
+  defp highlight_lines(machine, configuration, style) do
     count = tuple_size(machine.states)
 
     drawn =
@@ -314,12 +383,14 @@ defmodule StatifierUI.Diagram do
         []
 
       indexes ->
-        [
-          @indent <> @active_class,
-          @indent <> "class " <> Enum.map_join(indexes, ",", &"s#{&1}") <> " active"
-        ]
+        class_def(style) ++
+          [@indent <> "class " <> Enum.map_join(indexes, ",", &"s#{&1}") <> " active"]
     end
   end
+
+  @spec class_def(:none | String.t()) :: [String.t()]
+  defp class_def(:none), do: []
+  defp class_def(style), do: [@indent <> "classDef active " <> style]
 
   # ── Naming ────────────────────────────────────────────────────────
 

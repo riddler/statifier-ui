@@ -216,6 +216,16 @@ defmodule StatifierUI.InspectorTest do
       assert source =~ "class s3 active"
       refute source =~ "class s2 active"
     end
+
+    test "passes :active_style through to the diagram source" do
+      {machine, messages, _stats} = driven_messages(@two_state, "sess_insp_style")
+
+      assert Inspector.diagram(machine, messages) =~ "classDef active fill:#e0f2fe"
+      refute Inspector.diagram(machine, messages, active_style: :none) =~ "classDef"
+
+      assert Inspector.diagram(machine, messages, active_style: "fill:#0c4a6e") =~
+               "classDef active fill:#0c4a6e"
+    end
   end
 
   describe "event_log/1" do

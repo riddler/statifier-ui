@@ -69,6 +69,14 @@ defmodule StatifierUI.LiveTest do
       assert html =~ ~s(class="statifier-ui-panes")
     end
 
+    test "forwards active_style to the diagram pane", %{state: state} do
+      assert render_component(&Live.ops_view/1, id: "ops", state: state) =~
+               "classDef active fill:"
+
+      refute render_component(&Live.ops_view/1, id: "ops", state: state, active_style: :none) =~
+               "classDef"
+    end
+
     test "a persisted stream renders every pane with no subscriber at all", %{
       machine: machine,
       messages: messages
@@ -117,6 +125,21 @@ defmodule StatifierUI.LiveTest do
 
       assert render_component(&Live.diagram/1, id: "d", state: state, hook: "Mermaid") =~
                ~s(phx-hook="Mermaid")
+    end
+
+    test "styles the active highlight the way the host asks", %{state: state} do
+      assert render_component(&Live.diagram/1, id: "d", state: state) =~ "classDef active fill:"
+
+      none = render_component(&Live.diagram/1, id: "d", state: state, active_style: :none)
+
+      refute none =~ "classDef"
+      assert none =~ "active"
+
+      assert render_component(&Live.diagram/1,
+               id: "d",
+               state: state,
+               active_style: "fill:#0c4a6e,stroke:#38bdf8"
+             ) =~ "classDef active fill:#0c4a6e,stroke:#38bdf8"
     end
   end
 

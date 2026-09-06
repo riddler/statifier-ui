@@ -163,6 +163,74 @@ defmodule StatifierUI.DiagramTest do
     end
   end
 
+  describe "render/3 - :active_style" do
+    test "the default palette is byte-identical to render/2's" do
+      machine = compile!(@nested)
+      outer = index!(machine, "outer")
+
+      assert Diagram.render(machine, [outer], active_style: :default) ==
+               Diagram.render(machine, [outer])
+    end
+
+    test "the shipped classDef carries the documented light palette" do
+      machine = compile!(@flat)
+      a = index!(machine, "a")
+
+      assert "classDef active fill:#e0f2fe,stroke:#0284c7,stroke-width:2px,color:#0c4a6e" in trimmed_lines(
+               Diagram.render(machine, [a])
+             )
+    end
+
+    test ":none drops the classDef and keeps the class assignment" do
+      machine = compile!(@nested)
+      outer = index!(machine, "outer")
+      inner_a = index!(machine, "inner_a")
+
+      lines = trimmed_lines(Diagram.render(machine, [outer, inner_a], active_style: :none))
+
+      refute Enum.any?(lines, &String.starts_with?(&1, "classDef"))
+      assert "class s#{outer},s#{inner_a} active" in lines
+    end
+
+    test "a binary is emitted as the classDef body verbatim" do
+      machine = compile!(@flat)
+      a = index!(machine, "a")
+
+      lines =
+        trimmed_lines(
+          Diagram.render(machine, [a], active_style: "fill:#0c4a6e,stroke:#38bdf8,color:#e0f2fe")
+        )
+
+      assert "classDef active fill:#0c4a6e,stroke:#38bdf8,color:#e0f2fe" in lines
+      assert "class s#{a} active" in lines
+      refute Enum.any?(lines, &(&1 =~ "#e0f2fe,stroke:#0284c7"))
+    end
+
+    test "an empty configuration emits nothing under any style" do
+      machine = compile!(@flat)
+
+      for style <- [:default, :none, "fill:#111"] do
+        source = Diagram.render(machine, [], active_style: style)
+
+        refute source =~ "classDef"
+        refute source =~ ~r/^\s*class /m
+      end
+    end
+
+    test "an unusable style is an ArgumentError naming the option" do
+      machine = compile!(@flat)
+      a = index!(machine, "a")
+
+      assert_raise ArgumentError, ~r/:active_style/, fn ->
+        Diagram.render(machine, [a], active_style: :dark)
+      end
+
+      assert_raise ArgumentError, ~r/:active_style/, fn ->
+        Diagram.render(machine, [a], active_style: "")
+      end
+    end
+  end
+
   describe "render/2 - compound nesting" do
     test "renders a compound state as a composite block with its own initial" do
       machine = compile!(@nested)

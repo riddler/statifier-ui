@@ -102,6 +102,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:scrub_event, :string, default: @scrub_event)
     attr(:select_event, :string, default: @select_event)
     attr(:hook, :string, default: nil, doc: "`phx-hook` for the diagram element.")
+
+    attr(:active_style, :any,
+      default: :default,
+      doc: "how the diagram's active highlight is styled - see `diagram/1`."
+    )
+
     attr(:class, :string, default: nil)
 
     @doc """
@@ -123,7 +129,12 @@ if Code.ensure_loaded?(Phoenix.Component) do
           scrub_event={@scrub_event}
         />
         <div class="statifier-ui-panes">
-          <.diagram id={"#{@id}-diagram"} state={@state} hook={@hook} />
+          <.diagram
+            id={"#{@id}-diagram"}
+            state={@state}
+            hook={@hook}
+            active_style={@active_style}
+          />
           <.event_log
             id={"#{@id}-event-log"}
             state={@state}
@@ -218,6 +229,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     attr(:id, :string, required: true)
     attr(:state, State, required: true)
     attr(:hook, :string, default: nil)
+    attr(:active_style, :any, default: :default)
 
     @doc """
     The current-state diagram: `StatifierUI.Diagram`'s Mermaid source for
@@ -228,12 +240,20 @@ if Code.ensure_loaded?(Phoenix.Component) do
     `data-configuration` (a space-separated index list), so a test - or a
     host's own renderer - can read what is highlighted without parsing
     Mermaid.
+
+    `active_style` is `StatifierUI.Diagram`'s `t:StatifierUI.Diagram.active_style/0`.
+    It defaults to `:default`, the shipped light palette. A dark host passes
+    `:none` and styles the `active` class from its own stylesheet, or passes
+    its own `classDef` body as a binary.
     """
     @spec diagram(map()) :: Phoenix.LiveView.Rendered.t()
     def diagram(assigns) do
       assigns =
         assigns
-        |> assign(:source, State.diagram_source(assigns.state))
+        |> assign(
+          :source,
+          State.diagram_source(assigns.state, active_style: assigns.active_style)
+        )
         |> assign(:configuration, State.configuration(assigns.state))
 
       ~H"""
