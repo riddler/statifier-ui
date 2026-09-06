@@ -10,6 +10,33 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into a version section at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [0.9.1] 2026-09-06
+
+A patch. `StatifierUI.Diagram.render/3` now escapes the `:` in a transition
+label, so a chart whose event descriptors carry a prefixed name renders
+through any Mermaid client instead of failing to parse. The expression
+picklist offers every value of a `{:one_of, _}` path whose values are floats.
+And the event log marks the selected macrostep in wording that stays correct
+in a host composing the log with no diagram mounted. No surface changes and
+no dependency changes - the trace wire format is untouched, so a consumer
+taking `~> 0.9` re-pins nothing.
+
+### Changed
+
+- `StatifierUI.Live.event_log/1` marks the selected macrostep `- selected`
+  instead of `- shown in the diagram`, so the mark reads correctly in a host
+  that composes the log with no diagram mounted.
+
+### Fixed
+
+- `StatifierUI.Diagram.render/3` escapes `:` in a transition label as
+  Mermaid's `#58;` entity code, so a chart whose event descriptors carry a
+  prefixed name (`myapp:authorize`), a lifted edge, or a deep initial marker
+  now renders instead of failing to parse.
+- The expression picklist's value select offers every value of a `{:one_of,
+  _}` path whose values are floats, instead of rendering only the value the
+  author's own expression already carries.
+
 ## [0.9.0] 2026-09-06
 
 A minor, and the release that gives this package a required runtime
