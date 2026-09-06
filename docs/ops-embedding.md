@@ -487,13 +487,52 @@ With the tables above that is every class this package renders or builds.
 Class names are as public as the hook names: a rename breaks a host's
 stylesheet exactly the way it breaks its `app.js`.
 
-**One thing here is not yours to theme.** `diagram/1`'s Mermaid source
-carries a `classDef active` with literal fill, stroke, and text colours
-(`StatifierUI.Diagram`), so the active-configuration highlight keeps its
-light-mode palette under a dark host theme. It is inside the diagram source,
-not in an attribute or a class, so no stylesheet reaches it. Overriding it
-today means post-processing the source before handing it to your Mermaid
-client, or theming the pane around it and accepting the highlight as-is.
+### The active-configuration highlight
+
+The one surface that is not a CSS class in the page is the diagram's
+active-configuration highlight: it lives inside the Mermaid source
+`diagram/1` emits, as a `classDef active` line with literal fill, stroke,
+and text colours. Its default is a light palette, which is wrong under a
+dark host chrome, and a stylesheet cannot reach a `classDef`.
+
+`diagram/1` takes an `active_style` attribute for exactly that, so a host
+never post-processes the source it was handed:
+
+| `active_style` | What the source carries |
+| --- | --- |
+| `:default` (the default) | the shipped light palette, unchanged |
+| `:none` | no `classDef` at all - only `class sN active` |
+| a binary | `classDef active <your binary>`, verbatim |
+
+`:none` is the theming path. The `class sN active` assignment stays, so the
+nodes Mermaid renders still carry the `active` class and your own stylesheet
+or Mermaid theme decides how they look:
+
+```heex
+<StatifierUI.Live.diagram id="ops-diagram" state={@state} active_style={:none} />
+```
+
+`ops_view/1` takes the same attribute and forwards it to the pane it
+composes, so the shipped arrangement themes the same way.
+
+The binary is the other path, for a host that would rather keep the styling
+inside the source than in its stylesheet - a dark inversion of the shipped
+palette, for instance:
+
+```heex
+<StatifierUI.Live.diagram
+  id="ops-diagram"
+  state={@state}
+  active_style="fill:#0c4a6e,stroke:#38bdf8,stroke-width:2px,color:#e0f2fe"
+/>
+```
+
+Anything else raises. `StatifierUI.Inspector.diagram/3` takes the same
+option for a host folding the source itself, and the pure function
+underneath all of them is `StatifierUI.Diagram.render/3`. The Livebook
+inspector (`StatifierUI.Kino`) builds its own fold options and forwards
+none, so it always draws the default palette; that surface is Livebook's
+own chrome rather than a host's, and is not what this page is about.
 
 ## Rendering your own surfaces instead
 

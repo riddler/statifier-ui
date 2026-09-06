@@ -225,10 +225,13 @@ defmodule StatifierUI.Live.State do
   @doc """
   Mermaid `stateDiagram-v2` source for the diagram pane, highlighted at the
   current selection.
+
+  `opts[:active_style]` is passed to `StatifierUI.Diagram` unchanged - the
+  hook a dark host uses to reach the active-configuration highlight.
   """
-  @spec diagram_source(t()) :: String.t()
-  def diagram_source(%__MODULE__{} = state) do
-    Inspector.diagram(state.machine, state.messages, opts(state))
+  @spec diagram_source(t(), [Inspector.opt()]) :: String.t()
+  def diagram_source(%__MODULE__{} = state, extra \\ []) do
+    Inspector.diagram(state.machine, state.messages, opts(state) ++ extra)
   end
 
   @doc """
