@@ -490,3 +490,70 @@ evaluated nothing - are the engine's commitments, not this format's. If a
 future statifier changes either, this format's "never empty" schema
 commitment in decision 1 is what breaks, and it breaks loudly, in the
 golden. That is the intended failure mode.
+
+### Note 2026-09-06 (`sui-u30`): cite errata, and what the empty form warns
+
+*A note, not an amendment. Nothing above it has been edited: no numbered
+decision, no sentence, and not the Status line. It repoints locators that
+slid under later commits, records the ones this pull request itself moved,
+and corrects one description of a compiler warning. The `sui-51o` and
+`sui-3or` notes above stand as written.*
+
+**Three cites that slid.** The prose citing them is unchanged and still
+correct; only the line numbers moved, under `sui-sih` (which edited
+`docs/wire-format.md`) and `sui-if3` (which edited
+`lib/statifier_ui/trace/replay.ex` after the `sui-51o` note merged).
+
+| Cited above as | Resolves today at | The cited text |
+|---|---|---|
+| `docs/wire-format.md:1425`, decision 6's table, the "still nine" row | `docs/wire-format.md:1485` | "envelope, the nine `trace.*` type names, the `session.start` role" |
+| `lib/statifier_ui/trace/replay.ex:272-275`, the `sui-51o` note | `lib/statifier_ui/trace/replay.ex:345-348` | the four-line comment standing where the `:skip` arm was |
+| `lib/statifier_ui/trace/replay.ex:128-129`, the `sui-51o` note | `lib/statifier_ui/trace/replay.ex:167-168` | "ten of the format's twenty-five types missing, silently" |
+
+The companion locator in that same table row, `docs/wire-format.md:9`,
+still resolves, and so does the conformance-MUST row's
+`docs/wire-format.md:20`.
+
+**Four cites this pull request moved itself.** The moduledoc correction
+below adds three lines to `lib/statifier_ui/trace/normalizer.ex` above
+every locator the `sui-51o` note takes into that file, so each moves down
+by three. As merged:
+
+| Cited above as | Resolves at | The cited text |
+|---|---|---|
+| `normalizer.ex:54-77` | `normalizer.ex:54-80` | the "The retired third answer" moduledoc section |
+| `normalizer.ex:188` | `normalizer.ex:191` | `normalize/2`'s `@spec`, without `:skip` |
+| `normalizer.ex:255-256` | `normalizer.ex:258-259` | the two `decompose/2` fallthroughs |
+| `normalizer.ex:323-324` | `normalizer.ex:326-327` | the `trace_message/2` fallthrough |
+
+**What the empty form actually warns.** The `sui-51o` note above says "a
+guard over an empty list warns that its clause cannot match and an unused
+module attribute warns on its own, both fatal under `warnings_as_errors`",
+and `normalizer.ex`'s own section said the same. Both halves are real
+warnings and the conclusion - retire - is unaffected, but the description
+is wrong twice, and a reader reproducing it would not see what it
+describes.
+
+The two warnings are alternatives, not a pair, and neither is a warning
+about the guard. Keeping the empty constant *and* its clause
+(`when module in @skipped_trace_effects` over `[]`) expands the guard to
+`false`, so the pattern's own binding goes unread, and Elixir 1.18.3
+answers with an unused-*variable* warning naming `module`, not a
+cannot-match warning naming the clause. Dropping the clause and keeping
+the constant is the other arm, and is where the unused-attribute warning
+comes from. Each was reproduced under this repository's toolchain (Elixir
+1.18.3, Erlang/OTP 27) on the two-clause shape `sui-e41` replaced. The
+moduledoc section in `lib/statifier_ui/trace/normalizer.ex` is corrected
+to say this, in the same pull request as this note; the note above is
+left as written, as a note.
+
+**Cites deliberately not repointed.** The Implementation section's
+locators into `normalizer.ex` (`:130`, `:132-157`, `:322`) and the "Today"
+column of decision 6's table describe the file as it stood *before*
+`sui-e41` landed. They are historical by construction - the `sui-51o` note
+is what records that they went stale - and repointing them at today's
+lines would make them name text they do not describe.
+
+Every other `path:line` in this record was machine-checked against `main`
+at `7c14f79` as amended by this pull request, and resolves to the text it
+is cited for.
