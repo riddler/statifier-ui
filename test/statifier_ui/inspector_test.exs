@@ -691,6 +691,99 @@ defmodule StatifierUI.InspectorTest do
     end
   end
 
+  describe "datamodel/2 under a selection (sui-2uz)" do
+    test "folds the stream as it stood at the selected macrostep" do
+      messages = bumped_messages("sess_insp_dm_sel")
+
+      # 42 is the declared value; each `bump` adds one, so macrostep 1 is
+      # the initialize and the two driven macrosteps read 43 then 44.
+      assert Inspector.datamodel(messages, selection: {:macrostep, 1}) =~ "42"
+      refute Inspector.datamodel(messages, selection: {:macrostep, 1}) =~ "43"
+
+      assert Inspector.datamodel(messages, selection: {:macrostep, 2}) =~ "43"
+      assert Inspector.datamodel(messages, selection: {:macrostep, 3}) =~ "44"
+    end
+
+    test "on :live it is byte-identical to datamodel/1" do
+      messages = bumped_messages("sess_insp_dm_live")
+
+      assert Inspector.datamodel(messages, selection: :live) == Inspector.datamodel(messages)
+    end
+  end
+
+  describe "datamodel_diff/2 (sui-2uz)" do
+    test "reports what the selected macrostep changed" do
+      messages = bumped_messages("sess_insp_diff")
+
+      markdown = Inspector.datamodel_diff(messages, selection: {:macrostep, 2})
+
+      assert markdown =~ "#### Datamodel changes in macrostep 2"
+      assert markdown =~ "| `count` |"
+      assert markdown =~ "changed"
+      assert markdown =~ "| `42` | `43` |"
+    end
+
+    test "the first macrostep diffs against the seeded datamodel" do
+      messages = bumped_messages("sess_insp_diff_first")
+
+      markdown = Inspector.datamodel_diff(messages, selection: {:macrostep, 1})
+
+      # The declared `<data expr>` is evaluated in the initialize
+      # macrostep, so the slot goes from unbound to its declared value -
+      # a real reading of what macrostep 1 did, not an empty table.
+      assert markdown =~ "#### Datamodel changes in macrostep 1"
+      assert markdown =~ "| `count` | data | changed | `:undefined` | `42` |"
+    end
+
+    test "a macrostep that changed nothing says so" do
+      {_machine, messages, _stats} = driven_messages(@two_state, "sess_insp_diff_quiet")
+
+      markdown = Inspector.datamodel_diff(messages, selection: {:macrostep, 2})
+
+      assert markdown =~ "_No datamodel slot changed._"
+      refute markdown =~ "| slot |"
+    end
+
+    test "following the tip diffs the newest macrostep" do
+      messages = bumped_messages("sess_insp_diff_tip")
+
+      newest = List.last(Inspector.points(messages)).macrostep
+
+      assert Inspector.datamodel_diff(messages) ==
+               Inspector.datamodel_diff(messages, selection: {:macrostep, newest})
+    end
+
+    test "a stream with no macrostep has nothing to diff" do
+      assert Inspector.datamodel_diff([]) =~ "nothing to diff"
+    end
+
+    test "the title and empty note are forwarded to the renderer" do
+      {_machine, messages, _stats} = driven_messages(@two_state, "sess_insp_diff_opts")
+
+      markdown =
+        Inspector.datamodel_diff(messages,
+          selection: {:macrostep, 2},
+          title: nil,
+          empty_note: "quiet step"
+        )
+
+      assert markdown == "quiet step"
+    end
+  end
+
+  # Two `bump` events over @counter, so the datamodel moves twice and a
+  # per-macrostep fold has something to be wrong about.
+  defp bumped_messages(session_id) do
+    machine = SessionCase.compile!(@counter)
+    {sub, session} = SessionCase.start_early!(machine, session_id)
+    Session.send_event(session, "bump")
+    SessionCase.wait_for_macrostep(session, 2)
+    Session.send_event(session, "bump")
+    SessionCase.wait_for_macrostep(session, 3)
+    SessionCase.wait_until(sub, 1000, fn stats -> stats.seq >= 15 end)
+    Subscriber.messages(sub)
+  end
+
   describe "status/1" do
     test "renders session, counts, and no warnings for a whole stream" do
       {_machine, _messages, stats} = driven_messages(@two_state, "sess_insp_status")

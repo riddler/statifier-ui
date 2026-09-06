@@ -72,6 +72,17 @@ defmodule StatifierUI.Inspector do
   without parsing the manifest itself; both refuse with
   `{:error, :no_manifest}` on a stream that carries none.
 
+  ## Stepping a persisted trace (sui-2uz)
+
+  `datamodel/2` takes the same `:selection` every other fold here does, so
+  the datamodel pane can show the values as they stood at a selected
+  macrostep rather than only at the live tip, and `datamodel_diff/2`
+  renders what one macrostep changed. Both are the same stream cut short
+  and folded again by `StatifierUI.DatamodelExplorer.build_live/2`; the
+  comparison itself is `StatifierUI.DatamodelExplorer.Diff`. Nothing
+  re-runs the chart and nothing re-implements an assignment - a persisted
+  stream is a recording, and stepping it is a read of a shorter prefix.
+
   ## Linking out to a trace (sui-4w2)
 
   Every fold function also takes `:deep_link`, the host's APM URL template
@@ -85,6 +96,7 @@ defmodule StatifierUI.Inspector do
 
   alias Statifier.Machine
   alias StatifierUI.DatamodelExplorer
+  alias StatifierUI.DatamodelExplorer.Diff
   alias StatifierUI.Diagram
   alias StatifierUI.EventLog
   alias StatifierUI.EventLog.DeepLink
@@ -566,13 +578,109 @@ defmodule StatifierUI.Inspector do
   `StatifierUI.DatamodelExplorer.build_live/1` over `messages`, rendered
   with the default markers. A build failure renders as a visible error
   line, same policy as `event_log/1`.
+
+  Under `opts[:selection]` of `{:macrostep, n}` the pane folds the stream
+  as it stood at the end of macrostep `n` rather than at the live tip
+  (`sui-2uz`) - the same cut every other selection-aware read here takes,
+  so the datamodel a caller shows beside a selected configuration is the
+  one that configuration was reached with. On `:live` (the default) the
+  whole list folds, byte-identical to what `datamodel/1` always rendered.
+
+  Nothing is re-derived: the cut is a shorter prefix of the same messages,
+  folded by the same `build_live/2`.
   """
-  @spec datamodel([Message.t()]) :: String.t()
-  def datamodel(messages) do
-    case DatamodelExplorer.build_live(messages) do
+  @spec datamodel([Message.t()], [opt()]) :: String.t()
+  def datamodel(messages, opts \\ []) do
+    case DatamodelExplorer.build_live(in_view(messages, opts)) do
       {:ok, pane} -> DatamodelExplorer.Markdown.render(pane)
       {:error, reason} -> "**Datamodel explorer unavailable:** `#{inspect(reason)}`"
     end
+  end
+
+  @doc """
+  Markdown for the datamodel diff pane: what macrostep `n` changed in the
+  datamodel, as a table (`sui-2uz`).
+
+  The two sides are the same stream cut twice - everything below macrostep
+  `n`, and everything through it - folded by
+  `StatifierUI.DatamodelExplorer.build_live/2` and compared by
+  `StatifierUI.DatamodelExplorer.Diff.between/2`. "Adjacent" is therefore
+  the cut, not a pair of buckets: a macrostep the log holds no entry for
+  still diffs correctly against whatever precedes it, and macrostep `n`'s
+  own diff against the session's seeded datamodel is what the first
+  macrostep shows.
+
+  `opts[:selection]` picks `n`. On `:live` the newest macrostep in view is
+  diffed, so a pane following the tip answers "what did the step that just
+  happened change". A stream with no macrostep at all has nothing to diff
+  and says so.
+
+  Options are `t:opt/0`'s, plus `StatifierUI.DatamodelExplorer.Diff.Markdown`'s
+  `:title` and `:empty_note`, which are forwarded.
+  """
+  @spec datamodel_diff([Message.t()], [opt()]) :: String.t()
+  def datamodel_diff(messages, opts \\ []) do
+    case diff_macrostep(messages, opts) do
+      nil ->
+        "_No macrostep in view, so there is nothing to diff._"
+
+      n ->
+        render_opts =
+          opts
+          |> Keyword.take([:title, :empty_note])
+          |> Keyword.put_new(:title, "#### Datamodel changes in macrostep #{n}")
+
+        diff_table(messages, n, render_opts)
+    end
+  end
+
+  # Both panes have to build for the comparison to mean anything; one that
+  # refuses (a message list naming more than one session) reports the
+  # refusal rather than rendering a diff against an empty pane, which would
+  # read as "everything was added".
+  @spec diff_table([Message.t()], non_neg_integer(), keyword()) :: String.t()
+  defp diff_table(messages, n, render_opts) do
+    earlier = DatamodelExplorer.build_live(cut_below(messages, n))
+    later = DatamodelExplorer.build_live(in_view(messages, selection: {:macrostep, n}))
+
+    case {earlier, later} do
+      {{:ok, earlier_pane}, {:ok, later_pane}} ->
+        earlier_pane
+        |> Diff.between(later_pane)
+        |> Diff.Markdown.render(render_opts)
+
+      {{:error, reason}, _later} ->
+        "**Datamodel diff unavailable:** `#{inspect(reason)}`"
+
+      {_earlier, {:error, reason}} ->
+        "**Datamodel diff unavailable:** `#{inspect(reason)}`"
+    end
+  end
+
+  # The macrostep the diff is about: the selected one, or - following the
+  # tip - the newest one that exists. `points/1` rather than the raw stamps,
+  # so "newest" means the same thing here as it does to the scrubber.
+  @spec diff_macrostep([Message.t()], [opt()]) :: non_neg_integer() | nil
+  defp diff_macrostep(messages, opts) do
+    case Keyword.get(opts, :selection, :live) do
+      {:macrostep, n} ->
+        n
+
+      _live ->
+        case points(messages) do
+          [] -> nil
+          points -> List.last(points).macrostep
+        end
+    end
+  end
+
+  # The other half of `in_view/2`'s cut: strictly below macrostep `n`.
+  # Session-level messages (the manifest, `session.datamodel`) carry no
+  # macrostep stamp and stay on both sides - the seeded datamodel is not
+  # something macrostep 1 added.
+  @spec cut_below([Message.t()], non_neg_integer()) :: [Message.t()]
+  defp cut_below(messages, n) do
+    Enum.filter(messages, &(is_nil(&1.macrostep) or &1.macrostep < n))
   end
 
   @doc """
