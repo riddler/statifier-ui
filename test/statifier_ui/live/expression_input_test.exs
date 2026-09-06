@@ -518,6 +518,40 @@ defmodule StatifierUI.Live.ExpressionInputTest do
       assert html =~ ~s(value="amount == 2.0")
     end
 
+    # sui-9ik. The declaration says only that the value is one of the list, so
+    # the row is read through whichever of the grammar's two numeric literals
+    # the author happened to write. Neither reading may cost the other half of
+    # the list its options.
+    test "a one_of mixing integers and floats offers both, whichever kind the row observes" do
+      for source <- ["amount == 1", "amount == 2.0"] do
+        html = typed_html(source, ["amount"], %{}, %{"amount" => {:one_of, [1, 2.0]}})
+
+        assert html =~ ~s(data-value-kind="select"), "#{source} did not render a select"
+        assert html =~ ~s(value="amount == 1"), "#{source} dropped the integer option"
+        assert html =~ ~s(value="amount == 2.0"), "#{source} dropped the float option"
+      end
+    end
+
+    # The same list beside `IN`, where the options are checkboxes rather than a
+    # select and the term is built for a fragment instead of a whole clause.
+    test "a mixed one_of offers both numeric spellings in a multiselect too" do
+      html = typed_html("amount IN [1]", ["amount"], %{}, %{"amount" => {:one_of, [1, 2.0]}})
+
+      assert html =~ ~s(data-value-kind="multiselect")
+      assert html =~ ~s(<option value="1" selected>)
+      assert html =~ ~s(<option value="2.0">)
+    end
+
+    # The delegation the one_of widening does not reach: an undeclared path
+    # whose options come from `value_candidates`, read through a float row.
+    test "host candidates beside a float row keep their integer entries" do
+      html =
+        typed_html("amount == 2.0", ["amount"], %{"amount" => [1, 2.0]}, %{})
+
+      assert html =~ ~s(value="amount == 1")
+      assert html =~ ~s(value="amount == 2.0" selected)
+    end
+
     test "an integer path offers the integer operators" do
       html = typed_html("amount >= 500", ["amount"], %{}, %{"amount" => :integer})
 
