@@ -58,14 +58,17 @@ if Code.ensure_loaded?(Phoenix.Component) do
     A persisted stream drops the subscriber and the `handle_info/2` clause:
     `State.new(machine, messages: messages)` is the whole difference.
 
-    ## The diagram is Mermaid source, and this package ships no JavaScript
+    ## The diagram is Mermaid source, and no Mermaid client ships
 
     `diagram/1` emits `StatifierUI.Diagram`'s `stateDiagram-v2` source into
     a `<pre class="mermaid">`, the shape a Mermaid client renders in place.
     Attaching that client is the host's - pass `hook={"MyMermaid"}` and the
-    element carries `phx-hook`. ADR-0008's client-side elkjs SVG renderer is
-    the eventual full-fidelity diagram and is not built yet; when it is, it
-    replaces this pane's body and not its contract.
+    element carries `phx-hook`. The JavaScript this package does ship is the
+    expression field's hooks under `assets/js`, as source for the host's own
+    bundler to compile (ADR-0009); nothing here renders the diagram for you.
+    ADR-0008's client-side elkjs SVG renderer is the eventual full-fidelity
+    diagram and is not built yet; when it is, it replaces this pane's body
+    and not its contract.
 
     ## Class names, not styles
 
