@@ -282,6 +282,29 @@ defmodule StatifierUI.LiveTest do
 
       refute html =~ "**"
     end
+
+    # sui-bkl: a finished run's live tip is one Prev away from the macrostep
+    # that halted it, which `Inspector.resolution/2` reports as `{:final, n}`.
+    # Before the fix this raised FunctionClauseError and remounted the host.
+    test "Prev from the live tip of a halted run renders instead of crashing" do
+      {machine, messages} = halted_messages("sess_live_note_final")
+      state = machine |> State.new(messages: messages) |> State.scrub(:prev)
+
+      assert State.resolution(state) == {:final, 3}
+
+      html = render_component(&Live.scrubber/1, id: "s", state: state)
+
+      assert html =~ ~s(data-selection="macrostep-3")
+      assert html =~ ~s(data-resolution="final")
+
+      assert html =~
+               "Showing macrostep 3 (capture), at the final configuration the run halted in."
+
+      # The exit reading stays labelled apart from the quiescent one, and no
+      # Markdown emphasis leaks in from the inspector's wording.
+      refute html =~ "quiescent configuration"
+      refute html =~ "**"
+    end
   end
 
   describe "status/1" do
@@ -351,6 +374,52 @@ defmodule StatifierUI.LiveTest do
       foreign: 0,
       diagnostics: []
     })
+  end
+
+  # sui-bkl: the inspector test's halting chart - a run that ends by entering
+  # a top-level `<final>`, so its last macrostep stamps `trace.done` and never
+  # reaches quiescence. Document-order indexes: 0 scxml, 1 pending,
+  # 2 authorized, 3 captured.
+  @halting """
+  <?xml version="1.0" encoding="UTF-8"?>
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="pending" version="1.0">
+      <state id="pending">
+          <transition event="authorize" target="authorized"/>
+      </state>
+      <state id="authorized">
+          <transition event="capture" target="captured"/>
+      </state>
+      <final id="captured"/>
+  </scxml>
+  """
+
+  # 1 initialize, 2 "authorize", 3 "capture" (into the final, which halts).
+  defp halted_messages(session_id) do
+    machine = SessionCase.compile!(@halting)
+    {sub, session} = SessionCase.start_early!(machine, session_id)
+    Session.send_event(session, "authorize")
+    SessionCase.wait_for_macrostep(session, 2)
+    Session.send_event(session, "capture")
+    wait_for_final(sub, 3)
+    {machine, Subscriber.messages(sub)}
+  end
+
+  # The halting macrostep never becomes quiescent, so `wait_for_quiescent`
+  # would time out on it. Poll the same fold for the `final?` flag.
+  defp wait_for_final(sub, target, timeout \\ 1000) do
+    points = StatifierUI.Inspector.points(Subscriber.messages(sub))
+
+    cond do
+      Enum.any?(points, &(&1.macrostep == target and &1.final?)) ->
+        :ok
+
+      timeout <= 0 ->
+        flunk("macrostep #{target} never halted in the subscriber")
+
+      true ->
+        Process.sleep(10)
+        wait_for_final(sub, target, timeout - 10)
+    end
   end
 
   defp wait_for_quiescent(sub, target, timeout \\ 1000) do

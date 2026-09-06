@@ -422,7 +422,7 @@ The selectors that carry a state worth branching on:
 | `.statifier-ui-status[data-status]` | `persisted`, or the subscriber's status |
 | `.statifier-ui-projection` | the ADR-0012 redaction banner |
 | `.statifier-ui-scrub-button[data-move]` | `first`, `prev`, `next`, `live` |
-| `.statifier-ui-selection-note[data-resolution]` | `live`, `quiescent`, `carried`, `before_first` |
+| `.statifier-ui-selection-note[data-resolution]` | `live`, `quiescent`, `final`, `carried`, `before_first` |
 | `.statifier-ui-diagram-source[data-configuration]` | the Mermaid source |
 | `.statifier-ui-macrostep details[data-macrostep][data-selected]` | one run-history entry |
 | `.statifier-ui-round[data-round]` | one round inside a macrostep |
