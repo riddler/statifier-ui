@@ -499,7 +499,7 @@ slid under later commits, records the ones this pull request itself moved,
 and corrects one description of a compiler warning. The `sui-51o` and
 `sui-3or` notes above stand as written.*
 
-**Five cites that slid.** The prose citing them is unchanged and still
+**Six cites that slid.** The prose citing them is unchanged and still
 correct; only the line numbers moved, under `sui-e41` (`ac93c18`, which
 took `docs/wire-format.md` from 1458 lines to 1518) and `sui-if3`
 (`41b26ed`, which added to `lib/statifier_ui/trace/replay.ex` after the
@@ -509,13 +509,20 @@ took `docs/wire-format.md` from 1458 lines to 1518) and `sui-if3`
 |---|---|---|
 | `docs/wire-format.md:906`, decision 3, the origin table's `"transition"` row | `docs/wire-format.md:964` | "the platform raised the event about a transition's own `cond`" |
 | `docs/wire-format.md:890-895`, decision 5, the versioning precedent | `docs/wire-format.md:948-953` | "unlike `session.datamodel`, which kept version 1 because its type string was already reserved" |
+| `docs/wire-format.md:23-25`, decision 5, the conformance clause's **MAY** half | `docs/wire-format.md:24-27` | "MAY emit further message families ... and MAY add fields to any message beyond what this document requires" |
 | `docs/wire-format.md:1425`, decision 6's table, the "still nine" row | `docs/wire-format.md:1485` | "envelope, the nine `trace.*` type names, the `session.start` role" |
 | `lib/statifier_ui/trace/replay.ex:272-275`, the `sui-51o` note | `lib/statifier_ui/trace/replay.ex:345-348` | the four-line comment standing where the `:skip` arm was |
 | `lib/statifier_ui/trace/replay.ex:128-129`, the `sui-51o` note | `lib/statifier_ui/trace/replay.ex:167-168` | "ten of the format's twenty-five types missing, silently" |
 
 The companion locator in that same table row, `docs/wire-format.md:9`,
-still resolves, and so does the conformance-MUST row's
-`docs/wire-format.md:20`.
+still resolves. So does `docs/wire-format.md:20`, but as a locator only.
+`ac93c18` reworded the MUST bullet it points at - which is exactly the
+reword decision 5 above invites - so the words decision 5 quotes from it,
+"the nine `trace.*` types at the phase boundaries Appendix D names", are
+the pre-`sui-e41` wording. The bullet, now at `:20-23`, still says what
+decision 5 relies on it for: a MUST naming nine, and nine only. Decision
+6's table quotes the same sentence in its "Today" column, where the
+historical wording is the point.
 
 **Four cites this pull request moved itself.** The moduledoc correction
 below adds three lines to `lib/statifier_ui/trace/normalizer.ex` above
