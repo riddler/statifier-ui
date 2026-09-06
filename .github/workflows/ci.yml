@@ -66,13 +66,14 @@ jobs:
       - name: Fetch dependencies
         run: mix deps.get
 
-      # No Node step, deliberately, matching mise.toml: this package has no
-      # assets/ directory and ships no JavaScript yet. When the hooks land they
-      # are distributed as source and compiled by the host's own esbuild
-      # through `file:../deps/` - this repo never runs a bundler, so there is
-      # nothing for CI to build. The manifest lists assets/ under
-      # also_gated_paths so that a future assets/ change still runs the full
-      # gate; it does not imply a build step here.
+      # No Node step, deliberately, matching mise.toml: the JavaScript under
+      # assets/js is distributed as source and compiled by the host's own
+      # esbuild through `file:../deps/` - this repo never runs a bundler, so
+      # there is nothing for CI to build. The manifest lists assets/ under
+      # also_gated_paths so that an assets/ change still runs the full gate; it
+      # does not imply a build step here. That the shipped assets/js still
+      # bundles is checked downstream instead, in statifier_examples' Assets
+      # bundle job - see the dated notes on ADR-0009.
 
       # The gate is the whole job. It formats, compiles with warnings as
       # errors, runs credo --strict, dialyzer, the deps audit, doctor, and the
