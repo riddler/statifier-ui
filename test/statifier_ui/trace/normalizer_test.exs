@@ -807,6 +807,36 @@ defmodule StatifierUI.Trace.NormalizerTest do
       assert "effect.datamodel_change" in types
       assert "trace.conds_evaluated" in types
     end
+
+    test "pins the exact vocabulary, name by name" do
+      assert Normalizer.types() == [
+               "effect.autoforward",
+               "effect.budget_exhausted",
+               "effect.cancel",
+               "effect.cancel_invoke",
+               "effect.datamodel_change",
+               "effect.done",
+               "effect.invoke",
+               "effect.log",
+               "effect.send",
+               "effect.send_delayed",
+               "session.datamodel",
+               "session.halted",
+               "session.start",
+               "session.terminated",
+               "session.unroutable",
+               "trace.conds_evaluated",
+               "trace.content_executed",
+               "trace.done",
+               "trace.entry_set",
+               "trace.event_dequeued",
+               "trace.exit_set",
+               "trace.finalize_autoforward",
+               "trace.invoke_pass",
+               "trace.macrostep_stable",
+               "trace.transitions_selected"
+             ]
+    end
   end
 
   describe "normalize/2 - effect.datamodel_change" do
