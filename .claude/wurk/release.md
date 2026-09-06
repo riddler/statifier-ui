@@ -66,6 +66,16 @@ the version bump, and modeled on the reference prep commit above.
    between them**. It is not the skill's own `## [X.Y.Z] - YYYY-MM-DD`, and
    copying that dash in would make the new section the only one in the file
    shaped differently from its neighbours.
+
+   **The date is the operator's local date, not UTC** (the convention the
+   operator set on 2026-09-06). A prep run late in the local evening is cut
+   under a UTC date that is already tomorrow; writing that UTC date puts a
+   section in the file dated a day the release was not cut on, and a reader
+   comparing it against the tag or the commit date sees a discrepancy that
+   is not real. Take the date from `date +%F` on the machine cutting the prep
+   and write that. The 0.8.0 section is dated `2026-09-05`, the local date of
+   the prep commit that wrote it while UTC had already turned over, so the
+   file already follows the convention and no section needs rewriting.
 3. Under the heading, write a short lead paragraph saying what the release is,
    then the fragments' bullets grouped by heading and ordered `Added`,
    `Changed`, `Deprecated`, `Removed`, `Fixed`, `Security`.
