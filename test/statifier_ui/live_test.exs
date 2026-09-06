@@ -169,15 +169,23 @@ defmodule StatifierUI.LiveTest do
     test "marks and opens the selected entry, and only that one", %{state: state} do
       html = render_component(&Live.event_log/1, id: "log", state: State.select(state, 2))
 
-      assert html =~ "shown in the diagram"
+      assert html =~ ~s(class="statifier-ui-shown")
       assert html =~ ~s(data-macrostep="2" data-selected="true" open)
       assert html =~ ~s(data-macrostep="3" data-selected="false")
+    end
+
+    test "the selection mark does not name a diagram, for hosts with none", %{state: state} do
+      html = render_component(&Live.event_log/1, id: "log", state: State.select(state, 2))
+
+      assert html =~ "- selected"
+      refute html =~ "shown in the diagram"
     end
 
     test "with nothing selected the newest entry is open and none is marked", %{state: state} do
       html = render_component(&Live.event_log/1, id: "log", state: state)
 
-      refute html =~ "shown in the diagram"
+      refute html =~ ~s(class="statifier-ui-shown")
+      refute html =~ "- selected"
       assert html =~ ~s(data-macrostep="3" data-selected="false" open)
     end
 

@@ -280,7 +280,9 @@ if Code.ensure_loaded?(Phoenix.Component) do
     Clicking an entry sends `select_event` with `macrostep`, which is the
     link `StatifierUI.Kino`'s Markdown pane cannot have - a Markdown
     document has no click target to send back. The selected entry is open
-    and marked, and its configuration is what the diagram is drawing.
+    and marked `- selected`; the mark does not name a diagram, because a
+    host may compose this pane with no diagram mounted. Where `diagram/1`
+    is mounted beside it, that entry's configuration is what it draws.
 
     A message list the log refuses - more than one session on one timeline,
     which `docs/wire-format.md` forbids - renders as a visible error rather
@@ -349,7 +351,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
                 (not quiescent)
               </span>
               <span :if={macrostep.macrostep == @selected} class="statifier-ui-shown">
-                - shown in the diagram
+                - selected
               </span>
             </summary>
             <ol class="statifier-ui-rounds">
