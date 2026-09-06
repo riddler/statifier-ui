@@ -462,6 +462,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
       "Showing macrostep #{n}#{event_suffix(state, n)}, at its quiescent configuration."
     end
 
+    # sui-bkl: `Inspector.resolution/2` returns this for the macrostep a run
+    # halted in, so it reaches a scrubber the moment the run is finished -
+    # Prev from the live tip lands here. Without the clause the host LiveView
+    # raised FunctionClauseError and remounted.
+    defp resolution_note({:final, n}, state) do
+      "Showing macrostep #{n}#{event_suffix(state, n)}, at the final configuration the " <>
+        "run halted in."
+    end
+
     defp resolution_note({:carried, n, from}, state) do
       "Showing macrostep #{n}#{event_suffix(state, n)}, which is not quiescent; the " <>
         "configuration drawn is macrostep #{from}'s, carried forward."

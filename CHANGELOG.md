@@ -29,6 +29,10 @@ taking `~> 0.9` re-pins nothing.
 
 ### Fixed
 
+- `StatifierUI.Live`'s scrubber renders the note for a `{:final, n}`
+  resolution, so scrubbing back from the live tip of a run that has halted
+  names the configuration the run exited in instead of raising
+  `FunctionClauseError` and remounting the host LiveView.
 - `StatifierUI.Diagram.render/3` escapes `:` in a transition label as
   Mermaid's `#58;` entity code, so a chart whose event descriptors carry a
   prefixed name (`myapp:authorize`), a lifted edge, or a deep initial marker

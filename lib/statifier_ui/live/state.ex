@@ -209,6 +209,7 @@ defmodule StatifierUI.Live.State do
   @spec resolution(t()) ::
           :live
           | {:quiescent, non_neg_integer()}
+          | {:final, non_neg_integer()}
           | {:carried, non_neg_integer(), non_neg_integer()}
           | {:before_first, non_neg_integer()}
   def resolution(%__MODULE__{} = state), do: Inspector.resolution(state.messages, opts(state))
