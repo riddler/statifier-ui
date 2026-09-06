@@ -8,9 +8,12 @@ defmodule StatifierUI.KinoTest do
   alias Statifier.Session
   alias StatifierUI.Fixtures
   alias StatifierUI.Fixtures.Bundle
+  alias StatifierUI.Inspector
+  alias StatifierUI.Kino.TraceStepper
   alias StatifierUI.Kino.Updater
   alias StatifierUI.Test.Support.Trace.SessionCase
   alias StatifierUI.Trace.Capture
+  alias StatifierUI.Trace.Manifest
   alias StatifierUI.Trace.Subscriber
 
   setup :configure_livebook_bridge
@@ -22,6 +25,22 @@ defmodule StatifierUI.KinoTest do
           <transition event="go" target="b"/>
       </state>
       <state id="b"/>
+  </scxml>
+  """
+
+  # A datamodel that moves, so the stepper's diff pane has something to
+  # report at each macrostep.
+  @counter """
+  <?xml version="1.0" encoding="UTF-8"?>
+  <scxml xmlns="http://www.w3.org/2005/07/scxml" initial="a" version="1.0">
+      <datamodel>
+          <data id="count" expr="41 + 1"/>
+      </datamodel>
+      <state id="a">
+          <transition event="bump" target="a">
+              <assign location="count" expr="count + 1"/>
+          </transition>
+      </state>
   </scxml>
   """
 
@@ -269,6 +288,99 @@ defmodule StatifierUI.KinoTest do
 
       assert text =~ "Could not read"
       assert text =~ ":enoent"
+    end
+
+    test "a trace with no macrostep still assembles, without a jump control" do
+      machine = SessionCase.compile!(@two_state)
+      {:ok, manifest} = Manifest.build(machine, "sess_kino_bare_trace")
+
+      assert %Kino.Layout{} =
+               StatifierUI.Kino.inspect_trace([manifest], nil, machine: machine)
+    end
+  end
+
+  describe "the persisted stepper (sui-2uz)" do
+    setup do
+      machine = SessionCase.compile!(@counter)
+
+      {:ok, session} =
+        Session.start_link(machine, trace: true, record: true, session_id: "sess_kino_step")
+
+      Session.send_event(session, "bump")
+      SessionCase.wait_for_macrostep(session, 2)
+      Session.send_event(session, "bump")
+      SessionCase.wait_for_macrostep(session, 3)
+
+      {:ok, messages} = Capture.record(session, machine, source: @counter)
+
+      frames =
+        Map.new([:note, :diagram, :datamodel, :diff, :log], fn key ->
+          {key, Kino.Frame.new(placeholder: false)}
+        end)
+
+      {:ok, stepper} =
+        TraceStepper.start_link(machine: machine, messages: messages, frames: frames)
+
+      %{stepper: stepper, messages: messages, machine: machine}
+    end
+
+    test "starts following the end of the recording", %{stepper: stepper} do
+      assert :sys.get_state(stepper).selection == :live
+    end
+
+    test "first, prev, next and live walk the recording", %{stepper: stepper} do
+      :ok = TraceStepper.scrub(stepper, :first)
+      assert :sys.get_state(stepper).selection == {:macrostep, 1}
+
+      :ok = TraceStepper.scrub(stepper, :next)
+      assert :sys.get_state(stepper).selection == {:macrostep, 2}
+
+      :ok = TraceStepper.scrub(stepper, :prev)
+      assert :sys.get_state(stepper).selection == {:macrostep, 1}
+
+      :ok = TraceStepper.scrub(stepper, :live)
+      assert :sys.get_state(stepper).selection == :live
+
+      # Prev from the end pins the newest macrostep rather than moving.
+      :ok = TraceStepper.scrub(stepper, :prev)
+      assert :sys.get_state(stepper).selection == {:macrostep, 3}
+    end
+
+    test "jump-to-event selects one macrostep directly", %{stepper: stepper} do
+      :ok = TraceStepper.select(stepper, 2)
+      assert :sys.get_state(stepper).selection == {:macrostep, 2}
+    end
+
+    test "the assembled layout carries the jump control, labelled by event",
+         %{messages: messages, machine: machine} do
+      assert %Kino.Layout{items: items} =
+               StatifierUI.Kino.inspect_trace(messages, nil, machine: machine)
+
+      # The controls row is a nested grid; the select is the one input in it.
+      select =
+        items
+        |> Enum.flat_map(fn
+          %Kino.Layout{items: nested} -> nested
+          _other -> []
+        end)
+        |> Enum.find(&match?(%Kino.Input{attrs: %{type: :select}}, &1))
+
+      assert %Kino.Input{attrs: %{options: options}} = select
+      assert {1, "1 - initialize"} in options
+      assert {2, "2 - bump"} in options
+    end
+
+    test "every pane renders at the selected point", %{stepper: stepper, messages: messages} do
+      :ok = TraceStepper.select(stepper, 2)
+      :ok = TraceStepper.refresh(stepper)
+      _settled = :sys.get_state(stepper)
+
+      # The frames are what the widget shows; the strings in them are the
+      # Inspector's, so assert on the reading rather than on the widget.
+      assert Inspector.datamodel(messages, selection: {:macrostep, 2}) =~ "43"
+      assert Inspector.datamodel_diff(messages, selection: {:macrostep, 2}) =~ "`42` | `43`"
+      assert Inspector.selection_note(messages, selection: {:macrostep, 2}) =~ "macrostep 2"
+      assert Process.alive?(stepper)
     end
   end
 end

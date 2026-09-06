@@ -51,11 +51,18 @@ if Code.ensure_loaded?(Kino) do
     alias StatifierUI.Fixtures
     alias StatifierUI.Fixtures.Bundle
     alias StatifierUI.Inspector
+    alias StatifierUI.Kino.TraceStepper
     alias StatifierUI.Kino.Updater
     alias StatifierUI.Trace.Capture
     alias StatifierUI.Trace.Message
     alias StatifierUI.Trace.Subscriber
     alias StatifierUI.TruthTable
+
+    # Four static buttons, built once: a control rebuilt per render would
+    # leak a listener per rebuild, and the moves are relative anyway, so
+    # nothing here has to know how many macrosteps exist. The Updater asks
+    # Inspector.step/3 where each move lands.
+    @scrubber_moves [{:first, "|< First"}, {:prev, "< Prev"}, {:next, "Next >"}, {:live, "Live"}]
 
     @doc """
     Renders `fixtures`' truth table - every expression evaluated across every
@@ -190,13 +197,25 @@ if Code.ensure_loaded?(Kino) do
         `:machine` has no chart to draw and returns a
         `Kino.Markdown` saying so rather than a diagram it cannot draw.
 
-    ## What this is not
+    ## Stepping it (sui-2uz)
 
-    **Static, at the trace's live tip.** There are no scrubber buttons and
-    no injection form: both drive a session, and a file has none. Stepping
-    through a persisted trace - and the datamodel diff between adjacent
-    steps that makes stepping worth having - is `sui-2uz`, deliberately
-    left to decide its own contract.
+    The layout carries the same **|< First / < Prev / Next > / Live**
+    scrubber `inspect/3` has, plus a **jump to** select listing every
+    macrostep by number and event, and a datamodel diff pane saying what
+    the selected macrostep changed. A persisted stream has no tip that
+    moves, so "Live" here means the end of the recording.
+
+    Stepping a recording asks the engine for nothing: every configuration
+    shown was stamped by the engine into the file, and a trace read back
+    through `StatifierUI.Trace.Capture.load/1` got its contents from
+    statifier ADR-0034 replay re-driving the core at capture time. The
+    controls move a *selection* over messages already in hand.
+
+    ## What this is still not
+
+    **There is no injection form.** Injection drives a session, and a file
+    has none. The `fixtures` argument stays accepted and unused for that
+    reason.
     """
     @spec inspect_trace(Path.t() | [Message.t()], Fixtures.t() | nil, keyword()) ::
             Kino.Layout.t() | Kino.Markdown.t()
@@ -218,21 +237,64 @@ if Code.ensure_loaded?(Kino) do
 
     @spec trace_layout(Statifier.Machine.t(), [Message.t()]) :: Kino.Layout.t()
     defp trace_layout(machine, messages) do
+      frames =
+        Map.new([:note, :diagram, :datamodel, :diff, :log], fn key ->
+          {key, Kino.Frame.new(placeholder: false)}
+        end)
+
+      stepper =
+        Kino.start_child!({TraceStepper, machine: machine, messages: messages, frames: frames})
+
+      TraceStepper.refresh(stepper)
+
       Kino.Layout.grid(
         [
           Kino.Markdown.new(Inspector.persisted_status(messages)),
-          Kino.Layout.grid(
-            [
-              Kino.Mermaid.new(Inspector.diagram(machine, messages)),
-              Kino.Markdown.new(Inspector.datamodel(messages))
-            ],
-            columns: 2
-          ),
-          Kino.Markdown.new(Inspector.event_log(messages))
+          stepper_ui(stepper, messages),
+          frames.note,
+          Kino.Layout.grid([frames.diagram, frames.datamodel], columns: 2),
+          frames.diff,
+          frames.log
         ],
         columns: 1
       )
     end
+
+    # The scrubber's four moves plus the jump-to-event select, over a list
+    # that cannot grow: a persisted trace's macrosteps are all present when
+    # the widget is built, so unlike the live scrubber the select can be
+    # populated once and never rebuilt.
+    @spec stepper_ui(pid(), [Message.t()]) :: Kino.Layout.t()
+    defp stepper_ui(stepper, messages) do
+      buttons =
+        Enum.map(@scrubber_moves, fn {move, label} ->
+          button = Kino.Control.button(label)
+          Kino.listen(button, fn _event -> TraceStepper.scrub(stepper, move) end)
+          button
+        end)
+
+      Kino.Layout.grid(buttons ++ jump_ui(stepper, messages), columns: length(buttons) + 1)
+    end
+
+    # `Kino.Input.select/3` raises on an empty option list, and a trace with
+    # no macrostep in it is a real case (a session.start and nothing else),
+    # so the control is omitted rather than fabricated.
+    @spec jump_ui(pid(), [Message.t()]) :: [Kino.Input.t()]
+    defp jump_ui(stepper, messages) do
+      case Inspector.points(messages) do
+        [] ->
+          []
+
+        points ->
+          input = Kino.Input.select("Jump to", Enum.map(points, &jump_option/1))
+          Kino.listen(input, fn %{value: n} -> TraceStepper.select(stepper, n) end)
+          [input]
+      end
+    end
+
+    @spec jump_option(Inspector.point()) :: {non_neg_integer(), String.t()}
+    defp jump_option(%{macrostep: n, event: nil}), do: {n, "#{n} - initialize"}
+    defp jump_option(%{macrostep: n, event: event}), do: {n, "#{n} - #{event}"}
 
     # The machine is the one thing a message list cannot always supply.
     # Preferring an explicit :machine over the embedded source matters for
@@ -272,12 +334,6 @@ if Code.ensure_loaded?(Kino) do
     end
 
     # -- scrubber pane -------------------------------------------------------
-
-    # Four static buttons, built once: a control rebuilt per render would
-    # leak a listener per rebuild, and the moves are relative anyway, so
-    # nothing here has to know how many macrosteps exist. The Updater asks
-    # Inspector.step/3 where each move lands.
-    @scrubber_moves [{:first, "|< First"}, {:prev, "< Prev"}, {:next, "Next >"}, {:live, "Live"}]
 
     @spec scrubber_ui(pid()) :: Kino.Layout.t()
     defp scrubber_ui(updater) do
@@ -462,6 +518,110 @@ if Code.ensure_loaded?(Kino) do
       Kino.Frame.render(state.frames.log, Kino.Markdown.new(Inspector.event_log(messages, opts)))
 
       %{state | timer: nil}
+    end
+  end
+
+  defmodule StatifierUI.Kino.TraceStepper do
+    @moduledoc """
+    The persisted inspector's render loop (`sui-2uz`): a `GenServer` holding
+    one immutable message list and the point in it the panes are showing.
+
+    `StatifierUI.Kino.Updater` is its live sibling. The two differ in
+    exactly one thing - where the messages come from. The updater re-reads
+    a `StatifierUI.Trace.Subscriber` on every render because the stream is
+    still growing; a persisted trace is complete when the widget is built,
+    so this holds the list and re-renders only when the selection moves.
+    Both ask `StatifierUI.Inspector` where a move lands and what each pane
+    should say, so the stepping vocabulary is one definition rather than
+    two.
+
+    Started via `Kino.start_child/1`, so re-evaluating the cell terminates
+    it. There is nothing to detach: no session, no subscriber, no monitor.
+    """
+
+    use GenServer
+
+    alias StatifierUI.Inspector
+
+    @doc "Renders every pane now."
+    @spec refresh(GenServer.server()) :: :ok
+    def refresh(server), do: GenServer.cast(server, :refresh)
+
+    @doc """
+    Moves the selection one scrubber step (`:first`, `:prev`, `:next`,
+    `:live`) and re-renders. On a persisted trace `:live` is the end of the
+    recording rather than a tip that moves.
+    """
+    @spec scrub(GenServer.server(), :live | :first | :prev | :next) :: :ok
+    def scrub(server, move), do: GenServer.cast(server, {:scrub, move})
+
+    @doc """
+    Jumps straight to macrostep `n` - what the "Jump to" select does, and
+    what a scrubber alone cannot do on a long recording.
+    """
+    @spec select(GenServer.server(), non_neg_integer()) :: :ok
+    def select(server, n) when is_integer(n) and n >= 0 do
+      GenServer.cast(server, {:select, n})
+    end
+
+    @doc false
+    @spec start_link(keyword()) :: GenServer.on_start()
+    def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
+
+    @impl GenServer
+    def init(opts) do
+      state = %{
+        machine: Keyword.fetch!(opts, :machine),
+        messages: Keyword.fetch!(opts, :messages),
+        frames: Keyword.fetch!(opts, :frames),
+        selection: Keyword.get(opts, :selection, :live)
+      }
+
+      {:ok, state}
+    end
+
+    @impl GenServer
+    def handle_cast(:refresh, state), do: {:noreply, render_panes(state)}
+
+    def handle_cast({:scrub, move}, state) do
+      selection = Inspector.step(state.selection, Inspector.points(state.messages), move)
+      {:noreply, render_panes(%{state | selection: selection})}
+    end
+
+    def handle_cast({:select, n}, state) do
+      {:noreply, render_panes(%{state | selection: {:macrostep, n}})}
+    end
+
+    @spec render_panes(map()) :: map()
+    defp render_panes(state) do
+      opts = [selection: state.selection]
+
+      Kino.Frame.render(
+        state.frames.note,
+        Kino.Markdown.new(Inspector.selection_note(state.messages, opts))
+      )
+
+      Kino.Frame.render(
+        state.frames.diagram,
+        Kino.Mermaid.new(Inspector.diagram(state.machine, state.messages, opts))
+      )
+
+      Kino.Frame.render(
+        state.frames.datamodel,
+        Kino.Markdown.new(Inspector.datamodel(state.messages, opts))
+      )
+
+      Kino.Frame.render(
+        state.frames.diff,
+        Kino.Markdown.new(Inspector.datamodel_diff(state.messages, opts))
+      )
+
+      Kino.Frame.render(
+        state.frames.log,
+        Kino.Markdown.new(Inspector.event_log(state.messages, opts))
+      )
+
+      state
     end
   end
 else

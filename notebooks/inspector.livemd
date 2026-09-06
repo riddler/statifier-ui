@@ -169,10 +169,13 @@ caught-up stream got there through statifier ADR-0034 replay.
    (`sui-dc7`), and the note keeps the two readings apart: a configuration
    the chart *exited* in is never worded as one it *settled* in.
 
-The datamodel explorer does **not** move with the scrubber - it always
-shows the current values. Time-travelling the datamodel needs a
-per-macrostep fold the explorer does not have yet; the diagram and the
-log are the pair this walk exercises.
+The datamodel explorer in **this** widget does not move with the
+scrubber - it always shows the current values. The per-macrostep fold
+exists (`StatifierUI.Inspector.datamodel/2` takes the same `:selection`
+every other read here does, `sui-2uz`), and the persisted stepper in step
+10 is built on it; wiring it into the live inspector's own pane is a
+separate change. Here the diagram and the log are the pair this walk
+exercises.
 
 ## 7. The form, including its error path
 
@@ -218,6 +221,46 @@ buffered trace - death is an observation, not a reset. (Because the
 session was started from this notebook with `start_link`, killing it may
 also take down the cell's evaluator; re-evaluate from step 3 to go
 again.)
+
+## 10. Step through the run after it is over
+
+Save the recording and reopen it. This is `StatifierUI.Trace.Capture`'s
+record / save / reload, and the reopened widget is a *stepper* rather
+than a snapshot.
+
+```elixir
+{:ok, messages} = StatifierUI.Trace.Capture.record(session, machine, source: xml)
+path = Path.join(System.tmp_dir!(), "authorization.jsonl")
+:ok = StatifierUI.Trace.Capture.save(messages, path)
+
+StatifierUI.Kino.inspect_trace(path)
+```
+
+**Expect:** the status header says `persisted` and reports no subscriber
+counts (there is no subscriber), and above the diagram sit the same four
+scrubber buttons plus a **Jump to** select listing every macrostep by
+number and event.
+
+1. Pick a macrostep from **Jump to**. Expect: the note, the diagram, the
+   event log's marked entry, **and the datamodel pane** all move to that
+   point together - unlike step 6, the values shown are the ones that
+   macrostep ended with, not the ones the run finished with.
+2. Read the **Datamodel changes in macrostep N** table below the panes.
+   Expect: one row per slot the step moved, with the value before and
+   after. A step that assigned nothing says so in words rather than
+   showing an empty table.
+3. Step to the initialize macrostep. Expect: each declared `<data expr>`
+   shows as a change from `:undefined` to its declared value - the
+   evaluation of the declaration is something the run did, and the diff
+   says so.
+4. Click **Next >** past the newest macrostep. Expect: the selection
+   returns to the end of the recording. A file has no tip that moves, so
+   "Live" here means the last thing that happened.
+
+Nothing in this step asks the engine for anything. Every configuration
+and every value came out of the file, and the file's contents were
+produced by statifier ADR-0034 replay re-driving the core at capture
+time. Stepping is a read of a shorter prefix of the same messages.
 
 ## Where to go next
 
