@@ -10,6 +10,34 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into a version section at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [0.8.0] 2026-09-05
+
+A minor. The expression editor's clause builder takes a `path_types`
+assign: a clause's operator list and value control come from the kind the
+host declares for the path rather than from the literal in the source, and
+a date-declared path offers relative-date candidates. The expression
+field's two mode switches also stop rendering run-together on a host page
+that ships no stylesheet. The trace wire format is untouched - version `1`,
+25 types - so a consumer taking `~> 0.8` re-pins nothing.
+
+### Added
+
+- `StatifierUI.Live.ExpressionInput.expression_input/1` takes a `:path_types`
+  assign, `%{path => kind | {:list, kind} | {:one_of, values}}`, which decides a
+  clause's operator list and value control from the kind the host declares
+  rather than from the literal in the source.
+- `StatifierUI.Expression.simple/2` takes a `:path_types` option, and each row
+  it returns carries `:declared_kind`, `:control_kind` and `:advisories`.
+- `StatifierUI.Expression.relative_date_candidates/0` returns the relative
+  dates a date-declared path offers.
+
+### Fixed
+
+- The expression field's two mode switches no longer render run-together on a
+  host page with no stylesheet: their container carries an inline
+  `display: inline-flex; gap: 0.5rem`, the one layout default this package
+  ships.
+
 ## [0.7.0] 2026-09-05
 
 A minor. The wire vocabulary grows to 25 types with
