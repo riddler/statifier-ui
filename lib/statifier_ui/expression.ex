@@ -132,6 +132,38 @@ defmodule StatifierUI.Expression do
   @type candidate :: %{label: String.t(), value: term()}
 
   @typedoc """
+  A kind a host declares for a datamodel path, as the `:path_types` map carries
+  it: one of this module's own `t:value_kind/0`s, or `{:one_of, values}` for a
+  path whose values the host enumerates.
+
+  `{:one_of, _}` is the caller's tag rather than a grammar kind - it is the
+  vocabulary a datamodel document uses, not one `Predicator.Vocabulary` names -
+  so the operators offered beside one are the operators of the kind its own
+  values are: binaries are `:string`, integers `:integer`, floats `:float`,
+  booleans `:boolean`, and an empty or mixed list falls back to `:string`.
+  Inferring from the host's own values keeps that judgement to arithmetic over
+  data the host supplied, rather than to a table about the grammar.
+  """
+  @type declared_kind :: value_kind() | {:one_of, [candidate() | term()]}
+
+  @typedoc """
+  Something worth telling an author about a clause, and never a reason to
+  refuse one.
+
+  `:reason` is `:value_kind` when the value in the source is not of the kind
+  the host declared for the path, read through the operator, and `:operator`
+  when the operator in the source is one the declared kind's list does not
+  offer - which is the very condition that keeps it offered anyway.
+  `:contains` never raises the second one: it takes its collection on the
+  left, so the path's declared kind says nothing about whether it belongs.
+
+  An advisory is `:info` and only `:info`. ADR-0007 rules out refusing or
+  rewriting an author's expression, so a declaration that disagrees with the
+  source is reported and nothing else.
+  """
+  @type advisory :: %{severity: :info, reason: :value_kind | :operator, message: String.t()}
+
+  @typedoc """
   One row of the picklist: everything a renderer needs to draw a
   field / operator / value line, and nothing it would have to compute itself.
 
@@ -145,6 +177,15 @@ defmodule StatifierUI.Expression do
   `t:operator/0` `:label` is the grammar's display phrase and `:lexeme` is the
   spelling. A dropdown draws `t:operator/0`'s `:label`; `:op_label` is what
   the expression carries.
+
+  `:value_kind` is what the value in the source *is*; `:declared_kind` is what
+  the host said the path holds, or `nil` when it said nothing; and
+  `:control_kind` is the one a renderer picks a control from. The three are
+  kept apart because they answer different questions and can disagree: a
+  declaration decides which operators are offered, but it never decides the
+  shape of a control, because a control that wrote a shape the source does not
+  have would rewrite the author's expression. When they disagree,
+  `:advisories` says so and nothing is changed.
   """
   @type row :: %{
           path: String.t(),
@@ -153,13 +194,29 @@ defmodule StatifierUI.Expression do
           op_label: String.t(),
           value: term(),
           value_kind: value_kind(),
+          declared_kind: declared_kind() | nil,
+          control_kind: value_kind(),
           value_source: String.t(),
           operators: [operator()],
-          candidates: [candidate()]
+          candidates: [candidate()],
+          advisories: [advisory()]
         }
 
   @default_vocabulary Predicator.Vocabulary
   @default_simple Predicator.Simple
+
+  # The dates offered beside a declared date path, as {label, units,
+  # direction}. Spelled here rather than in the component so the offer is
+  # testable without a browser, and filtered against the grammar's own units
+  # at call time rather than trusted at compile time.
+  @relative_dates [
+    {"1d ago", [{1, "d"}], :ago},
+    {"7d ago", [{7, "d"}], :ago},
+    {"30d ago", [{30, "d"}], :ago},
+    {"90d ago", [{90, "d"}], :ago},
+    {"7d from now", [{7, "d"}], :future},
+    {"30d from now", [{30, "d"}], :future}
+  ]
 
   @doc """
   Every completion available to an expression field: the declared paths first,
@@ -251,6 +308,21 @@ defmodule StatifierUI.Expression do
   no entry gets an empty list and the renderer falls back to a free-text value
   control.
 
+  `opts` also takes `:path_types` - a map from a clause's `:path` to the
+  `t:declared_kind/0` the host declares for it. A declaration decides which
+  operators the row offers, asked of the grammar exactly as an observed kind
+  is; it fills the candidate list for a `{:one_of, _}` path that
+  `:value_candidates` says nothing about, and offers
+  `relative_date_candidates/0` for a `:date` or `:datetime` one. It never
+  decides a control whose shape the source does not have, and it never
+  rewrites, coerces, or refuses anything: a declaration the source disagrees
+  with lands in `:advisories`. A path with no entry behaves exactly as it did
+  before there was a map at all.
+
+  Only the host knows its own datamodel, so nothing is read from one here.
+  The caller builds the map - `statifier_blocks`, or any host with a datamodel
+  document to read - which is why this package takes no dependency on one.
+
   When `simple_available?/0` is false - the resolved predicator has no
   `Predicator.Simple`, or the module the `:predicator_simple` key points at
   does not export all four of `from_source/1`, `to_source/1`, `operators/1`
@@ -282,12 +354,27 @@ defmodule StatifierUI.Expression do
       iex> {row.value_kind, Enum.map(row.candidates, & &1.value)}
       {{:list, :string}, ["payment", "review", "confirmation"]}
 
+      iex> {:ok, [row], nil} =
+      ...>   StatifierUI.Expression.simple("plan == 'pro'", path_types: %{"plan" => :boolean})
+      iex> {row.control_kind, Enum.map(row.operators, & &1.lexeme)}
+      {:boolean, ["==", "===", "!=", "!==", "CONTAINS"]}
+
+      iex> {:ok, [row], nil} =
+      ...>   StatifierUI.Expression.simple("amount >= 500", path_types: %{"amount" => :string})
+      iex> Enum.map(row.advisories, & &1.reason)
+      [:value_kind]
+
   """
   @spec simple(String.t(), keyword()) ::
           {:ok, [row()], connective()} | :outside | {:error, term()}
   def simple(source, opts \\ []) when is_binary(source) do
     if simple_available?() do
-      classify(simple_module(), source, Keyword.get(opts, :value_candidates, %{}))
+      classify(
+        simple_module(),
+        source,
+        Keyword.get(opts, :value_candidates, %{}),
+        Keyword.get(opts, :path_types, %{})
+      )
     else
       :outside
     end
@@ -367,6 +454,56 @@ defmodule StatifierUI.Expression do
           [candidate()]
   def value_candidates(candidates, path) when is_map(candidates) do
     candidates |> Map.get(path, []) |> Enum.map(&candidate/1)
+  end
+
+  @doc """
+  The relative dates offered beside a path a host declared `:date` or
+  `:datetime`.
+
+  A date declaration carries no value list of its own the way `{:one_of, _}`
+  does, and a date field with only a free-text control asks an author to spell
+  a grammar they should not have to know. So a small fixed set is offered
+  instead. Which dates those are is presentation, which ADR-0007's picklist
+  amendment leaves to the component rather than to the record; the set lives
+  here rather than in the component so it is testable without a browser, and a
+  host wanting different ones supplies `:value_candidates` for the path, which
+  wins.
+
+  Every entry is checked against `Predicator.Simple.duration_units/0` before it
+  is offered, so a unit the resolved grammar does not know is dropped rather
+  than written into a source string the writer would refuse.
+
+  Empty when `simple_available?/0` is false, and empty when the resolved module
+  predates `duration_units/0` - that function is deliberately **not** added to
+  `simple_available?/0`'s four-export guard, because a predicator that can
+  classify and write should lose the offered dates, not the whole picklist.
+
+  ## Examples
+
+      iex> StatifierUI.Expression.relative_date_candidates() |> Enum.map(& &1.label)
+      ["1d ago", "7d ago", "30d ago", "90d ago", "7d from now", "30d from now"]
+
+  """
+  @spec relative_date_candidates() :: [candidate()]
+  def relative_date_candidates do
+    module = simple_module()
+
+    if simple_available?() and function_exported?(module, :duration_units, 0) do
+      known = module.duration_units()
+      Enum.flat_map(@relative_dates, &relative_date_candidate(&1, known))
+    else
+      []
+    end
+  end
+
+  @spec relative_date_candidate({String.t(), [{pos_integer(), String.t()}], atom()}, [String.t()]) ::
+          [candidate()]
+  defp relative_date_candidate({label, units, direction}, known) do
+    if Enum.all?(units, fn {_amount, unit} -> unit in known end) do
+      [%{label: label, value: {:relative_date, units, direction}}]
+    else
+      []
+    end
   end
 
   @doc """
@@ -551,12 +688,12 @@ defmodule StatifierUI.Expression do
     Application.get_env(:statifier_ui, :predicator_simple, @default_simple)
   end
 
-  @spec classify(module(), String.t(), map()) ::
+  @spec classify(module(), String.t(), map(), map()) ::
           {:ok, [row()], connective()} | :outside | {:error, term()}
-  defp classify(module, source, candidates) do
+  defp classify(module, source, candidates, path_types) do
     case module.from_source(source) do
       {:ok, %{connective: connective, clauses: clauses}} ->
-        {:ok, Enum.map(clauses, &row(module, &1, candidates)), connective}
+        {:ok, Enum.map(clauses, &row(module, &1, candidates, path_types)), connective}
 
       :outside ->
         :outside
@@ -566,10 +703,12 @@ defmodule StatifierUI.Expression do
     end
   end
 
-  @spec row(module(), {[tuple()], atom(), term()}, map()) :: row()
-  defp row(module, {segments, op, value}, candidates) do
+  @spec row(module(), {[tuple()], atom(), term()}, map(), map()) :: row()
+  defp row(module, {segments, op, value}, candidates, path_types) do
     path = path_source(module, segments)
     kind = value_kind(value)
+    declared = Map.get(path_types, path)
+    {operators, kept?} = offered_operators(module, declared, kind, op)
 
     %{
       path: path,
@@ -578,11 +717,201 @@ defmodule StatifierUI.Expression do
       op_label: operator_label(module, op),
       value: value,
       value_kind: kind,
+      declared_kind: declared,
+      control_kind: control_kind(declared, kind),
       value_source: value_source(module, op, value),
-      operators: kind |> vocabulary_kind() |> module.operators() |> Enum.map(&operator/1),
-      candidates: value_candidates(candidates, path)
+      operators: operators,
+      candidates: row_candidates(candidates, path, declared),
+      advisories: advisories(declared, kind, op, kept?)
     }
   end
+
+  # Rule 1. The operator list is the declaration's own, asked of the grammar
+  # exactly as the observed kind is - this module still holds no table of which
+  # operators belong beside which kind, which is the local exception ADR-0007's
+  # sui-94o Note recorded as closed.
+  #
+  # The second half is the invariant `keep_current/3` holds for values, held
+  # one control to the left: the operator the expression actually carries is
+  # offered whatever the declaration says. Dropping it would leave a dropdown
+  # that cannot spell the row beneath it, and the author's own source would
+  # vanish from its own editor the moment a host declared a kind.
+  @spec offered_operators(module(), declared_kind() | nil, value_kind(), atom()) ::
+          {[operator()], boolean()}
+  defp offered_operators(module, declared, observed, op) do
+    offered =
+      declared
+      |> operator_kind(observed)
+      |> vocabulary_kind()
+      |> module.operators()
+      |> Enum.map(&operator/1)
+
+    if Enum.any?(offered, &(&1.op == op)) do
+      {offered, false}
+    else
+      {offered ++ [kept_operator(module, op)], true}
+    end
+  end
+
+  @spec operator_kind(declared_kind() | nil, value_kind()) :: value_kind()
+  defp operator_kind(nil, observed), do: observed
+  defp operator_kind({:one_of, values}, _observed), do: inferred_kind(values)
+  defp operator_kind(declared, _observed), do: declared
+
+  # The entry for an operator the narrowed list dropped, found the way
+  # `operator_label/2` finds one: over a kind whose list is known to carry it.
+  @spec kept_operator(module(), atom()) :: operator()
+  defp kept_operator(module, op) do
+    op
+    |> probe_kind()
+    |> module.operators()
+    |> Enum.find(&(&1.op == op))
+    |> operator()
+  end
+
+  # `{:one_of, _}` is the caller's tag, not a grammar kind, so it is reduced to
+  # the kind of the values the caller enumerated rather than to a fixed one.
+  # A mixed or empty list falls back to `:string`: it is the kind every value
+  # can at least be spelled as, and guessing narrower would offer an author
+  # fewer operators than their own data supports.
+  @spec inferred_kind([candidate() | term()]) :: value_kind()
+  defp inferred_kind([]), do: :string
+
+  defp inferred_kind(values) do
+    values
+    |> Enum.map(&declared_value_kind/1)
+    |> Enum.uniq()
+    |> case do
+      [single] -> single
+      kinds -> if Enum.all?(kinds, &(&1 in [:integer, :float])), do: :float, else: :string
+    end
+  end
+
+  @spec declared_value_kind(candidate() | term()) :: value_kind()
+  defp declared_value_kind(%{value: value}), do: declared_value_kind(value)
+  defp declared_value_kind(value) when is_boolean(value), do: :boolean
+  defp declared_value_kind(value) when is_integer(value), do: :integer
+  defp declared_value_kind(value) when is_float(value), do: :float
+  defp declared_value_kind(_value), do: :string
+
+  # Rule 2. The control follows the shape the value actually has. A scalar
+  # value is never handed a list control and a list value is never handed a
+  # scalar one, because either would write the other shape into the author's
+  # source - a multiselect over `plan == 'pro'` writes `plan == ['x']`, which
+  # is exactly the silent rewrite ADR-0007 rules out. A disagreement about
+  # shape is reported by an advisory instead of repaired.
+  @spec control_kind(declared_kind() | nil, value_kind()) :: value_kind()
+  defp control_kind(nil, observed), do: observed
+  defp control_kind({:one_of, _values}, observed), do: observed
+
+  defp control_kind(declared, observed) do
+    if list_kind?(declared) == list_kind?(observed), do: declared, else: observed
+  end
+
+  @spec list_kind?(value_kind()) :: boolean()
+  defp list_kind?({:list, _member}), do: true
+  defp list_kind?(_kind), do: false
+
+  # `:value_candidates` is the host's more specific statement about this path -
+  # it names the values *and* their labels - so it wins. A `{:one_of, _}`
+  # declaration fills the list in only when the host said nothing more
+  # specific, and a declared date path is offered the relative-date set,
+  # because a date has no enumerated values of its own.
+  @spec row_candidates(map(), String.t(), declared_kind() | nil) :: [candidate()]
+  defp row_candidates(candidates, path, declared) do
+    case value_candidates(candidates, path) do
+      [] -> declared_candidates(declared)
+      declared_by_host -> declared_by_host
+    end
+  end
+
+  @spec declared_candidates(declared_kind() | nil) :: [candidate()]
+  defp declared_candidates({:one_of, values}), do: Enum.map(values, &candidate/1)
+  defp declared_candidates(kind) when kind in [:date, :datetime], do: relative_date_candidates()
+
+  defp declared_candidates({:list, member}) when member in [:date, :datetime],
+    do: relative_date_candidates()
+
+  defp declared_candidates(_declared), do: []
+
+  # Rule 3. What kind the value beside this operator is expected to be. `IN`
+  # takes a list of the path's kind and `CONTAINS` takes one member of it -
+  # contains holds its collection on the LEFT (ADR-0007's sui-94o Note) - so
+  # comparing the declaration to the value without reading the operator would
+  # report a mismatch on two clauses that are exactly right.
+  @spec expected_kind(value_kind(), atom()) :: value_kind()
+  defp expected_kind(declared, :in), do: {:list, declared}
+  defp expected_kind({:list, member}, :contains), do: member
+  defp expected_kind(declared, _op), do: declared
+
+  @spec advisories(declared_kind() | nil, value_kind(), atom(), boolean()) :: [advisory()]
+  defp advisories(nil, _observed, _op, _kept?), do: []
+
+  defp advisories(declared, observed, op, kept?) do
+    kind = operator_kind(declared, observed)
+
+    value_advisory(expected_kind(kind, op), observed) ++ operator_advisory(kind, op, kept?)
+  end
+
+  @spec value_advisory(value_kind(), value_kind()) :: [advisory()]
+  defp value_advisory(expected, observed) do
+    if comparable(expected) == comparable(observed) do
+      []
+    else
+      [
+        %{
+          severity: :info,
+          reason: :value_kind,
+          message:
+            "this value is #{describe(observed)}, and the path is declared #{describe(expected)}"
+        }
+      ]
+    end
+  end
+
+  # An operator kept by `offered_operators/4` rather than offered by it is one
+  # the declared kind's list does not carry, which is usually worth saying.
+  #
+  # `:in` and `:contains` are the two exceptions, and they are not special
+  # cases for convenience. `Predicator.Simple.operators/1` is keyed on the kind
+  # of the value on the **right** of a clause, while a declaration describes
+  # the **path** on the left. For every other operator in the subset those are
+  # the same kind, so the question transfers; for these two they are not.
+  # `IN` takes a list of the path's kind on the right, so it is never in a
+  # scalar declaration's list and `step IN ['payment']` on a string path is
+  # exactly right. `CONTAINS` holds its collection on the left (ADR-0007's
+  # sui-94o Note), so `plan CONTAINS 'pro'` on a path declared a list of
+  # strings is exactly right too. Neither may be nagged about; both are still
+  # offered, by `offered_operators/4`.
+  @spec operator_advisory(value_kind(), atom(), boolean()) :: [advisory()]
+  defp operator_advisory(_kind, op, _kept?) when op in [:in, :contains], do: []
+  defp operator_advisory(_kind, _op, false), do: []
+
+  defp operator_advisory(kind, _op, true) do
+    [
+      %{
+        severity: :info,
+        reason: :operator,
+        message: "the path is declared #{describe(kind)}, which does not offer this operator"
+      }
+    ]
+  end
+
+  # `:integer` and `:float` are one kind to the grammar and a relative date is
+  # a datetime there, so an advisory that split them would report a
+  # disagreement the operators themselves do not have.
+  @spec comparable(value_kind()) :: term()
+  defp comparable({:list, member}), do: {:list, comparable(member)}
+  defp comparable(kind) when kind in [:integer, :float], do: :number
+  defp comparable(:relative_date), do: :datetime
+  defp comparable(kind), do: kind
+
+  @spec describe(value_kind() | nil) :: String.t()
+  defp describe(nil), do: "of no particular kind"
+  defp describe({:list, nil}), do: "a list"
+  defp describe({:list, member}), do: "a list of #{describe(member)}"
+  defp describe(:relative_date), do: "a relative date"
+  defp describe(kind), do: "#{kind}"
 
   # Every spelling below is asked of predicator rather than written out here,
   # so a picklist never shows text the writer would not produce: a path and a
@@ -692,9 +1021,20 @@ defmodule StatifierUI.Expression do
   defp value_kind({:relative_date, _units, _direction}), do: :relative_date
   defp value_kind(value), do: simple_module().value_kind(value)
 
-  @spec candidate(candidate() | String.t()) :: candidate()
+  @spec candidate(candidate() | term()) :: candidate()
   defp candidate(%{label: label, value: value}), do: %{label: label, value: value}
   defp candidate(value) when is_binary(value), do: %{label: value, value: value}
+
+  # A `{:one_of, _}` path's values are not always strings - a card-processing
+  # host enumerating retry counts declares integers - and a host that did not
+  # bother to label them still gets a usable list. A number and a boolean are
+  # shown the way they are spelled; anything else is shown rather than raised
+  # over, because a renderer that crashed on one odd candidate would take the
+  # whole editor with it.
+  defp candidate(value) when is_number(value) or is_boolean(value),
+    do: %{label: to_string(value), value: value}
+
+  defp candidate(value), do: %{label: inspect(value), value: value}
 
   @spec path_completion(String.t()) :: completion()
   defp path_completion(path) do
