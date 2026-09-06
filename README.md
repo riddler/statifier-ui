@@ -228,6 +228,51 @@ edit can render it directly:
 />
 ```
 
+### Declaring what a path holds
+
+A host that knows its datamodel can say so, and the field uses it: a declared
+kind decides which operators a picklist row offers, which control draws its
+value, and what literal the "add clause" button seeds a new row with. It never
+rewrites what the author already typed - a declaration that disagrees with the
+source renders an advisory beside the row and changes nothing.
+
+Declare it as a plain map:
+
+```heex
+<StatifierUI.Live.ExpressionInput.expression_input
+  id="rule-cond"
+  name="rule[cond]"
+  value={@cond}
+  candidates={["authorization.amount_cents", "card.brand"]}
+  path_types={%{
+    "authorization.amount_cents" => :number,
+    "card.brand" => {:one_of, ["visa", "mastercard", "amex"]}
+  }}
+/>
+```
+
+or hand over the datamodel document those kinds were declared in, and let the
+field project it through
+[`StatifierDatamodel.Index.path_types/1`](https://hexdocs.pm/statifier_datamodel):
+
+```heex
+<StatifierUI.Live.ExpressionInput.expression_input
+  id="rule-cond"
+  name="rule[cond]"
+  value={@cond}
+  candidates={["authorization.amount_cents", "card.brand"]}
+  document={@datamodel_document}
+/>
+```
+
+The two produce the same field for the same document. A non-empty `path_types`
+wins over a `document` when both are given, so a host can hand over its
+document and still override one path.
+
+`candidates` stays the host's own list either way: it is what the completion
+popup offers and what the picklist's field dropdown draws, and a host routinely
+offers fewer paths than its document declares.
+
 The field carries no event of its own. It renders an `<input>` with the `name`
 it was given, so an edit arrives through the `phx-change` of whatever form the
 host already has around it - which is also true of a completion the author

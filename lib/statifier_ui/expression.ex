@@ -133,18 +133,30 @@ defmodule StatifierUI.Expression do
 
   @typedoc """
   A kind a host declares for a datamodel path, as the `:path_types` map carries
-  it: one of this module's own `t:value_kind/0`s, or `{:one_of, values}` for a
-  path whose values the host enumerates.
+  it: one of this module's own `t:value_kind/0`s, `:number`, or
+  `{:one_of, values}` for a path whose values the host enumerates.
 
-  `{:one_of, _}` is the caller's tag rather than a grammar kind - it is the
-  vocabulary a datamodel document uses, not one `Predicator.Vocabulary` names -
-  so the operators offered beside one are the operators of the kind its own
-  values are: binaries are `:string`, integers `:integer`, floats `:float`,
-  booleans `:boolean`, and an empty or mixed list falls back to `:string`.
-  Inferring from the host's own values keeps that judgement to arithmetic over
-  data the host supplied, rather than to a table about the grammar.
+  `{:one_of, _}` and `:number` are the caller's tags rather than grammar kinds
+  - they are the vocabulary a datamodel document uses, not ones
+  `Predicator.Vocabulary` names.
+
+  For `{:one_of, _}` the operators offered beside one are the operators of the
+  kind its own values are: binaries are `:string`, integers `:integer`, floats
+  `:float`, booleans `:boolean`, and an empty or mixed list falls back to
+  `:string`. Inferring from the host's own values keeps that judgement to
+  arithmetic over data the host supplied, rather than to a table about the
+  grammar.
+
+  `:number` is `StatifierDatamodel.Index.path_types/1`'s own tag: a datamodel
+  document declares `integer` and `decimal` and the projection answers
+  `:number` for both, because the expression language draws no line between
+  them either. It is admitted here rather than translated at the seam so that
+  the projection's map is a `:path_types` map as it stands - the same map,
+  whether a host hands over its document or the projection of it. Nothing else
+  changes: `:number` is already the grammar's own word, so it asks for the same
+  operators `:integer` and `:float` ask for, and it compares equal to both.
   """
-  @type declared_kind :: value_kind() | {:one_of, [candidate() | term()]}
+  @type declared_kind :: value_kind() | :number | {:one_of, [candidate() | term()]}
 
   @typedoc """
   Something worth telling an author about a clause, and never a reason to

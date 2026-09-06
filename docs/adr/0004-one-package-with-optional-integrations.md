@@ -120,3 +120,43 @@ package, no umbrella.
   against, but forces LiveView into every Livebook host and Kino into every
   Phoenix host, contradicting "optional dependencies are genuinely
   optional" in this repo's conventions. Rejected.
+
+## Note (2026-09-06): `statifier_datamodel` is the second required dependency
+
+A dated note rather than an amendment, because no clause of the decision
+moves. There is still one hex package, `kino` and `phoenix_live_view` are
+still both optional and still guarded, the dependency arrow still points one
+way, the license is still MIT and the repository is still unported. Nothing
+above this line changes.
+
+The note exists because the decision's first bullet reads **"Core depends only
+on `statifier`"**, and as of sui-p6v that sentence is no longer literally
+true. `mix.exs` carries three required dependencies: `statifier`, `predicator`
+(declared directly since the completion source calls `Predicator.*` itself),
+and now `{:statifier_datamodel, "~> 0.1"}`.
+
+**Why this one is not the split the bullet guards against.** The bullet's
+subject is the *integration* axis - the thing this record exists to keep out
+of the core is a host environment's UI toolkit, which is why the two optional
+dependencies are named in the very next bullet and why "split later only under
+a real forcing function" is written in terms of an integration's footprint.
+`statifier_datamodel` is on the other axis entirely: it is a pure library with
+no dependencies of its own, no processes, and no integration surface. A
+Livebook host and a Phoenix host pay for it identically, which is exactly the
+asymmetry `optional: true` exists to prevent and the reason it would be the
+wrong tag here.
+
+**Why it is a dependency rather than a local reading.** The expression editor
+takes a datamodel *document* and needs the path-to-kind projection
+`StatifierDatamodel.Index.path_types/1` computes from it. sd owns that
+document's shape and that projection (sd-ADR-0001, decisions 7 and 11).
+Reading the document a second time in this package would be a drifting copy of
+someone else's contract - the same duplication `StatifierUI.Expression`
+already refuses for the predicator grammar, for the same reason: a rule
+restated is a rule that goes stale.
+
+**The consequence for a host.** One more package resolves, and no host is
+required to have a document: `:path_types` remains a plain map a host can
+supply with no document anywhere in sight, and it wins when both are given.
+The dependency is required so that the projection is always callable, not so
+that it is always called.
