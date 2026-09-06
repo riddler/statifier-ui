@@ -673,10 +673,10 @@ defmodule StatifierUI.InspectorTest do
 
       markdown = Inspector.event_log(messages, selection: {:macrostep, 2})
       assert markdown =~ "Macrostep 2: start"
-      assert markdown =~ "- shown in the diagram"
+      assert markdown =~ "- selected"
 
       # Exactly one entry is marked, and it is the open one.
-      assert markdown |> String.split("- shown in the diagram") |> length() == 2
+      assert markdown |> String.split("- selected") |> length() == 2
       assert markdown =~ ~r/<details open>\s*<summary>Macrostep 2:/
     end
 
@@ -684,7 +684,7 @@ defmodule StatifierUI.InspectorTest do
       {_machine, messages} = nested_messages("sess_insp_log_live")
 
       markdown = Inspector.event_log(messages)
-      refute markdown =~ "shown in the diagram"
+      refute markdown =~ "- selected"
       assert markdown =~ ~r/<details open>\s*<summary>Macrostep 3:/
     end
   end

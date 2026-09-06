@@ -16,7 +16,7 @@ if Code.ensure_loaded?(Kino) do
     **Live** - move the diagram from the live tip to any macrostep in the
     log and back. Selecting a macrostep draws the configuration that
     macrostep settled in, opens its entry in the event log, and marks that
-    entry `- shown in the diagram`; the note above the diagram says which
+    entry `- selected`; the note above the diagram says which
     point is on screen. `StatifierUI.Inspector` decides all of it, so the
     whole behaviour is testable without Kino - this module only wires
     buttons to `Updater.scrub/2`.

@@ -65,12 +65,14 @@ defmodule StatifierUI.EventLog.Markdown do
     * `:open` - which macrosteps start open when `:collapsible` is `true`:
       `:last` (the default, opens the highest-numbered macrostep), `:all`,
       `:none`, or a list of macrostep numbers.
-    * `:selected` - the macrostep number the diagram beside this log is
-      currently showing (sui-3gg), or `nil` (the default) when the diagram
-      is on the live tip. The selected macrostep's summary is suffixed
-      `- shown in the diagram`, which is the whole of the link between the
-      two panes: the log says which entry the picture belongs to. It is
-      only a marker - use `:open` to open that entry as well.
+    * `:selected` - the macrostep number that is selected (sui-3gg), or
+      `nil` (the default) when none is. The selected macrostep's summary is
+      suffixed `- selected`, the same mark `StatifierUI.Live`'s event log
+      uses (sui-jbw); it does not name a diagram, because a host may compose
+      this log with no diagram beside it. Where one is mounted - the Kino
+      inspector, Livebook - that entry is what the diagram draws, and the
+      mark is the whole of the link between the two panes. It is only a
+      marker - use `:open` to open that entry as well.
     * `:deep_link` - the host's APM URL template (ADR-0013, sui-4w2), e.g.
       `"https://apm.example.com/trace/{trace_id}?span={span_id}"`. A
       macrostep whose messages carry the wire format's `otel` key gets a
@@ -235,7 +237,7 @@ defmodule StatifierUI.EventLog.Markdown do
   end
 
   @spec selection_suffix(boolean()) :: String.t()
-  defp selection_suffix(true), do: " - shown in the diagram"
+  defp selection_suffix(true), do: " - selected"
   defp selection_suffix(false), do: ""
 
   # No template, no `otel` key, or ids that are not W3C Trace Context hex:
