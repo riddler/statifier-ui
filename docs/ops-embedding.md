@@ -359,13 +359,23 @@ Three consequences worth knowing before you wire it up:
 
 ## Styling and theming
 
-No CSS ships, and no component reads a CSS custom property, a `data-theme`,
-or a `prefers-color-scheme` of its own. That is the theming contract rather
-than a gap in it: every element carries a `statifier-ui-*` class and the
-engine's own document-order identities as `data-*` attributes, per ADR-0007's
-sync contract, and your stylesheet is the only thing that gives any of them a
-colour. A package that shipped its own tokens would have a palette to
-reconcile with yours; this one has none to reconcile.
+No stylesheet ships, and no component reads a CSS custom property, a
+`data-theme`, or a `prefers-color-scheme` of its own. That is the theming
+contract rather than a gap in it: every element carries a `statifier-ui-*`
+class and the engine's own document-order identities as `data-*` attributes,
+per ADR-0007's sync contract, and your stylesheet is the only thing that gives
+any of them a colour. A package that shipped its own tokens would have a
+palette to reconcile with yours; this one has none to reconcile.
+
+**One element carries a style attribute of its own**, and it is layout rather
+than theme. `.statifier-ui-expression-modes`, the container holding the
+expression field's two mode switches, renders with an inline
+`display: inline-flex; gap: 0.5rem`. HEEx drops the whitespace between two
+adjacent elements, so without it the two buttons abut and read as one
+run-together phrase on a page with no stylesheet at all (sui-aln). There is no
+colour, font or token in it, so there is still nothing to reconcile with your
+palette. It is an attribute, so it wins on specificity: adding to it through
+the class works as usual, and replacing `display` or `gap` needs `!important`.
 
 So a theme switch is yours end to end. Define your tokens wherever you
 already define them, redefine them under whatever your app scopes a theme

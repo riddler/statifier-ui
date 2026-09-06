@@ -75,6 +75,18 @@ if Code.ensure_loaded?(Phoenix.Component) do
     drag an author back out of the mode they picked. The server decides only
     the *default*, which is picklists when the source is inside the subset.
 
+    The two switches sit in a `statifier-ui-expression-modes` container, and
+    that container is the one element in this package that carries a style of
+    its own: an inline `display: inline-flex; gap: 0.5rem`. HEEx drops the
+    whitespace between two adjacent elements, so on a host page with no
+    stylesheet the two buttons abutted and read as one run-together phrase
+    (sui-aln). The default is layout only - no colour, no font, no token to
+    reconcile with a host's palette, so the theming contract in
+    `docs/ops-embedding.md` still holds. A host restyles the container through
+    the class as usual; because the default is an attribute it wins on
+    specificity, so a rule that replaces `display` or `gap` rather than adding
+    to them needs `!important`.
+
     Picklist mode needs the `StatifierUIExpressionPicklist` hook, because a
     control that writes source text has to write it into the input; a host
     that registers no hook gets the text field alone, the same degradation the
@@ -412,7 +424,11 @@ if Code.ensure_loaded?(Phoenix.Component) do
             </option>
           </datalist>
         </div>
-        <div :if={@picklist_hook} class="statifier-ui-expression-modes">
+        <div
+          :if={@picklist_hook}
+          class="statifier-ui-expression-modes"
+          style="display: inline-flex; gap: 0.5rem"
+        >
           <button
             type="button"
             class="statifier-ui-expression-switch"
