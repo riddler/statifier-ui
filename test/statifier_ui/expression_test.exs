@@ -1,3 +1,17 @@
+defmodule SimpleWithoutDurationUnits do
+  @moduledoc false
+  # A predicator that can classify and write but predates `duration_units/0`.
+  # It exports exactly the four functions `simple_available?/0` guards on, so
+  # the picklist stays available and only the offered relative dates go - the
+  # degradation `relative_date_candidates/0` holds one function narrower than
+  # the module-wide guard.
+
+  defdelegate from_source(source), to: Predicator.Simple
+  defdelegate to_source(simple), to: Predicator.Simple
+  defdelegate operators(kind), to: Predicator.Simple
+  defdelegate value_kind(value), to: Predicator.Simple
+end
+
 defmodule StatifierUI.ExpressionTest do
   # Not async: the degraded-source tests swap an application env key that the
   # completion source reads at call time.
@@ -494,6 +508,203 @@ defmodule StatifierUI.ExpressionTest do
     end
   end
 
+  describe "declared path kinds" do
+    test "a declared kind decides the operator list, and the grammar still answers it" do
+      {:ok, [row], nil} = Expression.simple("plan == 'pro'", path_types: %{"plan" => :boolean})
+
+      assert Enum.map(row.operators, & &1.op) == Enum.map(Expression.operators(:boolean), & &1.op)
+      refute :gt in Enum.map(row.operators, & &1.op)
+    end
+
+    test "an integer declaration offers exactly the integer operators" do
+      {:ok, [row], nil} = Expression.simple("plan == 'pro'", path_types: %{"plan" => :integer})
+
+      assert Enum.map(row.operators, & &1.op) == Enum.map(Expression.operators(:integer), & &1.op)
+    end
+
+    test "a list declaration offers the list operators only" do
+      {:ok, [row], nil} =
+        Expression.simple("step in ['payment']", path_types: %{"step" => {:list, :string}})
+
+      assert Enum.map(row.operators, & &1.op) == [:in]
+    end
+
+    test "the operator the source carries is offered even when the declaration would drop it" do
+      {:ok, [row], nil} =
+        Expression.simple("plan CONTAINS 'pro'", path_types: %{"plan" => {:list, :string}})
+
+      assert Enum.map(row.operators, & &1.op) == [:in, :contains]
+    end
+
+    test "a kept CONTAINS raises no operator advisory" do
+      {:ok, [row], nil} =
+        Expression.simple("plan CONTAINS 'pro'", path_types: %{"plan" => {:list, :string}})
+
+      assert row.advisories == []
+    end
+
+    test "a kept IN raises no operator advisory - it holds its collection on the right" do
+      {:ok, [row], nil} =
+        Expression.simple("step in ['payment']", path_types: %{"step" => :string})
+
+      assert :in in Enum.map(row.operators, & &1.op)
+      assert row.advisories == []
+    end
+
+    test "IN and CONTAINS are read through the operator, not against it" do
+      {:ok, [in_row], nil} =
+        Expression.simple("step IN ['payment']", path_types: %{"step" => :string})
+
+      {:ok, [contains_row], nil} =
+        Expression.simple("plan CONTAINS 'pro'", path_types: %{"plan" => {:list, :string}})
+
+      refute Enum.any?(in_row.advisories, &(&1.reason == :value_kind))
+      refute Enum.any?(contains_row.advisories, &(&1.reason == :value_kind))
+    end
+
+    test "an operator outside a declared kind is kept, and says so" do
+      {:ok, [row], nil} = Expression.simple("plan > 'pro'", path_types: %{"plan" => :boolean})
+
+      assert :gt in Enum.map(row.operators, & &1.op)
+      assert Enum.any?(row.advisories, &(&1.reason == :operator and &1.severity == :info))
+    end
+
+    test "a one_of declaration asks the grammar for the kind of its own values" do
+      integers = %{"amount" => {:one_of, [1, 2]}}
+      strings = %{"amount" => {:one_of, ["a"]}}
+      empty = %{"amount" => {:one_of, []}}
+
+      assert ops("amount == 1", integers) == Enum.map(Expression.operators(:integer), & &1.op)
+      assert ops("amount == 1", strings) == Enum.map(Expression.operators(:string), & &1.op)
+      assert ops("amount == 1", empty) == Enum.map(Expression.operators(:string), & &1.op)
+    end
+
+    test "a one_of declaration fills the candidate list when value_candidates has no entry" do
+      {:ok, [row], nil} =
+        Expression.simple("status == 'active'",
+          path_types: %{"status" => {:one_of, ["active", "pending"]}}
+        )
+
+      assert Enum.map(row.candidates, & &1.value) == ["active", "pending"]
+    end
+
+    test "value_candidates win over a one_of declaration for the same path" do
+      {:ok, [row], nil} =
+        Expression.simple("status == 'active'",
+          value_candidates: %{"status" => ["active", "settled"]},
+          path_types: %{"status" => {:one_of, ["pending"]}}
+        )
+
+      assert Enum.map(row.candidates, & &1.value) == ["active", "settled"]
+    end
+
+    test "a one_of value that is not a string is still labelled rather than raising" do
+      {:ok, [row], nil} =
+        Expression.simple("amount == 1", path_types: %{"amount" => {:one_of, [1, 2]}})
+
+      assert Enum.map(row.candidates, & &1.label) == ["1", "2"]
+    end
+
+    test "a date declaration offers the relative-date set" do
+      {:ok, [row], nil} =
+        Expression.simple("created_at == 1", path_types: %{"created_at" => :date})
+
+      assert row.candidates == Expression.relative_date_candidates()
+      assert row.candidates != []
+    end
+
+    test "every offered relative date uses a unit the grammar knows" do
+      known = Predicator.Simple.duration_units()
+
+      for %{value: {:relative_date, units, _direction} = value} <-
+            Expression.relative_date_candidates() do
+        assert Enum.all?(units, fn {_amount, unit} -> unit in known end)
+        assert {:ok, _written} = Expression.value_source(:equal_equal, value)
+      end
+    end
+
+    test "a value that disagrees with its declaration raises an advisory, not an error" do
+      assert {:ok, [row], nil} =
+               Expression.simple("amount >= 500", path_types: %{"amount" => :string})
+
+      assert [%{severity: :info, reason: :value_kind}] = row.advisories
+    end
+
+    test "an integer and a float do not disagree, because the grammar has one number kind" do
+      {:ok, [row], nil} = Expression.simple("amount >= 500", path_types: %{"amount" => :float})
+
+      assert row.advisories == []
+    end
+
+    test "a list value is not given a scalar declaration's control kind" do
+      {:ok, [row], nil} =
+        Expression.simple("plan == 'pro'", path_types: %{"plan" => {:list, :string}})
+
+      assert row.control_kind == :string
+      assert Enum.any?(row.advisories, &(&1.reason == :value_kind))
+    end
+
+    test "a list value is never given a scalar declaration's control kind" do
+      {:ok, [row], nil} =
+        Expression.simple("step in ['payment']", path_types: %{"step" => :string})
+
+      assert row.control_kind == {:list, :string}
+    end
+
+    test "a declared kind that agrees with the source raises nothing" do
+      {:ok, [row], nil} = Expression.simple("plan == 'pro'", path_types: %{"plan" => :string})
+
+      assert row.declared_kind == :string
+      assert row.control_kind == :string
+      assert row.advisories == []
+    end
+
+    test "a path the map says nothing about is untouched by the map" do
+      {:ok, [row], nil} = Expression.simple("plan == 'pro'", path_types: %{"other" => :boolean})
+
+      assert row.declared_kind == nil
+      assert row.advisories == []
+      assert row.control_kind == row.value_kind
+    end
+
+    test "no path_types is exactly today's row" do
+      sources = [
+        "plan == 'pro'",
+        "amount >= 500",
+        "step in ['payment', 'review']",
+        "status == 'active' AND amount >= 500"
+      ]
+
+      for source <- sources do
+        assert Expression.simple(source) == Expression.simple(source, path_types: %{})
+
+        {:ok, rows, _connective} = Expression.simple(source)
+
+        for row <- rows do
+          assert row.declared_kind == nil
+          assert row.advisories == []
+          assert row.control_kind == row.value_kind
+        end
+      end
+    end
+
+    test "an unusable predicator still degrades to :outside" do
+      Application.put_env(:statifier_ui, :predicator_simple, NotPredicatorSimple)
+      on_exit(fn -> Application.delete_env(:statifier_ui, :predicator_simple) end)
+
+      assert Expression.simple("plan == 'pro'", path_types: %{"plan" => :boolean}) == :outside
+      assert Expression.relative_date_candidates() == []
+    end
+
+    test "relative_date_candidates/0 is empty when the resolved module lacks duration_units/0" do
+      Application.put_env(:statifier_ui, :predicator_simple, SimpleWithoutDurationUnits)
+      on_exit(fn -> Application.delete_env(:statifier_ui, :predicator_simple) end)
+
+      assert Expression.simple_available?()
+      assert Expression.relative_date_candidates() == []
+    end
+  end
+
   describe "the degraded source (no Predicator.Simple)" do
     setup do
       Application.put_env(:statifier_ui, :predicator_simple, NotPredicatorSimple)
@@ -531,6 +742,12 @@ defmodule StatifierUI.ExpressionTest do
   # through `Predicator.Simple.to_source/1` and take the word between the path
   # and the value. It lives here, and only here, as the thing the vocabulary
   # read is checked against.
+  defp ops(source, path_types) do
+    {:ok, [row], nil} = Expression.simple(source, path_types: path_types)
+
+    Enum.map(row.operators, & &1.op)
+  end
+
   defp written_spelling(op) do
     value = if op == :in, do: {:list, [{:integer, 0}]}, else: {:integer, 0}
 
