@@ -121,7 +121,7 @@ package, no umbrella.
   Phoenix host, contradicting "optional dependencies are genuinely
   optional" in this repo's conventions. Rejected.
 
-## Note (2026-09-06): `statifier_datamodel` is the second required dependency
+## Note (2026-09-06): `statifier_datamodel` is the third required dependency
 
 A dated note rather than an amendment, because no clause of the decision
 moves. There is still one hex package, `kino` and `phoenix_live_view` are
@@ -130,10 +130,14 @@ way, the license is still MIT and the repository is still unported. Nothing
 above this line changes.
 
 The note exists because the decision's first bullet reads **"Core depends only
-on `statifier`"**, and as of sui-p6v that sentence is no longer literally
-true. `mix.exs` carries three required dependencies: `statifier`, `predicator`
-(declared directly since the completion source calls `Predicator.*` itself),
-and now `{:statifier_datamodel, "~> 0.1"}`.
+on `statifier`"**, and `mix.exs` now carries three required dependencies:
+`statifier`, `predicator`, and `{:statifier_datamodel, "~> 0.1"}`.
+
+That bullet stopped being literally true on 2026-08-26, not with this note:
+dce46f9 declared `predicator` directly, because `lib/` calls `Predicator.*`
+itself and a dependency a module compiles against does not belong to a
+transitive edge. What sui-p6v adds is the second such dependency, and the
+first occasion anyone wrote the divergence down.
 
 **Why this one is not the split the bullet guards against.** The bullet's
 subject is the *integration* axis - the thing this record exists to keep out
@@ -149,7 +153,8 @@ wrong tag here.
 **Why it is a dependency rather than a local reading.** The expression editor
 takes a datamodel *document* and needs the path-to-kind projection
 `StatifierDatamodel.Index.path_types/1` computes from it. sd owns that
-document's shape and that projection (sd-ADR-0001, decisions 7 and 11).
+document's shape and that projection (statifier_datamodel ADR-0001, decisions
+7 and 11).
 Reading the document a second time in this package would be a drifting copy of
 someone else's contract - the same duplication `StatifierUI.Expression`
 already refuses for the predicator grammar, for the same reason: a rule
