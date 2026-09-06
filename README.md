@@ -345,7 +345,7 @@ labeled **Live-only** rather than presenting a partial stream as whole.
 A scrubber above the diagram - **|< First**, **< Prev**, **Next >**, **Live** -
 moves the diagram from the live tip to any macrostep in the event log and back.
 Selecting a macrostep draws the configuration that macrostep settled in, opens
-its entry in the log and marks it *shown in the diagram*, and prints a line
+its entry in the log and marks it *selected*, and prints a line
 saying which point is on screen. Nothing is recomputed to do it: every
 configuration shown was stamped by the engine on a `trace.macrostep_stable`,
 and a caught-up stream got there through replay, which re-drives the core

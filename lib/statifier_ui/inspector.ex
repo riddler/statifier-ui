@@ -43,7 +43,7 @@ defmodule StatifierUI.Inspector do
   Every fold function takes a `:selection`, which is `:live` (the default,
   the behaviour above) or `{:macrostep, n}`. Under a selection the diagram
   shows the configuration macrostep `n` settled in, the event log marks
-  that macrostep's entry `- shown in the diagram` and opens it, and
+  that macrostep's entry `- selected` and opens it, and
   `selection_note/2` renders the line that says which point is on screen.
   That is the whole of the link between the two panes.
 
@@ -356,8 +356,8 @@ defmodule StatifierUI.Inspector do
 
   @doc """
   Markdown for the event log pane: `StatifierUI.EventLog.build/1` rendered
-  collapsible. The selected macrostep is opened and marked `- shown in the
-  diagram`; with no selection the last macrostep is opened, as before. A
+  collapsible. The selected macrostep is opened and marked `- selected`;
+  with no selection the last macrostep is opened, as before. A
   build failure renders as a visible error line rather than raising - the
   inspector keeps showing the other panes.
   """

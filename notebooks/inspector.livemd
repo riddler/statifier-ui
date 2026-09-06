@@ -110,8 +110,8 @@ StatifierUI.Kino.inspect(session, fixtures, source: xml)
 5. **Injection pane** - one button per fixture event, then a free-form
    name/payload form.
 6. **Event log** - macrostep 1 (the initialize burst), collapsed except
-   the last macrostep, and nothing marked "shown in the diagram" while
-   the scrubber is live.
+   the last macrostep, and nothing marked "- selected" while the
+   scrubber is live.
 
 ## 5. Walk the chart from the palette
 
@@ -151,7 +151,7 @@ caught-up stream got there through statifier ADR-0034 replay.
 1. Click **|< First**. Expect: the note reads **Showing macrostep 1
    (initialize), at its quiescent configuration**, the diagram highlights
    `pending`, and macrostep 1's entry in the log is open and suffixed
-   **- shown in the diagram**. Exactly one entry carries that suffix.
+   **- selected**. Exactly one entry carries that suffix.
 2. Click **Next >** repeatedly. Expect: the note and the marked log entry
    advance together, macrostep by macrostep; the highlight follows what
    each macrostep settled in (so it sits on `pending` through the

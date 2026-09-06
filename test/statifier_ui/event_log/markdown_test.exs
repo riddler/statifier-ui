@@ -257,7 +257,7 @@ defmodule StatifierUI.EventLog.MarkdownTest do
     test "marks only the selected macrostep's summary", %{log: log} do
       lines = rendered_lines(log, selected: 1)
 
-      marked = Enum.filter(lines, &(&1 =~ "shown in the diagram"))
+      marked = Enum.filter(lines, &(&1 =~ "- selected"))
 
       assert length(marked) == 1
       assert hd(marked) =~ "Macrostep 1:"
@@ -269,22 +269,22 @@ defmodule StatifierUI.EventLog.MarkdownTest do
 
       assert marked ==
                String.replace_suffix(plain, "</summary>", "") <>
-                 " - shown in the diagram</summary>"
+                 " - selected</summary>"
     end
 
     test "no selection marks nothing", %{log: log} do
-      refute Enum.any?(rendered_lines(log), &(&1 =~ "shown in the diagram"))
-      refute Enum.any?(rendered_lines(log, selected: nil), &(&1 =~ "shown in the diagram"))
+      refute Enum.any?(rendered_lines(log), &(&1 =~ "- selected"))
+      refute Enum.any?(rendered_lines(log, selected: nil), &(&1 =~ "- selected"))
     end
 
     test "a selection naming no macrostep in the log marks nothing", %{log: log} do
-      refute Enum.any?(rendered_lines(log, selected: 99), &(&1 =~ "shown in the diagram"))
+      refute Enum.any?(rendered_lines(log, selected: 99), &(&1 =~ "- selected"))
     end
 
     test "the marker survives collapsible: false", %{log: log} do
       lines = rendered_lines(log, collapsible: false, selected: 2)
 
-      assert Enum.any?(lines, &(&1 =~ "Macrostep 2:" and &1 =~ "shown in the diagram"))
+      assert Enum.any?(lines, &(&1 =~ "Macrostep 2:" and &1 =~ "- selected"))
     end
   end
 
@@ -317,7 +317,7 @@ defmodule StatifierUI.EventLog.MarkdownTest do
           "2"
         )
 
-      assert summary =~ "shown in the diagram - [trace]("
+      assert summary =~ "selected - [trace]("
     end
 
     test "no option renders exactly what it rendered before", %{messages: messages} do

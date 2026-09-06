@@ -207,11 +207,10 @@ StatifierUI.Inspector.selection_note(messages,
 ```
 
 The event log appends `- [trace](...)` to the summary line of every
-macrostep that carries correlation, after the `- shown in the diagram`
-marker when both apply; `selection_note/2` appends `[open trace](...)` for
-the macrostep on screen, leaving the quiescent and carried-forward wording
-exactly as it was. Building the links directly, without a renderer, is
-`for_log/2`:
+macrostep that carries correlation, after the `- selected` marker when both
+apply; `selection_note/2` appends `[open trace](...)` for the macrostep on
+screen, leaving the quiescent and carried-forward wording exactly as it was.
+Building the links directly, without a renderer, is `for_log/2`:
 
 ```elixir
 links = StatifierUI.EventLog.DeepLink.for_log(log, StatifierUI.EventLog.DeepLink.from_opts(deep_link: template))
