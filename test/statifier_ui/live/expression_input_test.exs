@@ -446,6 +446,195 @@ defmodule StatifierUI.Live.ExpressionInputTest do
     end
   end
 
+  describe "declared path kinds" do
+    test "no path_types renders exactly what the assign-less call renders" do
+      paths = ["plan", "status", "amount", "step"]
+
+      for source <- [
+            "plan == 'pro'",
+            "status == 'active' AND amount >= 500",
+            "step IN ['payment']",
+            "len(plan) > 0",
+            "amount >= >="
+          ] do
+        without = picklist_html(source, paths)
+
+        assert without == typed_html(source, paths, %{}, %{}),
+               "path_types: %{} differed from no assign for #{inspect(source)}"
+
+        assert without == typed_html(source, paths, %{}, %{"unrelated" => :integer}),
+               "an unrelated declaration differed from no assign for #{inspect(source)}"
+      end
+    end
+
+    test "a boolean path renders the two-option control the component already has" do
+      html = typed_html("plan == 'pro'", ["plan"], %{}, %{"plan" => :boolean})
+
+      assert html =~ ~s(data-value-kind="select")
+      assert html =~ ~s(value="plan == true")
+      assert html =~ ~s(value="plan == false")
+      assert html =~ ~s(value="plan == &#39;pro&#39;" selected)
+    end
+
+    test "a one_of path renders a select" do
+      html =
+        typed_html("status == 'active'", ["status"], %{}, %{
+          "status" => {:one_of, ["active", "pending"]}
+        })
+
+      assert html =~ ~s(data-value-kind="select")
+      assert html =~ ~s(value="status == &#39;pending&#39;")
+    end
+
+    test "an integer path offers the integer operators" do
+      html = typed_html("amount >= 500", ["amount"], %{}, %{"amount" => :integer})
+
+      labels = op_labels(html)
+      assert labels != []
+      assert Enum.sort(labels) == Enum.sort(Enum.map(Expression.operators(:integer), & &1.label))
+    end
+
+    test "a boolean path offers no ordered comparison" do
+      html = typed_html("plan == 'pro'", ["plan"], %{}, %{"plan" => :boolean})
+
+      labels = op_labels(html)
+      grammar = Enum.map(Expression.operators(:boolean), & &1.label)
+
+      assert Enum.sort(labels) == Enum.sort(grammar)
+      refute ">" in labels
+      gt_label = Expression.operators(:integer) |> Enum.find(&(&1.op == :gt)) |> Map.get(:label)
+      refute gt_label in labels
+    end
+
+    test "the operator in the source is never dropped from the dropdown" do
+      html =
+        typed_html("plan CONTAINS 'pro'", ["plan"], %{}, %{"plan" => {:list, :string}})
+
+      assert html =~ ~s(value="plan CONTAINS &#39;pro&#39;" selected)
+      assert html =~ "is one of"
+    end
+
+    test "the declared kind is stamped on the clause row" do
+      integer_html = typed_html("amount >= 500", ["amount"], %{}, %{"amount" => :integer})
+      assert integer_html =~ ~s(data-declared-kind="integer")
+
+      list_html = typed_html("plan CONTAINS 'pro'", ["plan"], %{}, %{"plan" => {:list, :string}})
+      assert list_html =~ ~s(data-declared-kind="list:string")
+
+      one_of_html =
+        typed_html("status == 'active'", ["status"], %{}, %{
+          "status" => {:one_of, ["active", "pending"]}
+        })
+
+      assert one_of_html =~ ~s(data-declared-kind="one-of")
+
+      refute typed_html("plan == 'pro'", ["plan"], %{}, %{}) =~ "data-declared-kind"
+    end
+
+    test "a date path offers the relative-date set" do
+      html = typed_html("created_at >= 500", ["created_at"], %{}, %{"created_at" => :date})
+
+      assert html =~ ~s(value="created_at &gt;= 7d ago")
+    end
+
+    test "a list declaration on a list value reaches the multiselect" do
+      with_candidates =
+        typed_html("step IN ['payment']", ["step"], %{"step" => ["payment", "review"]}, %{
+          "step" => {:list, :string}
+        })
+
+      assert with_candidates =~ ~s(data-value-kind="multiselect")
+
+      without_candidates =
+        typed_html("step IN ['payment']", ["step"], %{}, %{"step" => {:list, :string}})
+
+      assert without_candidates =~ ~s(data-value-kind="readonly")
+    end
+
+    test "a list declaration on a scalar value does not" do
+      html = typed_html("plan == 'pro'", ["plan"], %{}, %{"plan" => {:list, :string}})
+
+      assert html =~ ~s(data-value-kind="text")
+      refute html =~ ~s(data-value-kind="multiselect")
+    end
+
+    test "a disagreement is advisory and nothing else" do
+      html = typed_html("amount >= 500", ["amount"], %{}, %{"amount" => :string})
+
+      assert html =~ ~s(data-advisory="value-kind")
+      assert html =~ ~s(data-severity="info")
+      assert html =~ ~s(data-subset="inside")
+      assert html =~ ~s(data-mode="picklist")
+      assert html =~ ~s(value="amount &gt;= 500")
+    end
+
+    test "an advisory never appears for an agreeing declaration" do
+      html = typed_html("amount >= 500", ["amount"], %{}, %{"amount" => :integer})
+
+      refute html =~ "data-advisory"
+    end
+
+    test "value_candidates still win over a one_of for the same path" do
+      html =
+        typed_html("status == 'active'", ["status"], %{"status" => ["active", "settled"]}, %{
+          "status" => {:one_of, ["active", "pending"]}
+        })
+
+      assert html =~ ~s(value="status == &#39;settled&#39;")
+      refute html =~ ~s(value="status == &#39;pending&#39;")
+    end
+
+    test "the sui-ivh recoverability property survives a declaration" do
+      path_types = %{
+        "plan" => :string,
+        "status" => :string,
+        "amount" => :integer,
+        "risk" => :integer,
+        "verdict" => :string
+      }
+
+      for source <- [
+            "plan == 'pro'",
+            "status == 'active' AND amount >= 500",
+            "risk >= 70 OR verdict == 'review'"
+          ] do
+        controls =
+          source
+          |> typed_html(["plan", "status", "amount", "risk", "verdict"], %{}, path_types)
+          |> picklist_controls()
+          |> Enum.reject(& &1.multiple?)
+
+        assert controls != []
+
+        for control <- controls do
+          values = Enum.map(control.options, & &1.value)
+          marked = Enum.filter(control.options, & &1.selected?)
+
+          assert source in values,
+                 "the #{control.role} control offers no option spelling #{inspect(source)}"
+
+          assert [%{value: ^source}] = marked,
+                 "the #{control.role} control marks #{inspect(Enum.map(marked, & &1.value))}"
+        end
+      end
+    end
+  end
+
+  defp op_labels(html) do
+    ~r{<option[^>]*\btitle="[^"]*"[^>]*>\s*([^<]*?)\s*</option>}
+    |> Regex.scan(html)
+    |> Enum.map(fn [_all, label] -> label end)
+  end
+
+  defp typed_html(value, candidates, value_candidates, path_types) do
+    seam_html(%{
+      value: value,
+      candidates: candidates,
+      value_candidates: value_candidates,
+      path_types: path_types
+    })
+  end
+
   # The rendered controls, read back the way a browser would see them. Parsing
   # is regex rather than a DOM library because the toolchain here deliberately
   # carries neither Node nor an HTML parser (see CLAUDE.md).
