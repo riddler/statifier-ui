@@ -230,3 +230,62 @@ accepted.
 
 No decision moves, no clause is edited, and no text above this line changes.
 Filed with `sui-wqr`, campaign 027's condition-editor arc.
+
+---
+
+## Note (2026-09-06): where the bundle check ended up living
+
+A dated note rather than an amendment, because no clause of the decision
+moves. JavaScript still ships as source under `assets/`, the host's bundler
+still compiles it, the editor is still CodeMirror 6, the precompiled
+`priv/static` bundle is still the documented fallback and still not the
+default, the toolchain stays Node-free, and **the gate still never bundles**.
+Nothing above this line changes.
+
+The Consequences above left one thing open by naming it as a future: this
+repository "cannot fully verify the JS end-to-end in its gate ... an example
+host app, when one exists, is the natural place to catch it earlier". That
+host now exists, and this note records that the check was built there rather
+than here.
+
+**Where it lives.** `statifier_examples`, the family's example Phoenix host,
+runs it. Its `.github/workflows/ci.yml` carries a job named **Assets bundle**,
+separate from the job that runs its own quality gate, whose one substantive
+step is **Bundle the JavaScript**, running `mix assets.bundle`. That alias is
+`esbuild.install --if-missing` + `compile` + `esbuild statifier_examples`:
+esbuild only, deliberately, because the failure being hunted is a dependency's
+`assets/js` that no longer bundles, and the Tailwind half of that app's
+`assets.build` never reads the JavaScript. esbuild resolves the bare
+specifiers in the host's `assets/js/app.js` through `NODE_PATH`, which that
+app points at its own `deps/`, so the file being bundled is this package's
+real `assets/js/index.js` as delivered.
+
+**Why there and not here.** The alternative was an esbuild smoke inside this
+repository's gate, and that is not a note-sized change: it contradicts the
+Decision's own words, "This repository's toolchain stays Node-free. Shipping
+source means the gate never bundles", which `mise.toml`, `CLAUDE.md` and
+this repository's own CI workflow each restate. Moving that clause would take
+an amendment written from an operator ruling, and none was sought, because the
+record had already named a cheaper place that costs this repository nothing.
+The host was already importing `StatifierUIHooks` from `assets/js/index.js`
+and already carried esbuild; what was missing was only that its CI ran the
+bundle.
+
+**What the check does and does not cover.** A syntax error or an unresolvable
+import anywhere in this package's `assets/js` exits that job non-zero, which
+is the thing the Consequences said this repository's gate could not see. Two
+limits are worth stating rather than discovering. First, it is a *bundle*, not
+a test: esbuild resolving and parsing every module says nothing about whether
+a hook behaves correctly at runtime, which is still exercised the way this
+record already describes, through what the LiveComponents render. Second, the
+example host takes `{:statifier_ui, "~> 0.8"}` from hex, so the version it
+bundles is the last published one, not this repository's `main`. The check
+therefore catches a broken `assets/js` on the host's next CI run after a
+release or a deliberate pin, not on the pull request in this repository that
+introduced it. That is a later warning than a gate stage would give and an
+earlier one than a downstream user's build, and it is the whole of what the
+"price of the thin toolchain" now buys.
+
+No decision moves, no clause is edited, and no text above this line changes.
+Filed with `sui-l3u`; the check itself is `statifier_examples` PR 65, campaign
+033's fill lane.
