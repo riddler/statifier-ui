@@ -10,6 +10,76 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into a version section at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [0.9.0] 2026-09-06
+
+A minor, and the release that gives this package a required runtime
+dependency: `statifier_datamodel ~> 0.1`, which a host adding
+`statifier_ui 0.9.0` pulls in. The expression editor takes a decoded datamodel
+`:document` and projects its declared path types instead of needing the host to
+assemble `:path_types` by hand. `StatifierUI.Live.State.configuration_ids/1`
+answers the selected configuration as the chart's own state ids rather than
+wire-format indexes. `StatifierUI.Kino.inspect_trace/3` is a stepper over a
+persisted trace, with a pane saying what each macrostep changed in the
+datamodel. And the diagram's active-configuration highlight takes an
+`:active_style`, so a host under a dark theme can restyle it. The trace wire
+format is untouched - version `1`, 25 types - so a consumer taking `~> 0.9`
+re-pins nothing.
+
+### Added
+
+- `StatifierUI.Kino.inspect_trace/3` is a stepper rather than a snapshot: the
+  reopened trace gets the **First / Prev / Next / Live** scrubber, a **Jump
+  to** select listing every macrostep by number and event, and a pane saying
+  what the selected macrostep changed in the datamodel.
+- `StatifierUI.Inspector.datamodel_diff/2`: what one macrostep changed in the
+  datamodel, as a Markdown table.
+- `StatifierUI.DatamodelExplorer.Diff.between/2` and
+  `StatifierUI.DatamodelExplorer.Diff.Markdown.render/2`: the pure comparison
+  behind that pane, over two datamodel explorer panes. A slot missing on one
+  side is `:absent`, so `nil` and `:undefined` stay values.
+- `StatifierUI.Diagram.render/3` takes `:active_style`, which decides how the
+  active-configuration highlight is styled: `:default` (the shipped light
+  palette, unchanged), `:none` (no `classDef` at all, so the host's own
+  stylesheet or Mermaid theme reaches the `active` class the nodes still
+  carry), or a `classDef` body as a binary. A host under a dark theme no
+  longer has to post-process the Mermaid source to restyle the highlight.
+- `StatifierUI.Inspector.diagram/3` accepts the same `:active_style` option,
+  and `StatifierUI.Live.diagram/1` and `ops_view/1` the same `active_style`
+  attribute.
+- `StatifierUI.Live.State.configuration_ids/1` and
+  `StatifierUI.Inspector.active_configuration_ids/2`: the configuration the
+  current selection implies, as the chart's own state ids rather than the wire
+  format's document-order indexes, resolved through the stream's own
+  `session.start` manifest. A host drawing its own diagram no longer has to
+  parse that manifest. A stream carrying none - the late-attach case - answers
+  `{:error, :no_manifest}`; the index reads are unchanged there.
+- `StatifierUI.Inspector.active_invokes/2`: the invocations live at that same
+  point, as `{state_id, invoke_type | nil}`, folded from the `effect.invoke`
+  and `effect.cancel_invoke` the engine already stamps.
+- `StatifierUI.Live.ExpressionInput.expression_input/1` takes a `:document`
+  assign: a decoded datamodel document, projected through
+  `StatifierDatamodel.Index.path_types/1` for the kinds `:path_types` would
+  otherwise carry. A non-empty `:path_types` wins over it.
+- `t:StatifierUI.Expression.declared_kind/0` admits `:number`, the tag that
+  projection answers for a document's `integer` and `decimal` alike.
+
+### Changed
+
+- `StatifierUI.Inspector.datamodel/2` takes the `:selection` every other fold
+  there takes, so the datamodel pane can show the values as they stood at a
+  selected macrostep. `datamodel/1` is unchanged.
+- Adds a required dependency on `statifier_datamodel ~> 0.1` (see ADR-0004's
+  2026-09-06 note).
+- "Add clause" seeds the new row's literal from the path's declared kind - `0`
+  for a number, `true` for a boolean, today for a date, the first value of a
+  `{:one_of, _}`, a `CONTAINS` clause for a list - instead of always seeding an
+  empty string.
+
+### Fixed
+
+- Adding a clause on a path declared `:number` no longer produces a row that
+  immediately carries a value-kind advisory about its own seed.
+
 ## [0.8.0] 2026-09-05
 
 A minor. The expression editor's clause builder takes a `path_types`
