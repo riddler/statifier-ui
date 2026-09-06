@@ -759,7 +759,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     defp value_select(rows, connective, canonical, index, row, candidates) do
       options =
         Enum.flat_map(candidates, fn candidate ->
-          with {:ok, term} <- term(row.control_kind, style(row), candidate.value),
+          with {:ok, term} <- term(option_kind(row), style(row), candidate.value),
                written when is_binary(written) <-
                  swap(rows, connective, index, &%{&1 | value: term}) do
             [%{label: candidate.label, source: written, selected: written == canonical}]
@@ -770,6 +770,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       %{kind: :select, options: keep_current(options, canonical, row)}
     end
+
+    # A `{:one_of, _}` row's control kind is the kind of the value it happens
+    # to hold, because the declaration says only that it is one of the list. A
+    # list mixing the grammar's two numeric literals is therefore read through
+    # whichever of the two the author's own value is, and every option of the
+    # other spelling drops out. The options of such a select are the
+    # declaration's own and both literals are spellable, so the numeric kinds
+    # are asked as `:number` while the list is built. Only the list widens -
+    # `control_kind` is untouched, so no control changes shape and no data
+    # attribute moves (sui-9ik).
+    @spec option_kind(Expression.row()) :: Expression.value_kind()
+    defp option_kind(%{declared_kind: {:one_of, _values}, control_kind: kind}), do: widen(kind)
+    defp option_kind(row), do: row.control_kind
+
+    @spec widen(Expression.value_kind()) :: Expression.value_kind()
+    defp widen({:list, member}), do: {:list, widen(member)}
+    defp widen(kind) when kind in [:integer, :float], do: :number
+    defp widen(kind), do: kind
 
     # An author's own value is never dropped from the list because the host
     # did not declare it. The field renders what is there and offers the rest.
@@ -798,7 +816,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
 
       options =
         Enum.flat_map(row.candidates, fn candidate ->
-          with {:ok, term} <- term(row.control_kind, style, candidate.value),
+          with {:ok, term} <- term(option_kind(row), style, candidate.value),
                written when is_binary(written) <- fragment(:equal_equal, term) do
             [%{label: candidate.label, fragment: written, selected: written in chosen}]
           else
@@ -1007,6 +1025,13 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # whichever of the two it is.
     defp term(:number, _style, value) when is_float(value), do: {:ok, {:float, value}}
     defp term(:number, style, value), do: term(:integer, style, value)
+
+    # A row observed as `:float` is still beside a list whose other entries may
+    # be the grammar's integer literal, so `:float` delegates the rest exactly
+    # as `:number` does. Nothing else reaches this clause: the datamodel
+    # projection never writes `:float`, so the only kind widened here is one an
+    # observed value produced (sui-9ik).
+    defp term(:float, style, value), do: term(:integer, style, value)
 
     defp term(_kind, _style, _value), do: :error
 
