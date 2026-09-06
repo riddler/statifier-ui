@@ -305,6 +305,30 @@ own diagram reads it in `render/1` and follows the scrubber without touching
 the pane. It is the read behind `data-configuration`, not a second answer to
 it.
 
+A host drawing its own diagram usually thinks in the chart's ids rather than
+in the wire format's document-order indexes, and
+`StatifierUI.Live.State.configuration_ids/1` is the same read resolved
+through the stream's own `session.start` manifest, so nothing on the host
+side has to parse that manifest:
+
+    iex> {:ok, machine} =
+    ...>   Statifier.compile(~s(<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="pending"><state id="pending"/><state id="authorized"/></scxml>))
+    iex> {:ok, manifest} = StatifierUI.Trace.Manifest.build(machine, "sess_ops")
+    iex> machine
+    ...> |> StatifierUI.Live.State.new(messages: [manifest], initial_configuration: [1])
+    ...> |> StatifierUI.Live.State.configuration_ids()
+    {:ok, ["pending"]}
+
+A stream carrying no `session.start` - the late-attach case, where the
+subscriber joined a session that had already emitted one - answers
+`{:error, :no_manifest}` rather than a list of `"#1"` strings.
+`configuration/1` still answers indexes there.
+`StatifierUI.Inspector.active_invokes/2` is the same read for the
+invocations live at that point, as `{state_id, invoke_type | nil}`.
+
+This snippet is executed by the test suite (`doctest_file`), so the doc
+cannot drift from the API it shows.
+
 ADR-0008's client-side elkjs SVG renderer is the eventual full-fidelity
 diagram and is not built yet. When it is, it replaces this pane's body and
 not its contract.
