@@ -289,3 +289,26 @@ earlier one than a downstream user's build, and it is the whole of what the
 No decision moves, no clause is edited, and no text above this line changes.
 Filed with `sui-l3u`; the check itself is `statifier_examples` PR 65, campaign
 033's fill lane.
+
+---
+
+## Note (2026-09-06): the bundle check now also runs against this repository's main
+
+A dated note rather than an amendment, because no clause of the decision
+moves. What it narrows is the second of the two limits stated in the note
+above, which said the host bundles "the last published one, not this
+repository's `main`".
+
+The **Assets bundle** job is now a two-leg matrix (`statifier_examples` PR 67,
+merged 2026-09-06 as `f32a93f`): beside the Hex leg that note describes, a
+second leg resolves `statifier_ui` from this repository's `main` through
+`STATIFIER_UI_REF` and bundles that, marked `continue-on-error` so it reports
+without blocking the host's build - so a broken `assets/js` on `main` is now
+caught before a publish rather than only after one.
+
+Everything else in that note holds unchanged: the check is still a bundle and
+not a test, it still lives in the host rather than here, and this repository's
+toolchain is still Node-free.
+
+No decision moves, no clause is edited, and no text above this line changes.
+Filed with `sui-ehe`, campaign 034's ruling RQ-034-10.

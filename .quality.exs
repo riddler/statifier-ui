@@ -12,10 +12,15 @@
 #
 # Agents: prefer `--format json --report -` when you want to route on results.
 #
-# There is no CI. This project has one contributor, and a workflow nobody reads
-# the output of is worse than none - so the local gate carries the whole weight.
-# Two things follow from that, and they are the reason this file is worth
-# reading rather than copying:
+# CI runs this same gate, and it is not a second reader. `.github/workflows/
+# ci.yml` has one job, on pushes to main, on pull requests and on demand, and
+# that job reads `gate.full` out of `.claude/wurk.json` rather than restating
+# a command - so what CI runs and what this file configures are one definition
+# with one place to change. But it runs *after* a push, and this project has
+# one contributor, so nobody else reads the diff and the local gate is still
+# the only thing standing between a mistake and `origin/main`. Two things
+# follow from that, and they are the reason this file is worth reading rather
+# than copying:
 #
 #   1. Nothing here is allowed to be slow enough to skip. A gate that gets
 #      routinely bypassed enforces nothing, and there is no second net behind
