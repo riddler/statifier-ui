@@ -63,12 +63,15 @@ defmodule StatifierUI.Trace.Normalizer do
   `:skip`, and `normalize/2` no longer offers it.**
 
   It was retired rather than kept empty because the empty form is not
-  writable here. A guard over an empty list warns that its clause cannot
-  match, an unused constant warns on its own, and a contract offering a
-  return no clause produces makes every caller's third arm dead code the
-  analyzer refuses. The next trace effect ruled out of the vocabulary
-  reintroduces the answer with the clause that produces it, which is the
-  only form that stays honest.
+  writable here, in either half. Keep the clause with an empty list and
+  `module in []` expands to `false`, so the pattern's own binding is never
+  read and the compiler answers `variable "module" is unused`; drop the
+  clause and keep the constant instead and it answers `module attribute
+  @skipped_trace_effects was set but never used`. Both are fatal under
+  `warnings_as_errors`, and a contract offering a return no clause produces
+  makes every caller's third arm dead code the analyzer refuses. The next
+  trace effect ruled out of the vocabulary reintroduces the answer with the
+  clause that produces it, which is the only form that stays honest.
 
   The fallthrough that answers `{:error, {:unknown_effect, _}}` is
   untouched, and deliberately so - a trace effect nobody has considered
