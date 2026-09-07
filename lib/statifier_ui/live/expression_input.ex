@@ -144,7 +144,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     | `data-clause-index` | a clause row | its position, from zero |
     | `data-role` | a picklist control | `path`, `operator`, `value`, `connective` |
     | `data-action` | a button | `add-clause`, `remove-clause`, `switch-text`, `switch-picklist` |
-    | `data-declared-kind` | a clause row | the kind the host declared for its path (`integer`, `list:string`, `one-of`, ...), absent when none |
+    | `data-declared-kind` | a clause row | the kind the host declared for its path (`integer`, `list:string`, `one-of`, `shape`, ...), absent when none |
     | `data-advisory` | an advisory row | `value-kind` or `operator`, why it is shown |
     | `data-severity` | an advisory row | `info` - an advisory never blocks |
 
@@ -181,10 +181,33 @@ if Code.ensure_loaded?(Phoenix.Component) do
     supplied. A non-empty `:path_types` wins whole, because a host that
     supplies both has said the more specific thing.
 
-    The projection's vocabulary *is* this component's `:path_types` vocabulary,
-    so nothing is translated between them - which is why
+    Everything the projection answers *is* a `:path_types` entry, so nothing is
+    translated between them - which is why
     `t:StatifierUI.Expression.declared_kind/0` admits `:number`, the tag that
-    projection answers for a document's `integer` and `decimal` alike.
+    projection answers for a document's `integer` and `decimal` alike. The map
+    is the wider of the two by exactly one entry, and the next section is that
+    entry.
+
+    ## An inline shape, and where one can come from
+
+    `:path_types` admits one entry the projection never answers:
+    `{:shape, members}`, sd's inline arm. An inline shape has no document
+    spelling, so `StatifierDatamodel.Index.path_types/1` cannot produce one and
+    a `:document` alone never carries one; it arrives only when a consumer
+    holding a structural value the host never declared - `statifier_blocks`'
+    environment, or a host with its own reader - builds the map itself.
+
+    It is offered and typed one segment down. Each member becomes a path the
+    field offers, after the path that declares it and through nesting, and a
+    read of one is typed by that member - `card.brand` takes the `brand`
+    member's type where `card` is declared a shape, with an exact `:path_types`
+    entry for the longer path still winning. The path holding the shape itself
+    declares nothing: a structure is not a kind the grammar compares, so its
+    row offers the operators and the control an undeclared path offers and
+    raises no advisory, while `data-declared-kind` still says `shape` so a
+    renderer can tell the two apart. A member the shape does not promise is
+    offered and typed like any other: the promise says what may be missing at
+    run time, not which paths exist.
     """
 
     use Phoenix.Component
@@ -229,8 +252,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
       default: %{},
       doc:
         "kinds the host declares per clause path, as `%{path => kind | {:list, kind} | " <>
-          "{:one_of, values}}`. A declared kind decides the operator list and the value " <>
-          "control; it never rewrites the author's source."
+          "{:one_of, values} | {:shape, members}}`. A declared kind decides the operator " <>
+          "list and the value control; it never rewrites the author's source. A " <>
+          "`{:shape, _}` entry offers and types its members one segment down, and " <>
+          "declares nothing at the path holding it."
     )
 
     attr(:document, :map,
@@ -503,6 +528,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Map.put_new(:path_types, %{})
       |> Map.put_new(:document, nil)
       |> put_path_types()
+      |> put_paths()
       |> Map.put_new(:mode, :auto)
       |> Map.put_new(:hook, @hook)
       |> put_picklist_hook()
@@ -530,9 +556,10 @@ if Code.ensure_loaded?(Phoenix.Component) do
     # through `StatifierDatamodel.Index.path_types/1` rather than read here:
     # sd owns the document's shape, and a second reading of it in this package
     # would be the drifting copy the completion source already refuses for the
-    # grammar. The projection's vocabulary IS the `:path_types` vocabulary -
+    # grammar. Everything the projection answers IS a `:path_types` entry -
     # `t:StatifierUI.Expression.declared_kind/0` admits its `:number` - so
-    # nothing is translated on the way in.
+    # nothing is translated on the way in. The map is wider by one entry the
+    # projection cannot reach: an inline shape, which no document spells.
     #
     # A non-empty `:path_types` wins whole: a host that supplies both has said
     # the more specific thing, and merging the two per path would leave it
@@ -553,9 +580,47 @@ if Code.ensure_loaded?(Phoenix.Component) do
       document |> StatifierDatamodel.Index.index() |> StatifierDatamodel.Index.path_types()
     end
 
+    # The paths this component offers: the host's own list, and after each path
+    # declared an inline shape, the members that shape names. A member read is
+    # a path an author cannot look up any more than a declared one is - the
+    # host's list cannot carry it, because an inline shape has no document
+    # spelling to have been read out of - so the declaration that types the
+    # read offers it too.
+    #
+    # The members follow their own path rather than the list, so a shape's
+    # members read as belonging to it, and they are spelled by joining on a dot
+    # because a member name is exactly what a property read spells: the
+    # structural form is asked of `Expression.segments/1` at the moment a
+    # clause is swapped onto one, which is the only place the spelling has to
+    # parse back.
+    #
+    # An unpromised member is offered like any other. The promise says what a
+    # value may be missing at run time, not which paths exist, and an editor
+    # that hid one would be refusing a read the expression language allows.
+    @spec put_paths(map()) :: map()
+    defp put_paths(assigns) do
+      paths =
+        assigns.candidates
+        |> Enum.flat_map(&[&1 | shape_member_paths(&1, Map.get(assigns.path_types, &1))])
+        |> Enum.uniq()
+
+      Map.put(assigns, :paths, paths)
+    end
+
+    @spec shape_member_paths(String.t(), term()) :: [String.t()]
+    defp shape_member_paths(path, {:shape, members}) do
+      Enum.flat_map(members, fn member ->
+        member_path = path <> "." <> member.name
+
+        [member_path | shape_member_paths(member_path, member.type)]
+      end)
+    end
+
+    defp shape_member_paths(_path, _not_a_shape), do: []
+
     @spec put_completions(map()) :: map()
     defp put_completions(assigns) do
-      completions = Expression.completions(assigns.candidates, assigns.vocabulary_opts)
+      completions = Expression.completions(assigns.paths, assigns.vocabulary_opts)
 
       assigns
       |> Map.put(:completions, completions)
@@ -575,7 +640,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       {subset, rows, connective, error} = classify(assigns)
       canonical = source(rows, connective)
       picklist? = assigns.picklist_hook != nil and canonical != nil
-      paths = Enum.uniq(assigns.candidates)
+      paths = assigns.paths
 
       assigns
       |> Map.put(:subset, subset)
@@ -971,6 +1036,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
     @spec declared_kind_attribute(Expression.declared_kind() | nil) :: String.t() | nil
     defp declared_kind_attribute(nil), do: nil
     defp declared_kind_attribute({:one_of, _values}), do: "one-of"
+    defp declared_kind_attribute({:shape, _members}), do: "shape"
     defp declared_kind_attribute({:list, nil}), do: "list"
     defp declared_kind_attribute({:list, member}), do: "list:" <> to_string(member)
     defp declared_kind_attribute(kind), do: to_string(kind)

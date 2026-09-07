@@ -100,7 +100,7 @@ defmodule StatifierUI.MixProject do
       # completion source already refuses for the grammar. Pure, no runtime
       # processes, and no dependency of its own (RQ-033-5: the Hex floor, not
       # a git pin).
-      {:statifier_datamodel, "~> 0.1"},
+      {:statifier_datamodel, "~> 0.4"},
 
       # Both integrations are optional: the package is a component library, and
       # a Livebook host has no reason to pull LiveView, or the reverse. Anything

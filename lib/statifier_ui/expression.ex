@@ -133,11 +133,12 @@ defmodule StatifierUI.Expression do
 
   @typedoc """
   A kind a host declares for a datamodel path, as the `:path_types` map carries
-  it: one of this module's own `t:value_kind/0`s, `:number`, or
-  `{:one_of, values}` for a path whose values the host enumerates.
+  it: one of this module's own `t:value_kind/0`s, `:number`,
+  `{:one_of, values}` for a path whose values the host enumerates, or
+  `{:shape, members}` for one holding a structure whose members it names.
 
-  `{:one_of, _}` and `:number` are the caller's tags rather than grammar kinds
-  - they are the vocabulary a datamodel document uses, not ones
+  `{:one_of, _}`, `:number` and `{:shape, _}` are the caller's tags rather than
+  grammar kinds - they are the vocabulary a datamodel document uses, not ones
   `Predicator.Vocabulary` names.
 
   For `{:one_of, _}` the operators offered beside one are the operators of the
@@ -155,8 +156,38 @@ defmodule StatifierUI.Expression do
   whether a host hands over its document or the projection of it. Nothing else
   changes: `:number` is already the grammar's own word, so it asks for the same
   operators `:integer` and `:float` ask for, and it compares equal to both.
+
+  `{:shape, members}` is `t:StatifierDatamodel.Types.t/0`'s inline arm, carried
+  here as sd spells it - `%{name:, type:, required?:}` per member, and a
+  member's own `type` is a type expression again, so a shape nests. It is the
+  one entry a document cannot write: sd's amendment gives an inline shape no
+  document spelling, so `StatifierDatamodel.Index.path_types/1` never answers
+  one and a path carries it only when a consumer holding a structural value the
+  host never declared - `statifier_blocks`' environment, or a host with its own
+  reader - puts it in the map itself.
+
+  A shape describes a *structure*, not a value the grammar compares, so at the
+  path that holds it a shape declares nothing: the row offers the operators and
+  the control an undeclared path offers, and raises no advisory. It says its
+  whole piece one segment down. A read of `card.brand` where `card` is declared
+  a shape is typed by the `brand` member, member-wise, exactly as though the
+  host had declared `card.brand` directly - and an exact entry for the longer
+  path still wins, because a host that spelled it out has said the more
+  specific thing.
+
+  A member's `required?` is the shape's *promise*, and it decides nothing here.
+  An unpromised member is still a path an author may read, and an editor that
+  hid it would be refusing a read the expression language allows; so a member
+  is found by name whether the shape promises it or not, and the promise is
+  carried rather than consulted. Deciding what an absent value does is the read
+  check's job (`StatifierDatamodel.Types.satisfies?/3`), and it is not this
+  module's.
   """
-  @type declared_kind :: value_kind() | :number | {:one_of, [candidate() | term()]}
+  @type declared_kind ::
+          value_kind()
+          | :number
+          | {:one_of, [candidate() | term()]}
+          | {:shape, [StatifierDatamodel.Types.member()]}
 
   @typedoc """
   Something worth telling an author about a clause, and never a reason to
@@ -331,6 +362,14 @@ defmodule StatifierUI.Expression do
   with lands in `:advisories`. A path with no entry behaves exactly as it did
   before there was a map at all.
 
+  An entry may also be `{:shape, members}` - sd's inline arm, which a consumer
+  builds and no document spells. A read *into* one is typed by the member it
+  names, member-wise and through nesting, so `card.brand` takes the `brand`
+  member's type where `card` is declared a shape; an exact entry for the longer
+  path still wins. At the path holding the shape itself nothing is declared:
+  a structure is not a kind the grammar compares, so the row offers what an
+  undeclared path offers and raises no advisory.
+
   Only the host knows its own datamodel, so nothing is read from one here.
   The caller builds the map - `statifier_blocks`, or any host with a datamodel
   document to read - which is why this package takes no dependency on one.
@@ -375,6 +414,15 @@ defmodule StatifierUI.Expression do
       ...>   StatifierUI.Expression.simple("amount >= 500", path_types: %{"amount" => :string})
       iex> Enum.map(row.advisories, & &1.reason)
       [:value_kind]
+
+      iex> {:ok, [row], nil} =
+      ...>   StatifierUI.Expression.simple("card.brand == 'visa'",
+      ...>     path_types: %{
+      ...>       "card" => {:shape, [%{name: "brand", type: :string, required?: false}]}
+      ...>     }
+      ...>   )
+      iex> {row.declared_kind, row.control_kind, row.advisories}
+      {:string, :string, []}
 
   """
   @spec simple(String.t(), keyword()) ::
@@ -719,7 +767,7 @@ defmodule StatifierUI.Expression do
   defp row(module, {segments, op, value}, candidates, path_types) do
     path = path_source(module, segments)
     kind = value_kind(value)
-    declared = Map.get(path_types, path)
+    declared = declared_for(path_types, module, segments, path)
     {operators, kept?} = offered_operators(module, declared, kind, op)
 
     %{
@@ -737,6 +785,86 @@ defmodule StatifierUI.Expression do
       advisories: advisories(declared, kind, op, kept?)
     }
   end
+
+  # The declaration for one clause path. An exact entry wins outright - a host
+  # that spelled the whole path out has said the more specific thing, the same
+  # rule `:path_types` and `:document` settle between them one level up.
+  #
+  # Failing that, the path may be a read *into* a declared inline shape, and
+  # then the declaration is the member's. The prefixes are walked longest
+  # first, so a shape nested under a shape is found by the entry closest to the
+  # read. Prefixes are spelled by predicator through `path_source/2` rather
+  # than by splitting the path string on dots: `account['tags'].name` is a
+  # three-segment read whose prefixes a splitter would get wrong, and a second
+  # parser here is the drift `segments/1` already refuses.
+  @spec declared_for(map(), module(), [tuple()], String.t()) :: declared_kind() | nil
+  defp declared_for(path_types, module, segments, path) do
+    case Map.fetch(path_types, path) do
+      {:ok, declared} -> declared
+      :error -> member_declared(path_types, module, segments)
+    end
+  end
+
+  @spec member_declared(map(), module(), [tuple()]) :: declared_kind() | nil
+  defp member_declared(path_types, module, segments) do
+    (length(segments) - 1)..1//-1
+    |> Enum.find_value(fn taken ->
+      prefix = path_source(module, Enum.take(segments, taken))
+
+      case Map.get(path_types, prefix) do
+        {:shape, members} -> member_kind(members, Enum.drop(segments, taken))
+        _not_a_shape -> nil
+      end
+    end)
+  end
+
+  # A member read, one segment at a time. A member is named, so only a segment
+  # that names one reaches it: predicator's `:property` for `card.brand` and
+  # its `:key` for the bracketed spelling of the same read, `card['brand']`,
+  # which is the same member and must not be typed differently for being
+  # spelled the long way. An index read, and a key that is not a name, read
+  # something the shape does not name at all, and a declaration invented for
+  # one would be this module guessing rather than reading.
+  @spec member_kind([StatifierDatamodel.Types.member()], [tuple()]) :: declared_kind() | nil
+  defp member_kind(members, [{segment, name} | rest])
+       when segment in [:property, :key] and is_binary(name) do
+    case Enum.find(members, &(&1.name == name)) do
+      nil -> nil
+      member -> member_type(member.type, rest)
+    end
+  end
+
+  defp member_kind(_members, _segments), do: nil
+
+  @spec member_type(StatifierDatamodel.Types.t(), [tuple()]) :: declared_kind() | nil
+  defp member_type({:shape, members}, [_next | _rest] = segments),
+    do: member_kind(members, segments)
+
+  defp member_type(_type, [_next | _rest]), do: nil
+  defp member_type(type, []), do: shape_member_kind(type)
+
+  # A member's type expression, in the kind vocabulary a row reads. The nine
+  # sd closes entry types at map onto the six the expression language names
+  # exactly as `StatifierDatamodel.Index.path_types/1` maps them, `integer` and
+  # `decimal` alike answering `:number`, so a member read and a declared path
+  # of the same type give a row the same declaration.
+  #
+  # Everything else is absent rather than wrong, which is the projection's own
+  # rule for an `object`, a `list` and a declaration-typed entry: a record is no
+  # more one of the expression language's kinds than an object is, and a member
+  # carries no `item_type` for a list to describe itself with. An inline shape
+  # is the one structural type that is carried, because it is the one this
+  # module can keep reading through.
+  @spec shape_member_kind(StatifierDatamodel.Types.t()) :: declared_kind() | nil
+  defp shape_member_kind(:string), do: :string
+  defp shape_member_kind(:integer), do: :number
+  defp shape_member_kind(:decimal), do: :number
+  defp shape_member_kind(:boolean), do: :boolean
+  defp shape_member_kind(:date), do: :date
+  defp shape_member_kind(:datetime), do: :datetime
+  defp shape_member_kind(:duration), do: :duration
+  defp shape_member_kind({:shape, members}), do: {:shape, members}
+  defp shape_member_kind(_declared_opaque_object_list_or_unknown), do: nil
 
   # Rule 1. The operator list is the declaration's own, asked of the grammar
   # exactly as the observed kind is - this module still holds no table of which
@@ -765,8 +893,12 @@ defmodule StatifierUI.Expression do
     end
   end
 
+  # A shape is a structure and not a kind the grammar compares, so it names no
+  # operator list of its own and the observed kind decides, exactly as it does
+  # for a path nothing was declared for.
   @spec operator_kind(declared_kind() | nil, value_kind()) :: value_kind()
   defp operator_kind(nil, observed), do: observed
+  defp operator_kind({:shape, _members}, observed), do: observed
   defp operator_kind({:one_of, values}, _observed), do: inferred_kind(values)
   defp operator_kind(declared, _observed), do: declared
 
@@ -814,6 +946,7 @@ defmodule StatifierUI.Expression do
   # shape is reported by an advisory instead of repaired.
   @spec control_kind(declared_kind() | nil, value_kind()) :: value_kind()
   defp control_kind(nil, observed), do: observed
+  defp control_kind({:shape, _members}, observed), do: observed
   defp control_kind({:one_of, _values}, observed), do: observed
 
   defp control_kind(declared, observed) do
@@ -858,6 +991,12 @@ defmodule StatifierUI.Expression do
 
   @spec advisories(declared_kind() | nil, value_kind(), atom(), boolean()) :: [advisory()]
   defp advisories(nil, _observed, _op, _kept?), do: []
+
+  # A shape declares nothing about the value beside it, so there is nothing for
+  # it to disagree with the source about. Saying "this value is a string, and
+  # the path is declared a structure" would be telling an author off for
+  # reading a path the host declared and the grammar allows.
+  defp advisories({:shape, _members}, _observed, _op, _kept?), do: []
 
   defp advisories(declared, observed, op, kept?) do
     kind = operator_kind(declared, observed)

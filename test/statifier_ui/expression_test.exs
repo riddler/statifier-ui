@@ -705,6 +705,132 @@ defmodule StatifierUI.ExpressionTest do
     end
   end
 
+  describe "an inline shape in the map (sui-9pj)" do
+    @holder {:shape,
+             [
+               %{name: "name", type: :string, required?: true},
+               %{name: "since", type: :datetime, required?: false}
+             ]}
+
+    @card {:shape,
+           [
+             %{name: "brand", type: :string, required?: true},
+             %{name: "last_four", type: :integer, required?: false},
+             %{name: "issued_on", type: :date, required?: true},
+             %{name: "issuer", type: {:declared, "cards.issuer"}, required?: true},
+             %{name: "holder", type: @holder, required?: true}
+           ]}
+
+    test "a member read is typed by its member" do
+      {:ok, [row], nil} =
+        Expression.simple("card.brand == 'visa'", path_types: %{"card" => @card})
+
+      assert row.declared_kind == :string
+      assert row.control_kind == :string
+      assert row.advisories == []
+    end
+
+    test "a member is typed exactly as the same declaration spelled on the path" do
+      shaped = Expression.simple("card.brand == 'visa'", path_types: %{"card" => @card})
+      spelled = Expression.simple("card.brand == 'visa'", path_types: %{"card.brand" => :string})
+
+      assert shaped == spelled
+    end
+
+    test "an integer member answers the projection's own tag for integer" do
+      {:ok, [row], nil} =
+        Expression.simple("card.last_four == 1234", path_types: %{"card" => @card})
+
+      assert row.declared_kind == :number
+      assert row.advisories == []
+    end
+
+    test "a date member is offered the relative-date candidates" do
+      {:ok, [row], nil} = Expression.simple("card.issued_on == 1", path_types: %{"card" => @card})
+
+      assert row.declared_kind == :date
+      assert row.candidates != []
+    end
+
+    test "a member the shape does not promise is read like any other" do
+      {:ok, [promised], nil} =
+        Expression.simple("card.brand == 'visa'", path_types: %{"card" => @card})
+
+      {:ok, [unpromised], nil} =
+        Expression.simple("card.last_four == 1", path_types: %{"card" => @card})
+
+      assert promised.declared_kind == :string
+      assert unpromised.declared_kind == :number
+      assert unpromised.advisories == []
+    end
+
+    test "a shape nested in a shape is read through" do
+      {:ok, [row], nil} =
+        Expression.simple("card.holder.name == 'ada'", path_types: %{"card" => @card})
+
+      assert row.declared_kind == :string
+      assert row.advisories == []
+    end
+
+    test "the path holding a nested shape carries that shape and declares nothing" do
+      {:ok, [row], nil} =
+        Expression.simple("card.holder == 'ada'", path_types: %{"card" => @card})
+
+      assert row.declared_kind == @holder
+      assert row.control_kind == row.value_kind
+      assert row.advisories == []
+    end
+
+    test "the bracketed spelling of a member read is the same member" do
+      {:ok, [dotted], nil} =
+        Expression.simple("card.brand == 'visa'", path_types: %{"card" => @card})
+
+      {:ok, [bracketed], nil} =
+        Expression.simple("card['brand'] == 'visa'", path_types: %{"card" => @card})
+
+      assert dotted.declared_kind == :string
+      assert bracketed.declared_kind == dotted.declared_kind
+    end
+
+    test "an exact entry for the longer path wins over the shape's member" do
+      {:ok, [row], nil} =
+        Expression.simple("card.brand == 'visa'",
+          path_types: %{"card" => @card, "card.brand" => {:one_of, ["visa", "amex"]}}
+        )
+
+      assert row.declared_kind == {:one_of, ["visa", "amex"]}
+    end
+
+    test "a member the shape does not name declares nothing" do
+      {:ok, [row], nil} =
+        Expression.simple("card.expiry == 'visa'", path_types: %{"card" => @card})
+
+      assert row.declared_kind == nil
+      assert row.advisories == []
+    end
+
+    test "a member typed by a declaration name declares nothing here" do
+      {:ok, [row], nil} =
+        Expression.simple("card.issuer == 'visa'", path_types: %{"card" => @card})
+
+      assert row.declared_kind == nil
+      assert row.advisories == []
+    end
+
+    test "the path holding the shape reads exactly as an undeclared path" do
+      for source <- ["card == 'visa'", "card in ['visa']", "card CONTAINS 'visa'"] do
+        {:ok, [shaped], nil} = Expression.simple(source, path_types: %{"card" => @card})
+        {:ok, [undeclared], nil} = Expression.simple(source)
+
+        assert Map.delete(shaped, :declared_kind) == Map.delete(undeclared, :declared_kind),
+               "a shape changed the row for #{inspect(source)}"
+
+        assert shaped.declared_kind == @card
+        assert shaped.advisories == []
+      end
+    end
+  end
+
   describe "the degraded source (no Predicator.Simple)" do
     setup do
       Application.put_env(:statifier_ui, :predicator_simple, NotPredicatorSimple)
