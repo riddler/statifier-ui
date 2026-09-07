@@ -850,6 +850,79 @@ defmodule StatifierUI.Live.ExpressionInputTest do
     end
   end
 
+  describe "an inline shape a consumer built (sui-9pj)" do
+    # An inline shape has no document spelling, so this map is the only way one
+    # reaches the component: sd's amendment gives `parse/2` nothing to read it
+    # from, and `StatifierDatamodel.Index.path_types/1` never answers one. A
+    # consumer holding a structural value the host never declared - sb's
+    # environment, or a host with its own reader - builds it.
+    @shaped %{
+      "card" =>
+        {:shape,
+         [
+           %{name: "brand", type: :string, required?: true},
+           %{name: "last_four", type: :integer, required?: false},
+           %{
+             name: "holder",
+             type: {:shape, [%{name: "name", type: :string, required?: true}]},
+             required?: true
+           }
+         ]}
+    }
+
+    test "the members are offered for completion, each after the path declaring it" do
+      html = typed_html("card.brand == 'visa'", ["card", "plan"], %{}, @shaped)
+
+      assert completion_paths(html) == [
+               "card",
+               "card.brand",
+               "card.last_four",
+               "card.holder",
+               "card.holder.name",
+               "plan"
+             ]
+    end
+
+    test "a member the shape does not promise is offered like any other" do
+      html = typed_html("card.brand == 'visa'", ["card"], %{}, @shaped)
+
+      assert "card.last_four" in completion_paths(html)
+    end
+
+    test "the same paths are what the field dropdown offers" do
+      html = typed_html("card.brand == 'visa'", ["card"], %{}, @shaped)
+
+      field = Enum.find(picklist_controls(html), &(&1.role == "path"))
+
+      assert Enum.map(field.options, & &1.value) == [
+               "card == 'visa'",
+               "card.brand == 'visa'",
+               "card.last_four == 'visa'",
+               "card.holder == 'visa'",
+               "card.holder.name == 'visa'"
+             ]
+    end
+
+    test "nothing is offered for a path the map shapes but the host does not name" do
+      html = typed_html("card.brand == 'visa'", ["plan"], %{}, @shaped)
+
+      assert completion_paths(html) == ["plan"]
+    end
+
+    test "a member read stamps the member's kind" do
+      html = typed_html("card.last_four == 1234", ["card"], %{}, @shaped)
+
+      assert html =~ ~s(data-declared-kind="number")
+    end
+
+    test "the path holding the shape stamps shape, and draws an undeclared row" do
+      html = typed_html("card == 'visa'", ["card"], %{}, @shaped)
+
+      assert html =~ ~s(data-declared-kind="shape")
+      refute html =~ ~s(data-advisory=)
+    end
+  end
+
   # The date-literal delimiter, as a function so no line of this file has to
   # carry a bare `#` inside an interpolating string.
   defp hash, do: "#"
@@ -926,6 +999,17 @@ defmodule StatifierUI.Live.ExpressionInputTest do
 
   defp picklist_html(value, candidates, value_candidates \\ %{}) do
     seam_html(%{value: value, candidates: candidates, value_candidates: value_candidates})
+  end
+
+  # The paths the completion list offers, in the order it offers them.
+  defp completion_paths(html) do
+    [_all, json] = Regex.run(~r/data-completions="([^"]*)"/, html)
+
+    json
+    |> unescape()
+    |> JSON.decode!()
+    |> Enum.filter(&(&1["kind"] == "path"))
+    |> Enum.map(& &1["insert"])
   end
 
   # HEEx escapes attribute values; the completion JSON is read back through the
