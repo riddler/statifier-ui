@@ -10,6 +10,58 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into a version section at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [0.10.0] 2026-09-06
+
+A minor. The expression editor reads the inline shape arm
+`statifier_datamodel` 0.4.0 added to a type expression, which moves this
+package's floor for it to `~> 0.4`: a `:path_types` entry may be
+`{:shape, members}`, and a host handing over a `:document` gets more of it
+typed without changing anything here. `StatifierUI.Trace.Normalizer.types/0`
+is now the trace vocabulary's documented public handle - the list a host
+diffs across upgrades. The expression picklist offers every value of a
+`{:one_of, _}` path that mixes integers and floats. And
+`StatifierUI.EventLog.Markdown.render/2` marks the selected macrostep the
+same way the LiveView renderer does. The trace wire format is untouched -
+version `1` - so a consumer re-pins nothing beyond the install pin itself.
+
+### Added
+
+- A `:path_types` entry may be `{:shape, members}`, the inline arm
+  `statifier_datamodel` 0.4.0 added to a type expression. The expression
+  editor offers each member as a path of its own, after the path declaring it
+  and through nesting, and types a read of one by that member - `card.brand`
+  takes the `brand` member's type where `card` is declared a shape, with an
+  exact entry for the longer path still winning. The path holding the shape
+  declares nothing itself: a structure is not a kind the grammar compares, so
+  its row offers what an undeclared path offers and raises no advisory, while
+  `data-declared-kind` says `shape`. An inline shape has no document spelling,
+  so it reaches the component only through the `:path_types` map a consumer
+  builds; a `:document` alone still renders exactly as it did.
+
+### Changed
+
+- The `statifier_datamodel` floor is `~> 0.4`, for the inline shape arm of its
+  type expression. A host handing over a `:document` gets more of it typed as
+  a result, without changing anything here: an entry whose `type` names a
+  declaration the document's `types` key declares is flattened into that
+  declaration's fields by sd's own index, so `card.brand` is completed and
+  typed where the document declares `card` a named shape and spells no field
+  of its own. That is sd's projection answering more fully, and every path it
+  already answered for answers the same.
+- Documents `StatifierUI.Trace.Normalizer.types/0` as the trace vocabulary's
+  public handle: the list a host holds and diffs across upgrades to notice an
+  added `type`. The list and the wire format version are unchanged.
+- `StatifierUI.EventLog.Markdown.render/2` marks the selected macrostep
+  `- selected` instead of `- shown in the diagram`, the same mark
+  `StatifierUI.Live.event_log/1` uses, so both renderers read alike.
+  `StatifierUI.Inspector.event_log/2` and the Kino inspector render the new
+  mark; a host asserting on the old text updates the string.
+
+### Fixed
+
+- A `{:one_of, _}` path mixing integer and float values offers every value it
+  enumerates, whichever of the two the clause's own value is.
+
 ## [0.9.1] 2026-09-06
 
 A patch. `StatifierUI.Diagram.render/3` now escapes the `:` in a transition

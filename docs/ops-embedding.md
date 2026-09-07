@@ -22,7 +22,7 @@ instead.
 so a host that wants these components declares it itself:
 
 ```elixir
-{:statifier_ui, "~> 0.9"},
+{:statifier_ui, "~> 0.10"},
 {:phoenix_live_view, "~> 1.0"}
 ```
 
