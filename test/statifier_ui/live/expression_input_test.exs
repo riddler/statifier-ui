@@ -967,6 +967,55 @@ defmodule StatifierUI.Live.ExpressionInputTest do
     })
   end
 
+  describe "the host's debounce reaches every control (sui-6fe)" do
+    test "the source input carries the seam's debounce as phx-debounce" do
+      html = seam_html(%{debounce: 300})
+
+      assert html =~ ~s(data-expression-source="true")
+      assert html =~ ~s(phx-debounce="300")
+    end
+
+    test "every form control it draws carries it, not only the one typed into" do
+      controls =
+        %{
+          value: "status == 'active' AND amount >= 500",
+          candidates: ["status", "amount"],
+          value_candidates: %{"status" => ["active", "pending"]},
+          debounce: 300
+        }
+        |> seam_html()
+        |> form_controls()
+
+      # the source input, a select and a value control per clause, the
+      # connective - more than one, and every one of them stamped
+      assert length(controls) > 1
+      assert Enum.all?(controls, &(&1 =~ ~s(phx-debounce="300")))
+    end
+
+    test "a :blur debounce is written through verbatim - the values are LiveView's" do
+      assert seam_html(%{debounce: :blur}) =~ ~s(phx-debounce="blur")
+    end
+
+    test "no debounce key renders no attribute, and the markup a host had before" do
+      html = seam_html()
+
+      refute html =~ "phx-debounce"
+      assert html == seam_html(%{debounce: nil})
+    end
+
+    test "as a component tag the attr defaults to nil, so nothing is stamped" do
+      html =
+        render_component(&ExpressionInput.expression_input/1,
+          id: "cond",
+          name: "cond",
+          value: "plan == 'pro'",
+          candidates: ["plan"]
+        )
+
+      refute html =~ "phx-debounce"
+    end
+  end
+
   # The rendered controls, read back the way a browser would see them. Parsing
   # is regex rather than a DOM library because the toolchain here deliberately
   # carries neither Node nor an HTML parser (see CLAUDE.md).
@@ -995,6 +1044,15 @@ defmodule StatifierUI.Live.ExpressionInputTest do
       [value] -> value
       nil -> nil
     end
+  end
+
+  # Every form control the component draws, as its opening tag. A `<datalist>`
+  # option is not one: it is a suggestion the browser copies into the input,
+  # and it posts nothing.
+  defp form_controls(html) do
+    ~r/<(?:select|input)(?<attrs>[^>]*)>/
+    |> Regex.scan(html, capture: :all_names)
+    |> Enum.map(fn [attrs] -> attrs end)
   end
 
   defp picklist_html(value, candidates, value_candidates \\ %{}) do
