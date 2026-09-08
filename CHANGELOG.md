@@ -10,6 +10,22 @@ fragment in [`changelog.d/`](changelog.d/README.md); the fragments are assembled
 into a version section at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [0.10.1] 2026-09-08
+
+A patch. `StatifierUI.Live.ExpressionInput.expression_input/1` reads the
+debounce the statifier_blocks `expression_component` seam hands it and writes
+it onto the controls it draws, so a host's debounce reaches the expression
+field instead of stopping at it. No surface changes and no dependency
+changes - the trace wire format is untouched, so a consumer taking `~> 0.10`
+re-pins nothing.
+
+### Fixed
+
+- `StatifierUI.Live.ExpressionInput.expression_input/1` reads a `:debounce`
+  assign from the statifier_blocks `expression_component` seam and writes it as
+  `phx-debounce` onto every control it draws, so a host's debounce reaches the
+  expression field instead of stopping at it.
+
 ## [0.10.0] 2026-09-06
 
 A minor. The expression editor reads the inline shape arm
