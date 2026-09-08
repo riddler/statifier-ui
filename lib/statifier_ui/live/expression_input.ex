@@ -39,6 +39,15 @@ if Code.ensure_loaded?(Phoenix.Component) do
     `input` event, so a keyboard-driven completion and a typed character are
     the same event to the host.
 
+    Because the event is the host's, so is how often it fires: a `:debounce`
+    assign is written verbatim as `phx-debounce` onto every form control this
+    component draws - the source input and each picklist row control - and no
+    key at all renders no attribute, which is byte for byte what this
+    component rendered before the assign existed. The sb seam supplies it from
+    the same `debounce` its own fields carry, so an `:expression` field
+    rendered through the seam debounces the way every other field in that form
+    does.
+
     ## Two modes, and the source text is the only representation
 
     The field has a **picklist mode** beside its text mode. On every render the
@@ -293,6 +302,24 @@ if Code.ensure_loaded?(Phoenix.Component) do
       doc: "passed to `Predicator.Vocabulary.functions/1` - a host's own providers."
     )
 
+    attr(:debounce, :any,
+      default: nil,
+      doc: """
+      What `phx-debounce` the controls this component draws carry, or `nil`
+      for none. Written verbatim onto every form control it renders - the
+      source input and each picklist row control - so the accepted values are
+      LiveView's own: milliseconds as an integer or a string, or `:blur` for
+      "post when the control loses focus".
+
+      `nil` renders no attribute at all, which is both what this component
+      rendered before the assign existed and the behaviour LiveView gives a
+      control with no `phx-debounce`: post every change event as it happens.
+      There is deliberately no non-`nil` default - the enclosing form owns the
+      event, so how often it fires is the host's decision rather than this
+      component's.
+      """
+    )
+
     attr(:field, :any, default: nil, doc: "accepted from the sb seam and never read.")
 
     @doc """
@@ -330,6 +357,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             <select
               class="statifier-ui-expression-path"
               data-role="path"
+              phx-debounce={@debounce}
               aria-label={"field, clause #{clause.index + 1}"}
             >
               <option :for={option <- clause.path_options} value={option.source} selected={option.selected}>
@@ -339,6 +367,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             <select
               class="statifier-ui-expression-operator"
               data-role="operator"
+              phx-debounce={@debounce}
               aria-label={"operator, clause #{clause.index + 1}"}
             >
               <option
@@ -355,6 +384,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               class="statifier-ui-expression-value"
               data-role="value"
               data-value-kind="select"
+              phx-debounce={@debounce}
               aria-label={"value, clause #{clause.index + 1}"}
             >
               <option
@@ -376,6 +406,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               data-list-open={clause.value.open}
               data-list-separator={clause.value.separator}
               data-list-close={clause.value.close}
+              phx-debounce={@debounce}
               aria-label={"values, clause #{clause.index + 1}"}
             >
               <option
@@ -400,6 +431,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               value={clause.value.text}
               spellcheck="false"
               autocomplete="off"
+              phx-debounce={@debounce}
               aria-label={"value, clause #{clause.index + 1}"}
             />
             <span
@@ -435,6 +467,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
               :if={@connective_options != []}
               class="statifier-ui-expression-connective"
               data-role="connective"
+              phx-debounce={@debounce}
               aria-label="how the clauses join"
             >
               <option
@@ -468,6 +501,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
             spellcheck="false"
             autocomplete="off"
             phx-hook={@hook}
+            phx-debounce={@debounce}
             data-expression-source="true"
             data-completions={@completions_json}
             data-completion-count={length(@completions)}
@@ -535,6 +569,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
       |> Map.put_new(:placeholder, "an expression")
       |> Map.put_new(:class, nil)
       |> Map.put_new(:vocabulary_opts, [])
+      |> Map.put_new(:debounce, nil)
       |> Map.put_new(:field, nil)
       |> put_completions()
       |> put_picklist()
