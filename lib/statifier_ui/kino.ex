@@ -179,7 +179,7 @@ if Code.ensure_loaded?(Kino) do
     Reopens a saved trace: the third leg of
     `StatifierUI.Trace.Capture`'s record / save / reload.
 
-        StatifierUI.Kino.inspect_trace("run.jsonl")
+        StatifierUI.Kino.inspect_trace("execution.jsonl")
 
     `trace` is a file path (read through
     `StatifierUI.Trace.Capture.load/1`) or an already-loaded

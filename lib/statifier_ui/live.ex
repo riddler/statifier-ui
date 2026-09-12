@@ -331,7 +331,7 @@ if Code.ensure_loaded?(Phoenix.Component) do
         Event log: <code>{@log.session || "(no session)"}</code>
       </p>
       <p :if={@log.truncated?} class="statifier-ui-log-truncated">
-        Earliest messages were dropped from the buffer; this log starts mid-run.
+        Earliest messages were dropped from the buffer; this log starts mid-trace.
       </p>
       <ol class="statifier-ui-macrosteps">
         <li :for={macrostep <- @log.macrosteps} class="statifier-ui-macrostep">
