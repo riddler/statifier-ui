@@ -13,8 +13,8 @@ defmodule StatifierUI.Trace.Capture do
   sequence lived in `test/support/`, which ships to nobody.
 
       {:ok, messages} = StatifierUI.Trace.Capture.record(session, machine, source: xml)
-      :ok = StatifierUI.Trace.Capture.save(messages, "run.jsonl")
-      {:ok, messages} = StatifierUI.Trace.Capture.load("run.jsonl")
+      :ok = StatifierUI.Trace.Capture.save(messages, "execution.jsonl")
+      {:ok, messages} = StatifierUI.Trace.Capture.load("execution.jsonl")
 
   ## Where the IO is
 

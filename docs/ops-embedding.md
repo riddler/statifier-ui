@@ -34,7 +34,7 @@ dependency and is always compiled.
 
 `StatifierUI.Live.State` is a plain struct in your socket. It holds the
 compiled `Statifier.Machine`, the wire-format v1 messages seen so far
-(`docs/wire-format.md`), and which point in the run the panes are showing.
+(`docs/wire-format.md`), and which point in the trace the panes are showing.
 It is pure: every reading it answers is `StatifierUI.Inspector` reading the
 engine's own `trace.macrostep_stable` stamps, so nothing here re-derives a
 configuration or asks a running session for anything.
@@ -46,14 +46,14 @@ subscription, and the events.
 ## A live stream
 
 ```elixir
-defmodule MyAppWeb.RunLive do
+defmodule MyAppWeb.ExecutionLive do
   use MyAppWeb, :live_view
 
   alias StatifierUI.Live.State
   alias StatifierUI.Trace.Subscriber
 
-  def mount(%{"run_id" => run_id}, _session, socket) do
-    {machine, session, source} = MyApp.Runs.fetch!(run_id)
+  def mount(%{"execution_id" => execution_id}, _session, socket) do
+    {machine, session, source} = MyApp.Executions.fetch!(execution_id)
 
     {:ok, subscriber} = Subscriber.start_link(machine: machine, source: source)
     :ok = Subscriber.attach(subscriber, session, catch_up: true)
@@ -107,36 +107,36 @@ Three details in `mount/3` earn their place:
 Drop the subscriber and the `handle_info/2` clause. Decode the stored
 messages - `StatifierUI.Trace.Json.decode/1` for one message,
 `decode_lines/1` for a JSON Lines document, or
-`StatifierUI.Trace.Capture.load/1` when the run is a file on disk - and
+`StatifierUI.Trace.Capture.load/1` when the trace is a file on disk - and
 hand them to `new/2`:
 
 ```elixir
-def mount(%{"run_id" => run_id}, _session, socket) do
-  {machine, messages} = MyApp.Runs.load_trace!(run_id)
+def mount(%{"execution_id" => execution_id}, _session, socket) do
+  {machine, messages} = MyApp.Executions.load_trace!(execution_id)
 
   {:ok, assign(socket, :trace, State.new(machine, messages: messages))}
 end
 ```
 
 The two `handle_event/3` clauses and `render/1` are unchanged: the scrubber
-works the same over a finished run as over a live one, because both are the
+works the same over a finished execution as over a live one, because both are the
 same message list. With no subscriber there are no stats, and the status
 pane says `persisted` rather than inventing a status.
 
-A run captured with `StatifierUI.Trace.Capture` needs no unpacking of its
+A trace captured with `StatifierUI.Trace.Capture` needs no unpacking of its
 own, because the list it saved is the list `new/2` wants back:
 
 ```elixir
-{:ok, messages} = StatifierUI.Trace.Capture.load("runs/#{run_id}.jsonl")
+{:ok, messages} = StatifierUI.Trace.Capture.load("executions/#{execution_id}.jsonl")
 State.new(machine, messages: messages)
 ```
 
-The bytes are stable across runs and the decode is exact
+The bytes are stable across executions and the decode is exact
 (`docs/wire-format.md`, "Persistence and the v1 round-trip"), so a stored
-run diffs against another one as behavior rather than as formatting.
+trace diffs against another one as behavior rather than as formatting.
 
 If the stream starts before any macrostep has stabilized - a very early
-attach, or a run captured at its first instant - pass the session's own
+attach, or an execution captured at its first instant - pass the session's own
 opening configuration so the diagram has something to draw:
 
 ```elixir
@@ -146,13 +146,13 @@ State.new(machine, messages: messages, initial_configuration: [0, 1])
 ## From a persisted event log
 
 A host that stored the session's own event log rather than the trace stream
-has no messages to decode - it has the inputs the run was driven by.
+has no messages to decode - it has the inputs the execution was driven by.
 `StatifierUI.Trace.Replay.from_events/4` produces the message list from
 those, offline, with no session process and no clock (ADR-0017):
 
 ```elixir
-def mount(%{"run_id" => run_id}, _session, socket) do
-  {machine, initialize_opts, events} = MyApp.Runs.load_log!(run_id)
+def mount(%{"execution_id" => execution_id}, _session, socket) do
+  {machine, initialize_opts, events} = MyApp.Executions.load_log!(execution_id)
 
   {:ok, messages} =
     StatifierUI.Trace.Replay.from_events(machine, initialize_opts, events)
@@ -161,7 +161,7 @@ def mount(%{"run_id" => run_id}, _session, socket) do
 end
 ```
 
-It takes the compiled chart; the session options the recorded run was made
+It takes the compiled chart; the session options the recorded execution was made
 under, in `Statifier.Session.Recording.new/3`'s vocabulary (`:session_id`,
 `:trace`, `:datamodel`, `:max_macrostep_rounds`, `:routes`, `:invoke_types`,
 `:invoke_handlers`); the persisted log, as
@@ -175,9 +175,9 @@ process concerns, and this is a function.
 Two things about the contract decide what a host has to store:
 
 - **`:trace` has to be true in the recorded options.** A recording defaults
-  the flag to `false`, and a run made without it completes normally while
+  the flag to `false`, and an execution made without it completes normally while
   emitting no `trace.*` messages at all, so the producer refuses rather than
-  hand back a stream the recorded run never produced:
+  hand back a stream the recorded execution never produced:
   `{:error, {:initialize_opts, :trace_disabled}}`.
 - **It fails closed.** The first failure returns `{:error, reason}` and no
   partial list, because a partial list returned as `{:ok, messages}` cannot
@@ -204,9 +204,9 @@ one of them, and this table is that mapping:
 
 `routes` is the last element of every shape: the `Statifier.Send.Routes`
 snapshot in force for the drive that row triggered, or `nil`. Store the
-snapshot if the run had one worth distinguishing - sends aimed at other
+snapshot if the execution had one worth distinguishing - sends aimed at other
 sessions, a parent, or an invocation. `nil` means the session-start
-snapshot, which is what a single-session run has for its whole life.
+snapshot, which is what a single-session execution has for its whole life.
 
 Rows go into a `Statifier.Session.Recording` through
 `StatifierUI.Trace.Replay.recording/3`, which is the same fold
@@ -215,7 +215,7 @@ Rows go into a `Statifier.Session.Recording` through
 already hold:
 
 ```elixir
-entries = Enum.map(rows, &MyApp.Runs.to_entry/1)
+entries = Enum.map(rows, &MyApp.Executions.to_entry/1)
 
 {:ok, recording} =
   StatifierUI.Trace.Replay.recording(machine, initialize_opts, entries)
@@ -238,12 +238,12 @@ accepted instead of returning
 `{:error, {:unscheduled_timer_firing, send_id}}`. And the credit the firing
 should have spent stays outstanding, where a later cancel of the same
 `send_id` moves it to the raced pool and a subsequent firing can still draw
-it - so a run with a cancel replays differently from the one that was
+it - so an execution with a cancel replays differently from the one that was
 recorded.
 
 A single firing with nothing after it produces the same message stream under
 either name, which is why this is worth stating rather than leaving to be
-discovered by the run where it matters.
+discovered by the execution where it matters.
 
 What comes out is the same list `StatifierUI.Trace.Subscriber` produces from
 a live session: the same message types in the same order, with the same
