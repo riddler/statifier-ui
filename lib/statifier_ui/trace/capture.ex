@@ -120,7 +120,7 @@ defmodule StatifierUI.Trace.Capture do
 
   `StatifierUI.Trace.Json.encode_lines/1` is canonical, so the same message
   list always writes the same bytes - which is what makes a saved capture
-  diffable against another run, and what the round-trip law in
+  diffable against another trace, and what the round-trip law in
   `docs/wire-format.md` rests on.
 
   Returns `File.write/2`'s result unchanged; a missing directory is a

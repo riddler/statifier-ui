@@ -136,8 +136,8 @@ The bytes are stable across executions and the decode is exact
 trace diffs against another one as behavior rather than as formatting.
 
 If the stream starts before any macrostep has stabilized - a very early
-attach, or an execution captured at its first instant - pass the session's own
-opening configuration so the diagram has something to draw:
+attach, or a trace captured at the execution's first instant - pass the
+session's own opening configuration so the diagram has something to draw:
 
 ```elixir
 State.new(machine, messages: messages, initial_configuration: [0, 1])
