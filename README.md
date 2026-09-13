@@ -6,6 +6,14 @@
 [![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/statifier_ui/)
 [![License](https://img.shields.io/hexpm/l/statifier_ui.svg)](https://github.com/riddler/statifier-ui/blob/main/LICENSE)
 
+> **Pre-1.0.** Until `statifier_ui` reaches v1.0, its public surface may change
+> between minor releases, sometimes drastically: a release may rename modules,
+> callbacks, table columns, telemetry events or error vocabulary with no
+> compatibility shim. Every such change is recorded in
+> [CHANGELOG.md](CHANGELOG.md) under a bold **Breaking** heading that says what
+> to do about it. Pinning to an exact minor - `~> X.Y.0` - is the recommended way
+> to consume the package until 1.0.
+
 UI components for authoring, observing, inspecting, and debugging
 [statifier](https://github.com/riddler/statifier-ex) statecharts and
 [predicator](https://github.com/riddler/predicator) expressions.
