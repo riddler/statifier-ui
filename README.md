@@ -35,7 +35,7 @@ effects; the engine needs nothing changed to support it.
 ```elixir
 def deps do
   [
-    {:statifier_ui, "~> 0.10"}
+    {:statifier_ui, "~> 0.10.0"}
   ]
 end
 ```
