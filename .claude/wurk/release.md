@@ -105,7 +105,7 @@ compiler-style stamped constant here and no parity assertion in the suite.
 
 `docs/` is the exception, and it is a prose carrier rather than a code one:
 `docs/ops-embedding.md` shows a host's `deps` entry, and that snippet pins
-`statifier_ui` in the same major/minor form the README does. Step B below
+`statifier_ui` in the same exact-minor form the README does. Step B below
 moves it, and the table at the end lists it.
 
 The sentence that used to sit here said `docs/` carried no version at all.
@@ -131,51 +131,76 @@ looked.
 ## The README install pin
 
 `release.readme_pin` is `true`. `README.md` carries a
-`{:statifier_ui, "~> X.Y"}` pin in its `def deps` snippet - the major/minor
-form with the patch component dropped that the skill's own step bumps, so the
-pin needs no step of its own here. It is named only so that the carriers a
-release moves are all listed in one place.
+`{:statifier_ui, "~> X.Y.0"}` pin in its `def deps` snippet, and the skill's
+own step is what bumps it, so the pin needs no step of its own here. What
+this section adds is the **form**, which the skill leaves to the project:
+"the exact form of the project's install pin" is the first thing its Project
+extension section names an extension for.
+
+The form is the exact-minor one - `~> X.Y.0`, with a literal `0` in the patch
+position - because that is what this package tells its consumers to use. The
+pre-1.0 banner at the top of `README.md` says pinning to an exact minor,
+`~> X.Y.0`, is the recommended way to consume the package until 1.0, and a
+snippet a host copies out of the same file should not recommend one thing and
+demonstrate another.
+
+Two consequences a prep should not have to derive:
+
+- The patch component is always the literal `0`, never the release's own
+  patch number. A `0.10.1` prep leaves both pins reading `~> 0.10.0`, which
+  already admits `0.10.1`; only a major or minor release moves them.
+- The skill's own wording for this step - the constraint bumps to the new
+  major/minor, dropping the patch component, "in whatever form previous
+  releases used" - is answered here rather than by reading a previous release
+  commit. The form changed outside a release, in the same commit that moved
+  both pins to it (2026-09-13), so release commits older than that one show
+  the earlier `~> X.Y` form and are not evidence for this question.
+
+It is also named here, as it always was, so that the carriers a release moves
+are all listed in one place.
 
 The pin's current value is not written down here, for the same reason no
 version is written down anywhere else in this file. Read it and check it
 against the version file instead:
 
 ```bash
-grep 'statifier_ui, "~>' README.md   # the pin
+grep 'statifier_ui, "~>' README.md   # the pin, in the ~> X.Y.0 form
 grep '@version "' mix.exs            # the version it should track
 ```
 
-They should agree on major and minor. If they ever do not, the pin edit
-repairs the drift in one move rather than stepping one release at a time: it
-goes straight to the current major/minor, and that is the recipe working, not
-a mistake to correct back. That has happened once - the 0.2.0 prep bumped the
-version file without bumping the pin, and the following prep carried the pin
-across two minors in a single edit. The two carriers have agreed since.
+They should agree on major and minor, and the pin's patch component should
+read `0`. If they ever do not, the pin edit repairs the drift in one move
+rather than stepping one release at a time: it goes straight to the current
+major/minor, and that is the recipe working, not a mistake to correct back.
+That has happened once - the 0.2.0 prep bumped the version file without
+bumping the pin, and the following prep carried the pin across two minors in
+a single edit. The two carriers have agreed since.
 
 ## Step B: the docs install pin
 
 Placed with the recipe's `readme_pin` edit, in the same commit.
 
 `docs/ops-embedding.md`'s `## What you need` snippet carries the same
-`{:statifier_ui, "~> X.Y"}` pin the README does, and the recipe's `readme_pin`
-step reaches `README.md` only. So this one is moved by hand, to the same
-major/minor, in the same pass as the README pin.
+`{:statifier_ui, "~> X.Y.0"}` pin the README does, and the recipe's
+`readme_pin` step reaches `README.md` only. So this one is moved by hand, to
+the same exact minor, in the same pass as the README pin.
 
 Resolve all three carriers by content when you read this, never by a line
 number:
 
 ```bash
-grep -n 'statifier_ui, "~>' docs/ops-embedding.md   # the docs pin
-grep -n 'statifier_ui, "~>' README.md               # the README pin
+grep -n 'statifier_ui, "~>' docs/ops-embedding.md   # the docs pin, ~> X.Y.0
+grep -n 'statifier_ui, "~>' README.md               # the README pin, ~> X.Y.0
 grep -n '@version "' mix.exs                        # the version they track
 ```
 
-They should agree on major and minor. Nothing in the suite asserts that, so
-this step is the whole of what keeps them together - unlike the compiler
-carrier a sibling repo has, a docs pin left behind takes no gate red. As with
-the README pin, a pin found several minors behind goes straight to the current
-major/minor in one move rather than stepping one release at a time; that is
-the recipe repairing drift, not a mistake to correct back.
+They should agree on major and minor, both in the `~> X.Y.0` form. Nothing in
+the suite asserts that, so this step is the whole of what keeps them
+together - unlike the compiler carrier a sibling repo has, a docs pin left
+behind takes no gate red. As with the README pin, a pin found several minors
+behind goes straight to the current major/minor in one move rather than
+stepping one release at a time; that is the recipe repairing drift, not a
+mistake to correct back.
 
 ## The files a release commit touches
 
