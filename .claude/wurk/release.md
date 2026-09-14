@@ -18,7 +18,8 @@ git log --oneline --no-patch -L '/@version/,+1:mix.exs'
 The first line is the last commit that moved `@version`, and the last commit
 that moved `@version` is the last release prep by definition. Where this file
 and that commit disagree, the commit is the evidence and this file is the
-defect.
+defect - except the pin form, which this file answers rather than a previous
+release commit (see "The README install pin" below).
 
 **This file names no SHA for that reference, on purpose, and it carries no
 version string anywhere.** A hard-coded reference stops being the most recent
@@ -147,8 +148,8 @@ demonstrate another.
 Two consequences a prep should not have to derive:
 
 - The patch component is always the literal `0`, never the release's own
-  patch number. A `0.10.1` prep leaves both pins reading `~> 0.10.0`, which
-  already admits `0.10.1`; only a major or minor release moves them.
+  patch number. An `X.Y.1` prep leaves both pins reading `~> X.Y.0`, which
+  already admits `X.Y.1`; only a major or minor release moves them.
 - The skill's own wording for this step - the constraint bumps to the new
   major/minor, dropping the patch component, "in whatever form previous
   releases used" - is answered here rather than by reading a previous release
