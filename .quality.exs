@@ -3,8 +3,9 @@
 # Two ways to run:
 #
 #   mix quality                 - full gate: format, compile, credo, dialyzer,
-#                                 deps audit, doc coverage, full test suite
-#                                 with coverage. Run before every commit.
+#                                 deps audit, doc coverage, docs build, doc
+#                                 links, full test suite with coverage. Run
+#                                 before every commit.
 #
 #   mix quality --profile loop  - inner loop while implementing: skips dialyzer
 #                                 and coverage, runs only the tests covering
@@ -52,6 +53,21 @@
 
   credo: [
     strict: true
+  ],
+
+  # The two docs stages are opt-in in ex_quality, and both are on here so
+  # that this gate is the pre-publish check for the package's docs, locally
+  # and in CI. The Docs stage fails on any ExDoc warning. The Doc links stage
+  # fails on the link rules ExDoc accepts silently: a README relative link to
+  # a file not in the package files, a published relative link to a file that
+  # is not an extra, two extras sharing a basename, and a silent rewrite to a
+  # different extra. Each of those builds cleanly and breaks on HexDocs or
+  # hex.pm, so only a gate stage catches them before a publish.
+  docs: [
+    enabled: :auto
+  ],
+  doc_links: [
+    enabled: :auto
   ],
 
   profiles: [
