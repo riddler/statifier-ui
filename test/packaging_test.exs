@@ -55,4 +55,41 @@ defmodule StatifierUI.PackagingTest do
       assert {"assets", "ADR-0009 (JavaScript ships as source)"} in @published_by_adr
     end
   end
+
+  describe "README relative links" do
+    # hex.pm renders the README from the package tarball, so a relative link
+    # there resolves inside the tarball and answers 404 unless the target
+    # ships; HexDocs rewrites a relative link only when the target is an
+    # extra. One relative link works on GitHub, HexDocs and hex.pm alike only
+    # when its target is in both lists. A file that is in neither (an ADR,
+    # for one) is linked by absolute GitHub URL instead.
+    test "every relative link target is in package files: and in extras" do
+      config = Mix.Project.config()
+      files = config[:package][:files]
+      extras = Enum.map(config[:docs][:extras], &extra_path/1)
+
+      targets = readme_relative_targets()
+      assert targets != [], "found no relative links in README.md; the scan is broken"
+
+      for target <- targets do
+        assert target in extras,
+               "README.md links #{target} relatively, but it is not in docs() extras: #{inspect(extras)}"
+
+        assert Enum.any?(files, &(target == &1 or String.starts_with?(target, &1 <> "/"))),
+               "README.md links #{target} relatively, but package() files: does not ship it: #{inspect(files)}"
+      end
+    end
+  end
+
+  defp readme_relative_targets do
+    ~r/\]\(([^)\s]+)\)/
+    |> Regex.scan(File.read!("README.md"), capture: :all_but_first)
+    |> List.flatten()
+    |> Enum.reject(&String.match?(&1, ~r{^(https?:|mailto:|#)}))
+    |> Enum.map(&(&1 |> String.split("#") |> hd()))
+    |> Enum.uniq()
+  end
+
+  defp extra_path({path, _opts}), do: to_string(path)
+  defp extra_path(path), do: to_string(path)
 end
