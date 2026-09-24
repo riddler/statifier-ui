@@ -36,9 +36,9 @@ defmodule StatifierUI.MixProject do
   defp elixirc_paths(_env), do: ["lib"]
 
   # Hexdocs configuration. These paths are read off the publisher's disk at
-  # `mix docs` time and need no entry in package()'s files: list - the docs
-  # tarball hexdocs hosts is built separately from the package tarball
-  # `mix deps.get` fetches.
+  # `mix docs` time - the docs tarball hexdocs hosts is built separately from
+  # the package tarball `mix deps.get` fetches. A guide the README links to
+  # relatively is also in package()'s files: list, for hex.pm's README page.
   defp docs do
     [
       name: "StatifierUI",
@@ -69,8 +69,24 @@ defmodule StatifierUI.MixProject do
       # `assets` is here because ADR-0009 makes it public API: the JavaScript
       # ships as source and the host's bundler compiles it, so a tarball without
       # it is a package whose documented hook cannot be imported.
-      # `test/packaging_test.exs` holds this list against the ADRs.
-      files: ~w(lib assets mix.exs README.md LICENSE CHANGELOG.md),
+      # The docs/ guides are here because hex.pm renders the README from this
+      # tarball, so a README relative link answers 404 there unless its target
+      # ships; each is also an extra, so the same link works on HexDocs.
+      # `test/packaging_test.exs` holds this list against the ADRs and the
+      # README's relative links.
+      files: ~w(
+        lib
+        assets
+        mix.exs
+        README.md
+        LICENSE
+        CHANGELOG.md
+        docs/architecture.md
+        docs/ops-embedding.md
+        docs/fixture-bundles.md
+        docs/wire-format.md
+        docs/telemetry.md
+      ),
       links: %{
         "GitHub" => @source_url,
         "Changelog" => "#{@source_url}/blob/main/CHANGELOG.md"

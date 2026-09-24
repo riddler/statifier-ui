@@ -159,7 +159,7 @@ The vocabulary that stream can carry is closed and published:
 string the format defines. It is the handle to hold and diff across upgrades -
 a consumer still ignores types it does not know, but a diff of that list is
 how it notices a new one. See the note on pinning the vocabulary in
-[ADR-0005](docs/adr/0005-language-neutral-trace-wire-format.md).
+[ADR-0005](https://github.com/riddler/statifier-ui/blob/v0.10.1/docs/adr/0005-language-neutral-trace-wire-format.md).
 
 ## Checking expressions
 
