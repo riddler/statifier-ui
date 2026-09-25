@@ -1,6 +1,6 @@
 # ADR-0018: A wire message for guard evaluation
 
-Status: accepted (2026-09-05, campaign-031; proposed 2026-09-05, campaign-031)
+Status: accepted (2026-09-05; proposed 2026-09-05)
 
 Adds one type to the v1 trace wire format: `trace.conds_evaluated`, the
 mapping of statifier 2.5.0's `Statifier.Effect.Trace.CondsEvaluated`. It
@@ -14,7 +14,7 @@ move on `sui-e41`, which is filed and blocked on this record. This record
 merges at **proposed**; flipping it to accepted after `sui-e41` lands is a
 separate gated change (`sui-3or`).
 
-**Note, 2026-09-05 (campaign-031, `sui-3or`):** that separate change is the one
+**Note, 2026-09-05 (`sui-3or`):** that separate change is the one
 carrying this Note. The Status line above now reads `accepted`; `sui-e41` landed
 on `main` at `ac93c18` and the 0.7.0 prep at `6beea9f`. The sentence above stands
 as written and is historical: it describes the state at the recording pull
@@ -389,7 +389,7 @@ and it flips only by its own gated pull request (`sui-3or`), after the
 section above; it touches no numbered decision, and every decision 1-6
 landed as written.*
 
-**Note, 2026-09-05 (campaign-031, `sui-3or`):** that gated pull request has
+**Note, 2026-09-05 (`sui-3or`):** that gated pull request has
 landed, and the Status line now reads `accepted`. The paragraph above stands as
 written and is historical: it describes the state at the recording pull request.
 Its two substantive claims are unaffected by the flip - nothing above or below
@@ -477,7 +477,7 @@ decides a wire-format shape before the shape exists: ADR-0016 and ADR-0017
 each merged at proposed and were flipped in a later, separately gated
 change (`9942e1f` then `9592f0e`; `0f3c083` then `35a388a`).
 
-**Note, 2026-09-05 (campaign-031, `sui-3or`):** the flip landed in the pull
+**Note, 2026-09-05 (`sui-3or`):** the flip landed in the pull
 request that carries this Note, and the Status line above reads `accepted`. The
 paragraph above stands as written and is historical. The check it asks for was
 performed against `main` at `6beea9f`: every numbered decision 1-6 holds as

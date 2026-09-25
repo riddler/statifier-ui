@@ -114,7 +114,7 @@ defmodule StatifierUI.MixProject do
       # (`StatifierDatamodel.Index.path_types/1`), and a second reading of the
       # same document in this package would be the drifting copy the
       # completion source already refuses for the grammar. Pure, no runtime
-      # processes, and no dependency of its own (RQ-033-5: the Hex floor, not
+      # processes, and no dependency of its own (the Hex floor, not
       # a git pin).
       {:statifier_datamodel, "~> 0.4"},
 

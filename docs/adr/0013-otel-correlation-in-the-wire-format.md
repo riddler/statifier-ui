@@ -1,6 +1,6 @@
 # ADR-0013: OTel correlation in the trace wire format
 
-Status: accepted (2026-09-01, campaign-025; unqualified direction-agent verdict)
+Status: accepted (2026-09-01; unqualified direction-agent verdict)
 
 Extends ADR-0005 additively: one new optional envelope key, reserved by
 name, carried on the message families that already carry the step counters.
@@ -34,7 +34,7 @@ misbehaving macrostep in the inspector cannot get to its trace, and one
 looking at a slow `statifier.macrostep` span cannot get to the phase-by-phase
 detail that would explain it. The join is the point of doing either.
 
-The operator ruling of 2026-09-01 (campaign-025 ruling R25-2, recorded as a
+The operator ruling of 2026-09-01 (recorded as a
 dated note on `sui-b94`) settled the question this record's bead was filed to
 ask, and left one thing open:
 

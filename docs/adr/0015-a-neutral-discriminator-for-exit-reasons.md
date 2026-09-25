@@ -1,6 +1,6 @@
 # ADR-0015: A neutral discriminator beside `session.terminated`'s reason
 
-Status: accepted (2026-09-05, campaign-029)
+Status: accepted (2026-09-05)
 
 Extends ADR-0005 additively: `session.terminated` gains one optional field,
 `kind`, carrying a language-neutral token for the exit reason's class. The
@@ -471,7 +471,7 @@ emits `reason` alone.
 
 ## Notes
 
-- 2026-09-02 (campaign-027, `sui-2s4`): recorded at Status **proposed**. The
+- 2026-09-02 (`sui-2s4`): recorded at Status **proposed**. The
   flip to accepted is the operator's, and follows as its own docs-only
   change. No code, no `docs/wire-format.md` edit, and no implementing bead
   accompany this record; all three follow the flip.
@@ -502,7 +502,7 @@ emits `reason` alone.
   branch is cut from. ADR-0014 was already on `main` when this branch was
   created, so its README index row is inherited rather than merged around.
 
-- **Note, 2026-09-05 (campaign-030, `sui-77a`): the record's citations
+- **Note, 2026-09-05 (`sui-77a`): the record's citations
   re-resolved against `main` at `9592f0e`.** PR 97's direction review left
   finding 3 open - two citations had drifted a few lines. Re-resolving them
   today showed the drift is wider than those two, because `docs/wire-format.md`

@@ -229,7 +229,7 @@ still surfaces in a host's build, which is the price this record already
 accepted.
 
 No decision moves, no clause is edited, and no text above this line changes.
-Filed with `sui-wqr`, campaign 027's condition-editor arc.
+Filed with `sui-wqr`, part of the condition-editor arc.
 
 ---
 
@@ -287,8 +287,7 @@ earlier one than a downstream user's build, and it is the whole of what the
 "price of the thin toolchain" now buys.
 
 No decision moves, no clause is edited, and no text above this line changes.
-Filed with `sui-l3u`; the check itself is `statifier_examples` PR 65, campaign
-033's fill lane.
+Filed with `sui-l3u`; the check itself is `statifier_examples` PR 65.
 
 ---
 
@@ -311,4 +310,4 @@ not a test, it still lives in the host rather than here, and this repository's
 toolchain is still Node-free.
 
 No decision moves, no clause is edited, and no text above this line changes.
-Filed with `sui-ehe`, campaign 034's ruling RQ-034-10.
+Filed with `sui-ehe`, on a ruling by the operator.

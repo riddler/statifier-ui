@@ -1,7 +1,7 @@
 # ADR-0012: Trace projection and redaction
 
 Status: accepted (2026-08-26)
-Amendment status: **accepted** (2026-09-05, campaign-029; proposed 2026-08-27, sui-0of); **accepted** (2026-08-29, sui-hmn: the three implementation rulings, accepted under the operator campaign-015 direction-agent gate grant, PR 55) - see "Amendment
+Amendment status: **accepted** (2026-09-05; proposed 2026-08-27, sui-0of); **accepted** (2026-08-29, sui-hmn: the three implementation rulings, accepted under the operator's direction-agent gate grant, PR 55) - see "Amendment
 proposed" below; the sui-0of substitution was applied to the Decision's
 "Located positions" passage on 2026-09-05 (sui-bzg), under the operator
 ruling of that date.
@@ -13,7 +13,7 @@ version stays `1` - see "Versioning decision" below.
 
 ## Amendment proposed 2026-08-27 (sui-0of): canonical example domains
 
-*Accepted 2026-09-05 (campaign-029); proposed 2026-08-27. The substitution
+*Accepted 2026-09-05; proposed 2026-08-27. The substitution
 proposed below was applied to the Decision's "Located positions" passage on
 2026-09-05 (sui-bzg); nothing else below this section has been edited.*
 
@@ -53,7 +53,7 @@ list is still a list.
 
 ## Amendment accepted 2026-08-29 (sui-hmn): the three implementation rulings
 
-Status: accepted (2026-08-29, unqualified direction-agent verdict under the operator campaign-015 grant, PR 55)
+Status: accepted (2026-08-29, unqualified direction-agent verdict under the operator's grant, PR 55)
 
 *Accepted 2026-08-29. Nothing outside this section has been edited, and
 no Status line elsewhere in this record has been changed.*

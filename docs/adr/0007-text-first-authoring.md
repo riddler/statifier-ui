@@ -3,14 +3,14 @@
 Status: accepted (2026-08-16)
 Amendment status: **accepted** (2026-09-02, sui-qay: attribute-level
 stamping and the closed layering gap, on the unqualified direction-agent
-verdict under the operator campaign-026 grant, PR 68; drafted 2026-09-01
+verdict under the operator's grant, PR 68; drafted 2026-09-01
 as proposed) - see "Amendment accepted" below; the accepted text outside
 that section is unchanged.
 
 Amendment status: **accepted** (2026-09-05, sui-gcm: a picklist is a
 rendering of the expression string, and the component owns no second
 representation, on the unqualified direction-agent verdict under the
-operator campaign-029 grant; drafted 2026-09-04 as proposed) - see
+operator's grant; drafted 2026-09-04 as proposed) - see
 "Amendment accepted" below; the accepted text outside that section is
 unchanged, as is the sui-qay amendment above it.
 

@@ -1,6 +1,6 @@
 # ADR-0017: An offline producer for the wire format
 
-Status: accepted (2026-09-05, campaign-030; proposed 2026-09-05, campaign-030)
+Status: accepted (2026-09-05; proposed 2026-09-05)
 
 Adds a **second producer** of the v1 trace wire format beside
 `StatifierUI.Trace.Subscriber`: a pure function that turns a persisted
@@ -229,7 +229,7 @@ avoids paying, it pays in surface.
 Recommended, pending the operator's flip. The Status line above stays
 `proposed`.
 
-**Note, 2026-09-05 (campaign-030, `sui-yse`):** the flip landed in the pull
+**Note, 2026-09-05 (`sui-yse`):** the flip landed in the pull
 request that carries this Note, and the header above now reads `accepted`.
 The sentence above stands as written and is historical: it describes the
 state at the recording pull request, not the record's state today. Added by
