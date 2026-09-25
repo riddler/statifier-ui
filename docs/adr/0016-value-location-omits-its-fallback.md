@@ -1,9 +1,9 @@
 # ADR-0016: `value_location` omits its element-span fallback
 
-Status: accepted (2026-09-05, campaign-030; proposed 2026-09-02, campaign-027)
+Status: accepted (2026-09-05; proposed 2026-09-02)
 
-Amendment status: **accepted** (2026-09-05, campaign-030; proposed
-2026-09-05, campaign-030, sui-4so: Decision 2 re-argued
+Amendment status: **accepted** (2026-09-05; proposed
+2026-09-05, sui-4so: Decision 2 re-argued
 against an always-present span cell, after `8119f19` falsified the "not a
 schema change" limb) - see "Amendment proposed" below; the record's text
 outside that section is unchanged, apart from one added item in the
@@ -209,10 +209,10 @@ This pull request merges at `proposed`; a separate pull request flips this
 amendment's status, and the record's own Status line, to `accepted` once
 the operator has taken the judgement in limb 2 above.
 
-**Note, 2026-09-05 (campaign-030, `sui-dgi`):** that separate pull request is
+**Note, 2026-09-05 (`sui-dgi`):** that separate pull request is
 the one carrying this Note. Both status lines - this amendment's in the
 header and the record's own - now read `accepted`, and the operator has taken
-the judgement in limb 2 (`RQ-030-1`, verbatim: "accept as written, version
+the judgement in limb 2 (ruled by the operator, 2026-09-05, verbatim: "accept as written, version
 stays 1"). The sentence above stands as written and is historical: it
 describes the state at the recording pull request, not the record's state
 today. Added by addition rather than by rewording, so the flip removes no
@@ -415,7 +415,7 @@ redundancy, and the naming is the part the format cares least about.
 Recommended, pending the operator's flip. The Status line above stays
 `proposed`.
 
-**Note, 2026-09-05 (campaign-030, `sui-dgi`):** the flip landed in the pull
+**Note, 2026-09-05 (`sui-dgi`):** the flip landed in the pull
 request that carries this Note, and the header above now reads `accepted`.
 The sentence above stands as written and is historical: it describes the
 state at the recording pull request, not the record's state today. Added by

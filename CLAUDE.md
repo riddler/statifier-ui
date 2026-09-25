@@ -90,7 +90,7 @@ that owns the work is the other case: there the authority is the operator's
 and the subagent is only the hands, so it may act. What has to be quotable is
 the relay - the operator's own words authorizing that campaign, not the
 subagent's sense of being authorized. A subagent that cannot quote them
-reports and stops. (Recorded 2026-09-05 by the operator, campaign 029.)
+reports and stops. (Recorded 2026-09-05 by the operator.)
 
 A relay unlocks nothing the rows above forbid outright: closing a mirrored
 bead whose other half has not landed, and a release - a tag, a
@@ -102,15 +102,14 @@ merge of one PR meeting every condition its consent names.
 
 A version bump is the recorded exception: on a release bead the operator has
 named (in the campaign plan or their own words), the bump commit is release
-prep, not a release. (Recorded 2026-08-27 by the operator, campaign 008.)
+prep, not a release. (Recorded 2026-08-27 by the operator.)
 
 Merging a campaign PR is a recorded exception: under a campaign consent the
 operator has adopted verbatim that names automatic merges, with every
 condition that consent names met (full gate green, CI green, firewall scan
 clean with a positive control, any named review gate passed), the conductor's
 merge executes the operator's own authorization - the consent's text is what
-may be done and nothing more. (Recorded 2026-09-01 by the operator, campaign
-025 post-wrap queue walk.)
+may be done and nothing more. (Recorded 2026-09-01 by the operator.)
 
 Widening this section is a decision for the user to make and record here. An
 agent may draft the change; it does not adopt it.

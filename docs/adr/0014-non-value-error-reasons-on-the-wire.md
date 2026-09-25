@@ -1,6 +1,6 @@
 # ADR-0014: Non-value error reasons on the wire
 
-Status: accepted (2026-09-05, campaign-029; proposed 2026-09-02, campaign-027)
+Status: accepted (2026-09-05; proposed 2026-09-02)
 
 Extends ADR-0005 additively: the existing event `error` object gains a
 discriminator and two optional fields, and becomes reachable for a class of
@@ -449,7 +449,7 @@ drops these messages.
 
 ## Notes
 
-- 2026-09-02 (campaign-027, `sui-4lr`): recorded at Status **proposed**. The
+- 2026-09-02 (`sui-4lr`): recorded at Status **proposed**. The
   flip to accepted is the operator's, and follows as its own docs-only
   change. Line numbers in this record were resolved against
   `statifier-ui` `662a6f6` and statifier 2.0.0 as vendored under

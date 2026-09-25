@@ -12,9 +12,9 @@ value it holds - and lets that declaration decide the operator list, the value
 control, and the candidate set, while never rewriting the author's source and
 never refusing it.
 
-Bead: sui-2vj. Campaign 032, lane U.
+Bead: sui-2vj.
 
-**No new dependency.** The 032 design walk ruled that statifier-ui takes no
+**No new dependency.** The operator ruled that statifier-ui takes no
 `statifier_datamodel` dependency: the caller (statifier_blocks, or any host)
 builds the map. `mix.exs` is untouched by this plan.
 
@@ -893,7 +893,7 @@ change is measured against, and it satisfies all three.
 
 ## References
 
-- Bead: `sui-2vj` (campaign 032, lane U; blocks `sui-oyy` and `sui-aln`)
+- Bead: `sui-2vj` (blocks `sui-oyy` and `sui-aln`)
 - Related ADRs: `docs/adr/0007-text-first-authoring.md` (the sui-gcm amendment
   and its sui-94o Note), `docs/adr/0004-one-package-with-optional-integrations.md` (the one-way
   dependency arrow),

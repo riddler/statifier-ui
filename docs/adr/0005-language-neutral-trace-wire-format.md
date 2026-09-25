@@ -7,7 +7,7 @@ set gains exactly one form, `{"$redacted": true}`, producible by the
 projection layer; format version stays 1
 Amendment status: **accepted** (2026-09-02, sui-qay: attribute-level
 entries in the identity tables, on the unqualified direction-agent verdict
-under the operator campaign-026 grant, PR 68; drafted 2026-09-01 as
+under the operator's grant, PR 68; drafted 2026-09-01 as
 proposed) - see "Amendment accepted" below; the accepted text outside that
 section is unchanged.
 

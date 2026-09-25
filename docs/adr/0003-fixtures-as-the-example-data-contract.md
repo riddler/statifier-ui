@@ -1,7 +1,7 @@
 # ADR-0003: Fixtures as the example-data contract
 
 Status: accepted (2026-08-16)
-Amendment status: **accepted** (2026-09-05, campaign-029) - see below; the
+Amendment status: **accepted** (2026-09-05) - see below; the
 amendment's substitution table was applied to the accepted text's named
 sites on 2026-09-05 (sui-bzg), under the operator ruling of that date.
 
