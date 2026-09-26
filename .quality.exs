@@ -59,10 +59,11 @@
   # that this gate is the pre-publish check for the package's docs, locally
   # and in CI. The Docs stage fails on any ExDoc warning. The Doc links stage
   # fails on the link rules ExDoc accepts silently: a README relative link to
-  # a file not in the package files, a published relative link to a file that
-  # is not an extra, two extras sharing a basename, and a silent rewrite to a
-  # different extra. Each of those builds cleanly and breaks on HexDocs or
-  # hex.pm, so only a gate stage catches them before a publish.
+  # a file not in the package files, a relative link in a Markdown extra to a
+  # file that is not itself an extra (moduledoc links are the Docs stage's),
+  # two extras sharing a basename, and a silent rewrite to a different extra.
+  # Each of those builds cleanly and breaks on HexDocs or hex.pm, so only a
+  # gate stage catches them before a publish.
   docs: [
     enabled: :auto
   ],
