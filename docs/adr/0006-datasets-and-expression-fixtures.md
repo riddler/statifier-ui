@@ -4,9 +4,10 @@ Status: accepted (2026-08-16); corpus amended 2026-08-27 (sui-6ld) - the
 worked example moved off an ad-hoc age-eligibility domain and onto the
 family's canonical example domains; dataset names, expression names, and
 example values only, no part of the contract changed
-Amendment status: a **proposed** second amendment (2026-08-27, sui-0of)
-reaches two illustrative names the first pass left behind - see the note
-below; the accepted text is unchanged until it is read and accepted
+Amendment status: a second amendment (2026-08-27, sui-0of), **accepted**
+(2026-09-26), reaches two illustrative names the first pass left behind -
+see the note below; the accepted text below it is unedited, and those two
+names read through the amendment's table
 
 **Amendment note.** *(2026-08-27, sui-6ld, executing the fleet ruling of the
 same date.)* The record originally illustrated both new keys with an
@@ -31,7 +32,7 @@ fixture files and tests that carry this corpus, so the executable examples and
 the record continue to agree.
 
 **Second amendment, proposed 2026-08-27 (sui-0of) - two sites the first one
-did not reach.** *Proposed, not accepted; nothing below this note has been
+did not reach.** *Accepted 2026-09-26. Nothing below this note has been
 edited.* The sui-6ld pass moved the worked corpus in the Decision and left
 two illustrative names elsewhere in the record off the canonical domains:
 
@@ -50,6 +51,17 @@ in a signup-wizard sentence, off-domain twice over - and
 
 Names and example values only. Nothing about the overlay question, the
 rejected alternatives, or the contract changes.
+
+**Note, 2026-09-26:** the operator accepted this second amendment on
+2026-09-26, and the status marks above say so. It is docs only, so no release
+gates it. Its one factual claim was re-checked on `main` before the flip:
+`"over-budget"` is a dataset the fixture-bundles guide carries
+(`docs/fixture-bundles.md`, its worked example), and ADR-0003's matching
+substitution to `"within-budget-account"` was accepted and applied there on
+2026-09-05. The two sites the table names, in "Alternatives considered" and
+"Open questions carried", are not edited by this acceptance: read their names
+through the table above. Applying the table in place, as ADR-0003's was, is a
+separate change.
 
 ## Context
 
