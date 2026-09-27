@@ -218,10 +218,18 @@ Exactly these, and a release commit that touches anything else is wrong:
 ## What a release here still is not
 
 The skill does not tag, push, open a request or publish, and this extension
-does not either. In this repo those are the operator's, in every campaign and
-outside every campaign. `CLAUDE.md`'s authority table says it twice: a version
-bump on a release bead's branch is authorized only on "an operator-authorized
-release bead, inside a campaign carrying the operator's explicit consent", and
-"a release (tag, `mix hex.publish`, GitHub release)" carries the trigger
-`never`. The one thing a release-prep request contains is the version bump and
-the fragment promotion above.
+does not either. The one thing a release-prep request contains is the version
+bump and the fragment promotion above. What happens around it is
+`CLAUDE.md`'s authority table, not this recipe. A version bump on a release
+bead's branch is authorized only on "an operator-authorized release bead,
+inside a campaign carrying the operator's explicit consent"; the push and the
+request follow the table's push row. Once the prep is merged to
+`origin/main`, the conductor or the session that owns the release bead tags
+that merged commit with the new version and pushes the tag: the table's
+tagging row fires when "the release bead's version bump is merged to
+`origin/main`; the tag names that version at the merged commit", and the
+same file's Release preps paragraph makes the bump and the tag the family
+norm rather than a grant a consent has to name. Publishing stays the
+operator's, in every campaign and outside every campaign: "a release
+(`mix hex.publish`, GitHub release)" carries the trigger `never`, a docs
+republish is part of it, and no consent or relay delegates it.
