@@ -44,8 +44,11 @@ The manifest does carry a `release` recipe - `kind: "hex"`, `version_file`
 `mix.exs`, `readme_pin` true - so `/wurk:release` runs here, driven by that
 block together with the required steps in `.claude/wurk/release.md`. None of
 that is a commit-time concern: the recipe runs on an operator-authorized
-release bead, and it still stops short of tagging, pushing and publishing,
-which `CLAUDE.md`'s authority table holds for the operator in every campaign.
+release bead, and it still stops short of tagging, pushing and publishing.
+Those follow `CLAUDE.md`'s authority table: once the prep is merged to
+`origin/main`, the conductor or the session that owns the release bead tags
+that merged commit, and only the publish (`mix hex.publish`, a GitHub
+release) is the operator's, in every campaign.
 What it means for an ordinary commit is only this: if a version change turns
 up in the diff and you are not on a release bead, that is the finding -
 report it and stop, do not commit it.
