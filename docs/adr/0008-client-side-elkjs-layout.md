@@ -163,3 +163,33 @@ rather than discovering the cost mid-implementation.
   developer): add nothing over elkjs plus SVG that this viewer needs, at a
   per-seat price incompatible with an open-source component library whose
   hosts would each need licenses. Rejected.
+
+## Note (2026-09-28): statifier_blocks's Map is a second elkjs renderer, for a different document kind
+
+A dated note rather than an amendment. A Note decides nothing, and nothing
+above this line changes.
+
+The renderer this record decides lays out every SCXML state of a chart:
+compound states inside their parents, parallel regions, history
+pseudo-states, and the transitions between them, stamped with the engine's
+document-order identities. It is still this record's destination rather
+than shipped code - the diagram this package draws today is the Mermaid
+first cut, and `StatifierUI.Live`'s moduledoc says the elkjs renderer "is
+not built yet" (`lib/statifier_ui/live.ex`, its "The diagram is Mermaid
+source, and no Mermaid client ships" section, read at `e3141f4`).
+
+statifier_blocks ships a second elkjs renderer, and it lays out a
+different document: a block document's tree. Its Map draws one box per
+block, nested as the document nests blocks in slots, from that package's
+view model of the document, as SVG in the browser beside a host's
+list of the same blocks. The record for it is statifier_blocks ADR-0018,
+"The Map is a reader of the view model"
+(`docs/adr/0018-the-map-reads-the-view-model.md` in that repository, at
+proposed on its main, read at `43c584e`); its decision (c) names the hook
+that draws it.
+
+Each renderer is a projection of its own document kind: this record's
+reads a chart's SCXML, the Map reads a block document. Neither replaces the
+other, and no merge of the two is planned - ADR-0018's "What this record
+does not decide" keeps them separate. They share a layout library, not a
+document, an input or a hook.
