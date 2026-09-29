@@ -221,9 +221,9 @@ The skill does not tag, push, open a request or publish, and this extension
 does not either. The one thing a release-prep request contains is the version
 bump and the fragment promotion above. What happens around it is
 `CLAUDE.md`'s authority table, not this recipe. A version bump on a release
-bead's branch is authorized only on "an operator-authorized release bead,
-inside a campaign carrying the operator's explicit consent"; the push and the
-request follow the table's push row. Once the prep is merged to
+bead's branch is authorized on "a release bead the operator has named (in
+the campaign plan or their own words)", with no campaign consent to name it;
+the push and the request follow the table's push row. Once the prep is merged to
 `origin/main`, the conductor or the session that owns the release bead tags
 that merged commit with the new version and pushes the tag: the table's
 tagging row fires when "the release bead's version bump is merged to
