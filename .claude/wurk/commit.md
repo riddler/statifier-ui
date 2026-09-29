@@ -43,8 +43,8 @@ release bead moves it.
 The manifest does carry a `release` recipe - `kind: "hex"`, `version_file`
 `mix.exs`, `readme_pin` true - so `/wurk:release` runs here, driven by that
 block together with the required steps in `.claude/wurk/release.md`. None of
-that is a commit-time concern: the recipe runs on an operator-authorized
-release bead, and it still stops short of tagging, pushing and publishing.
+that is a commit-time concern: the recipe runs on a release bead the
+operator has named, and it still stops short of tagging, pushing and publishing.
 Those follow `CLAUDE.md`'s authority table: once the prep is merged to
 `origin/main`, the conductor or the session that owns the release bead tags
 that merged commit, and only the publish (`mix hex.publish`, a GitHub
