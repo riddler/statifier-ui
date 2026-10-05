@@ -51,6 +51,7 @@ defmodule StatifierUI.MixProject do
         "CHANGELOG.md",
         "docs/architecture.md",
         "docs/ops-embedding.md",
+        "docs/guides/observe-an-execution.md",
         "docs/fixture-bundles.md",
         "docs/wire-format.md",
         "docs/telemetry.md"
@@ -61,7 +62,10 @@ defmodule StatifierUI.MixProject do
       # stay ungrouped at the top. Decision records and planning notes are a
       # record for contributors, not extras.
       groups_for_extras: [
-        "How-to guides": ["docs/ops-embedding.md"],
+        "How-to guides": [
+          "docs/ops-embedding.md",
+          "docs/guides/observe-an-execution.md"
+        ],
         Reference: ["docs/wire-format.md"],
         Explanation: [
           "docs/architecture.md",
@@ -94,6 +98,7 @@ defmodule StatifierUI.MixProject do
         CHANGELOG.md
         docs/architecture.md
         docs/ops-embedding.md
+        docs/guides/observe-an-execution.md
         docs/fixture-bundles.md
         docs/wire-format.md
         docs/telemetry.md
