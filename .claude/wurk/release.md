@@ -229,7 +229,8 @@ that merged commit with the new version and pushes the tag: the table's
 tagging row fires when "the release bead's version bump is merged to
 `origin/main`; the tag names that version at the merged commit", and the
 same file's Release preps paragraph makes the bump and the tag the family
-norm rather than a grant a consent has to name. Publishing stays the
-operator's, in every campaign and outside every campaign: "a release
-(`mix hex.publish`, GitHub release)" carries the trigger `never`, a docs
-republish is part of it, and no consent or relay delegates it.
+norm rather than a grant a consent has to name. An agent or a session
+never runs `mix hex.publish` (a docs republish included): the release
+workflow publishes on the tag push the tagging row already allows, and a
+failed workflow is re-run from its Actions page, never worked round by a
+local publish.
