@@ -127,6 +127,9 @@ Elixir.
     chart fragment carries its own executable examples
   - [Telemetry and the OTel bridge half](docs/telemetry.md) - what this
     package emits about its own work, and how a host correlates it
+  - [Why the viewer speaks a wire format and not the engine](docs/explanation/why-a-wire-format.md) -
+    why every pane reads a documented trace stream rather than the engine,
+    what that buys and costs, and the alternatives considered
   - [The decision records](https://github.com/riddler/statifier-ui/tree/main/docs/adr) -
     why the package is built the way it is
 
