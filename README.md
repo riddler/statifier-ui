@@ -6,31 +6,26 @@
 [![Hex Docs](https://img.shields.io/badge/hex-docs-lightgreen.svg)](https://hexdocs.pm/statifier_ui/)
 [![License](https://img.shields.io/hexpm/l/statifier_ui.svg)](https://github.com/riddler/statifier-ui/blob/main/LICENSE)
 
-> **Pre-1.0.** Until `statifier_ui` reaches v1.0, its public surface may change
-> between minor releases, sometimes drastically: a release may rename modules,
-> callbacks, table columns, telemetry events or error vocabulary with no
-> compatibility shim. Every such change is recorded in
-> [CHANGELOG.md](CHANGELOG.md) under a bold **Breaking** heading that says what
-> to do about it. Pinning to an exact minor - `~> X.Y.0` - is the recommended way
-> to consume the package until 1.0.
+Viewers and inspectors for [statifier](https://github.com/riddler/statifier-ex)
+executions: a Livebook inspector, LiveView components, and an expression field
+for [predicator](https://github.com/riddler/predicator-ex) expressions. Every
+pane reads one trace stream, written down as a language-neutral wire format, so
+a UI in another language can read the same stream.
 
-UI components for authoring, observing, inspecting, and debugging
-[statifier](https://github.com/riddler/statifier-ex) statecharts and
-[predicator](https://github.com/riddler/predicator) expressions.
+## Why a UI over the trace
 
-Debug-first and text-first: SCXML is the source of truth, and the visualization
-reads it. See the
-[GUI research and direction document](https://github.com/riddler/statifier-ui/blob/main/docs/research/260816-sui-kua-gui-research-and-direction.md)
-for how that direction was reached, and the
-[architecture decision records](https://github.com/riddler/statifier-ui/tree/main/docs/adr)
-for the decisions themselves.
+An execution in a session is a process holding a configuration and a
+datamodel, and without a viewer the way to learn why it stands where it does is
+to read logs or add prints to the host. Statifier already emits a trace effect
+at every phase boundary of its algorithm, stamped with its macrostep and round,
+with source locations kept on states, transitions and expressions. This
+package folds that stream into panes - the active configuration as a diagram,
+an event log by macrostep and round, the datamodel with what the last
+macrostep changed - and nothing in the engine changes to support it. Each
+pane is a pure function of the message list, so the same view renders in
+Livebook, in a LiveView page, or as a string in a test.
 
-Statifier already emits trace effects at every Appendix D phase boundary,
-stamps them with `(macrostep, round)` counters, and retains source locations on
-states, transitions, and expressions. A UI is one more interpreter of those
-effects; the engine needs nothing changed to support it.
-
-## Installation
+## Install
 
 ```elixir
 def deps do
@@ -41,369 +36,113 @@ end
 ```
 
 The `:kino` (Livebook) and `:phoenix_live_view` integrations are optional
-dependencies - add whichever your host actually renders with.
+dependencies: add whichever your host renders with.
 
-## Observing a run
+## Basic usage
 
-The panes are pure folds over a trace message list, so the whole package is
-usable without Livebook, without Phoenix, and without a display. This is a card
-authorization that settles - the chart, a subscriber, one event, and the
-rendered panes.
+A library loan, renewed once and then due, observed by a subscriber and
+rendered as panes:
 
 ```elixir
 xml = """
-<?xml version="1.0" encoding="UTF-8"?>
-<scxml xmlns="http://www.w3.org/2005/07/scxml" initial="pending" version="1.0">
-    <datamodel>
-        <data id="amount_cents" expr="1999"/>
-        <data id="captured_cents" expr="0"/>
-    </datamodel>
-    <state id="pending">
-        <transition event="authorize.approved" target="authorized"/>
-        <transition event="authorize.declined" target="declined"/>
-    </state>
-    <state id="authorized">
-        <transition event="capture.settled" target="captured">
-            <assign location="captured_cents" expr="amount_cents"/>
-        </transition>
-    </state>
-    <final id="captured"/>
-    <final id="declined"/>
+<scxml xmlns="http://www.w3.org/2005/07/scxml" version="1.0" initial="on_loan">
+  <datamodel>
+    <data id="renewals" expr="0"/>
+  </datamodel>
+  <state id="on_loan">
+    <transition event="loan.renew" target="on_loan">
+      <assign location="renewals" expr="renewals + 1"/>
+    </transition>
+    <transition event="loan.due" target="due"/>
+  </state>
+  <state id="due">
+    <transition event="loan.returned" target="returned"/>
+    <transition event="loan.lost" target="lost"/>
+  </state>
+  <final id="returned"/>
+  <final id="lost"/>
 </scxml>
 """
 
-{:ok, machine} = Statifier.compile(xml)
+{:ok, chart} = Statifier.compile(xml)
 
-# Start the subscriber first and hand it to the session as a subscriber, so it
-# sees the initialize burst. `Session.start_link/2` initializes to quiescence
-# before it returns, so anything that attaches afterwards has already missed it.
-{:ok, sub} = StatifierUI.Trace.Subscriber.start_link(machine: machine, source: xml)
+# Hand the subscriber to the session at start, so it sees the initialize burst.
+{:ok, sub} = StatifierUI.Trace.Subscriber.start_link(machine: chart, source: xml)
 
 {:ok, session} =
-  Statifier.Session.start_link(machine,
-    trace: true,
-    subscribers: [sub],
-    session_id: "sess_card_demo"
-  )
+  Statifier.Session.start_link(chart, trace: true, subscribers: [sub], session_id: "loan_42")
 
 :ok = StatifierUI.Trace.Subscriber.attach(sub, session, subscribe: false)
 
-# `send_event/2` is a cast: it enqueues, and the run happens in the session.
-:ok = Statifier.Session.send_event(session, "authorize.approved")
-Process.sleep(50)
-
+# send_event/2 is a cast; the snapshot call returns once both macrosteps are done.
+:ok = Statifier.Session.send_event(session, "loan.renew")
+:ok = Statifier.Session.send_event(session, "loan.due")
+_ = Statifier.Session.snapshot(session)
 messages = StatifierUI.Trace.Subscriber.messages(sub)
+
+StatifierUI.Inspector.diagram(chart, messages)   # Mermaid, with "due" classed active
+StatifierUI.Inspector.event_log(messages)        # Markdown, one section per macrostep
+StatifierUI.Inspector.datamodel(messages)        # Markdown, "renewals" at 1
 ```
 
-`messages` is the whole run so far. Every pane is a function of it.
-
-`StatifierUI.Inspector.diagram(machine, messages)` renders the configuration as
-Mermaid, with the active state classed `active`:
-
-```
-stateDiagram-v2
-    state "pending" as s1
-    state "authorized" as s2
-    state "captured (final)" as s3
-    state "declined (final)" as s4
-    [*] --> s1
-    s1 --> s2 : authorize.approved
-    s1 --> s4 : authorize.declined
-    s2 --> s3 : capture.settled
-    classDef active fill:#e0f2fe,stroke:#0284c7,stroke-width:2px,color:#0c4a6e
-    class s2 active
-```
-
-`StatifierUI.Inspector.event_log(messages)` renders the run as collapsible
-Markdown, one section per macrostep, newest open:
-
-```markdown
-# Event log: sess_card_demo
-
-<details>
-<summary>Macrostep 1: initialize, 2 rounds, quiescent at <scxml>, pending</summary>
-
-| round | event | selected | exited | entered |
-| --- | --- | --- | --- | --- |
-| 0 | - | - |  | <scxml>, pending |
-| 1 | (eventless) | none |  |  |
-</details>
-
-<details open>
-<summary>Macrostep 2: authorize.approved, 2 rounds, quiescent at <scxml>, authorized</summary>
-
-| round | event | selected | exited | entered |
-| --- | --- | --- | --- | --- |
-| 0 | authorize.approved | authorize.approved: pending -> authorized | pending | authorized |
-| 1 | (eventless) | none |  |  |
-- authorize.approved: pending -> authorized: 
-</details>
-```
-
-The trailing bullet is the transition's executable content, listed with the
-source location of each element. This transition carries none; the one on
-`capture.settled` would list its `<assign>`.
-
-`StatifierUI.Inspector.datamodel(messages)` renders the live datamodel with a
-marker on what the last macrostep changed, and
-`StatifierUI.Inspector.status(StatifierUI.Trace.Subscriber.stats(sub))` renders
-the one-line session header. Sending `capture.settled` next moves the highlight
-to `captured` and marks `captured_cents` as changed.
-
-To hand the same stream to a UI written in something other than Elixir,
-`StatifierUI.Trace.Json.encode_lines(messages)` emits it as JSON Lines in the
-language-neutral [trace wire format](docs/wire-format.md).
-
-The vocabulary that stream can carry is closed and published:
-`StatifierUI.Trace.Normalizer.types/0` returns the sorted list of every `type`
-string the format defines. It is the handle to hold and diff across upgrades -
-a consumer still ignores types it does not know, but a diff of that list is
-how it notices a new one. See the note on pinning the vocabulary in
-[ADR-0005](https://github.com/riddler/statifier-ui/blob/v0.10.1/docs/adr/0005-language-neutral-trace-wire-format.md).
-
-## Checking expressions
-
-Datasets and expressions are the other half of the fixtures contract
-(ADR-0006): named example datamodels, named predicator expressions, and the
-expected result of each pairing. Here they cover a signup wizard's A/B
-completion check.
-
-```elixir
-{:ok, fixtures} =
-  StatifierUI.Fixtures.new(
-    datasets: %{
-      "variant-a-early" => %{"signup" => %{"steps_completed" => 1, "variant" => "A"}},
-      "variant-b-complete" => %{"signup" => %{"steps_completed" => 4, "variant" => "B"}}
-    },
-    expressions: %{
-      "is-complete-variant-b" => %{
-        "source" => "signup.steps_completed >= 3 and signup.variant == 'B'",
-        "expect" => %{"variant-a-early" => false, "variant-b-complete" => true}
-      }
-    }
-  )
-
-fixtures
-|> StatifierUI.TruthTable.build()
-|> StatifierUI.TruthTable.Markdown.render()
-```
-
-renders every expression against every dataset:
-
-```markdown
-# Truth table
-
-**true**, false, and _undefined_ are three separate results. _undefined_ means the expression's inputs were absent, not that it evaluated to false.
-
-| dataset | is-complete-variant-b |
-| --- | --- |
-| variant-a-early | false |
-| variant-b-complete | **true** |
-
-Expressions:
-- **is-complete-variant-b**: `signup.steps_completed >= 3 and signup.variant == 'B'`
-```
-
-The `"expect"` entries are executable, not documentation:
-`StatifierUI.Fixtures.Expectations.check(fixtures)` returns `:ok` when the
-table matches and `{:error, results}` naming each disagreement, so a host can
-run its own fixtures as part of its test suite. See
-[fixture bundles](docs/fixture-bundles.md) for the per-fragment layout and the
-sidecar file format.
-
-## Editing an expression
-
-`StatifierUI.Live.ExpressionInput` is an expression field with completion:
-predicator's own grammar - operators, keywords, literal words, duration units,
-and every function the host's providers resolve - plus the datamodel paths the
-host declares, offered at the caret.
-
-It is written for
-[statifier_blocks](https://github.com/riddler/statifier-blocks)' ADR-0005
-`expression_component` seam, which is the affordance that record defers to this
-package, and it drops into an editor as a function reference:
-
-```elixir
-<StatifierBlocks.Editor.editor
-  ...
-  expression_component={&StatifierUI.Live.ExpressionInput.expression_input/1}
-  path_candidates={StatifierBlocks.Datamodel.candidates(document, datamodel)}
-/>
-```
-
-Nothing about it is specific to that package - any host with an expression to
-edit can render it directly:
-
-```heex
-<StatifierUI.Live.ExpressionInput.expression_input
-  id="rule-cond"
-  name="rule[cond]"
-  value={@cond}
-  candidates={["authorization.amount_cents", "card.brand"]}
-/>
-```
-
-### Declaring what a path holds
-
-A host that knows its datamodel can say so, and the field uses it: a declared
-kind decides which operators a picklist row offers, which control draws its
-value, and what literal the "add clause" button seeds a new row with. It never
-rewrites what the author already typed - a declaration that disagrees with the
-source renders an advisory beside the row and changes nothing.
-
-Declare it as a plain map:
-
-```heex
-<StatifierUI.Live.ExpressionInput.expression_input
-  id="rule-cond"
-  name="rule[cond]"
-  value={@cond}
-  candidates={["authorization.amount_cents", "card.brand"]}
-  path_types={%{
-    "authorization.amount_cents" => :number,
-    "card.brand" => {:one_of, ["visa", "mastercard", "amex"]}
-  }}
-/>
-```
-
-or hand over the datamodel document those kinds were declared in, and let the
-field project it through
-[`StatifierDatamodel.Index.path_types/1`](https://hexdocs.pm/statifier_datamodel):
-
-```heex
-<StatifierUI.Live.ExpressionInput.expression_input
-  id="rule-cond"
-  name="rule[cond]"
-  value={@cond}
-  candidates={["authorization.amount_cents", "card.brand"]}
-  document={@datamodel_document}
-/>
-```
-
-The two produce the same field for the same document. A non-empty `path_types`
-wins over a `document` when both are given, so a host can hand over its
-document and still override one path.
-
-`candidates` stays the host's own list either way: it is what the completion
-popup offers and what the picklist's field dropdown draws, and a host routinely
-offers fewer paths than its document declares.
-
-The field carries no event of its own. It renders an `<input>` with the `name`
-it was given, so an edit arrives through the `phx-change` of whatever form the
-host already has around it - which is also true of a completion the author
-picks with the keyboard.
-
-**Without JavaScript** the field is bound to a native `<datalist>` of the
-word-shaped completions, and that is a working field. **With the hook**
-registered it drops the datalist and offers a caret-aware list instead: the
-token under the cursor is the prefix, arrow keys move, Enter or Tab inserts,
-Escape dismisses.
-
-Registering the hook is the two steps ADR-0009 describes - the JavaScript ships
-as source and your bundler compiles it. In `assets/package.json`:
-
-```json
-"dependencies": {
-  "statifier_ui": "file:../deps/statifier_ui/assets"
-}
-```
-
-and in `assets/js/app.js`:
-
-```javascript
-import { StatifierUIHooks } from "statifier_ui"
-
-let liveSocket = new LiveSocket("/live", Socket, {
-  hooks: { ...StatifierUIHooks }
-})
-```
-
-`StatifierUIHooks` is every hook this package ships, keyed by the name its
-component renders; `StatifierUIExpressionInput` is the one this field uses and
-can be imported on its own. Hook names and export names are public API
-(ADR-0009).
-
-Completion needs `Predicator.Vocabulary`, and a host on a predicator without it
-gets its declared paths and no grammar entries rather than an error - the
-rendered input stamps `data-vocabulary` so the two cases are told apart.
-`StatifierUI.Expression.completions/2` is the same list without any of the
-markup, for a host that would rather render its own control.
-
-The field ships no CSS either. It stamps `data-hook` once the hook has
-upgraded it and `data-vocabulary` for the case above, and the hook builds the
-completion popup at runtime under its own classes;
-[the embedding guide](docs/ops-embedding.md) lists every selector, including
-the ones no template renders.
-
-## The Livebook inspector
-
-`StatifierUI.Kino.inspect/3` composes the four panes above - configuration
-diagram, datamodel explorer, event injection, event log - into one live widget
-over a running session:
-
-```elixir
-{:ok, session} = Statifier.Session.start_link(machine, trace: true, record: true)
-StatifierUI.Kino.inspect(session, fixtures, source: xml)
-```
-
-`record: true` is what lets the widget catch up on everything that happened
-before the cell was evaluated (statifier ADR-0049); without it the panes are
-labeled **Live-only** rather than presenting a partial stream as whole.
-
-A scrubber above the diagram - **|< First**, **< Prev**, **Next >**, **Live** -
-moves the diagram from the live tip to any macrostep in the event log and back.
-Selecting a macrostep draws the configuration that macrostep settled in, opens
-its entry in the log and marks it *selected*, and prints a line
-saying which point is on screen. Nothing is recomputed to do it: every
-configuration shown was stamped by the engine on a `trace.macrostep_stable`,
-and a caught-up stream got there through replay, which re-drives the core
-rather than rewinding a live session (statifier ADR-0034). The decisions are
-`StatifierUI.Inspector`'s - `active_configuration/2`, `points/1`, `step/3`,
-`selection_note/2` - so a LiveView or other host gets the same behaviour
-without Kino.
-
-[`notebooks/inspector.livemd`](https://github.com/riddler/statifier-ui/blob/main/notebooks/inspector.livemd)
-walks the whole widget end to end and doubles as its manual acceptance test.
-
-## What is in the package
-
-| Module | Renders |
-|---|---|
-| `StatifierUI.Diagram` | Mermaid `stateDiagram-v2` source for a machine and a configuration |
-| `StatifierUI.EventLog` | the run as macrosteps and rounds, with the transitions each selected |
-| `StatifierUI.DatamodelExplorer` | the datamodel, live from a trace or authoring-time from a chart |
-| `StatifierUI.EventInjection` | the palette of example events a fixture set defines |
-| `StatifierUI.TruthTable` | expressions evaluated across datasets |
-| `StatifierUI.Expression` | the completion source: predicator's grammar plus declared datamodel paths |
-| `StatifierUI.Fixtures` | the example-data contract: scenarios, events, datasets, expressions |
-| `StatifierUI.Trace.Subscriber` | a session's effect stream, normalized and buffered |
-| `StatifierUI.Inspector` | the four panes composed, as strings |
-| `StatifierUI.Kino` | the same, as Livebook widgets (optional `:kino`) |
-| `StatifierUI.Live.ExpressionInput` | an expression field with completion (optional `:phoenix_live_view`) |
-
-Everything except `StatifierUI.Kino` and `StatifierUI.Live.*` is pure and
-dependency-free: build the
-strings, render them wherever you like.
+`messages` is the whole execution so far, and every pane is a function of it.
+`StatifierUI.Trace.Json.encode_lines(messages)` writes the same stream as JSON
+Lines in the trace wire format, for a UI written in something other than
+Elixir.
 
 ## Documentation
 
-Published guides on [hexdocs](https://hexdocs.pm/statifier_ui/):
+- Learn
+  - [Basic usage](https://hexdocs.pm/statifier_ui/readme.html#basic-usage) -
+    an execution observed and its panes rendered, without Livebook or Phoenix
+  - [The inspector notebook](https://github.com/riddler/statifier-ui/blob/main/notebooks/inspector.livemd) -
+    the Livebook widget over a live session, end to end
+- Do
+  - [How to embed the ops view in a host LiveView](docs/ops-embedding.md) -
+    the hooks' asset pipeline, the classes and data attributes to theme, and
+    rendering your own surfaces off the wire format
+  - [Add an expression field with completion](https://hexdocs.pm/statifier_ui/StatifierUI.Live.ExpressionInput.html) -
+    the field, its declared path kinds and its hook; the API reference until a
+    guide page exists
+  - [Open the inspector in Livebook](https://hexdocs.pm/statifier_ui/StatifierUI.Kino.html) -
+    the widget, its scrubber and why it wants `record: true`; the API reference
+    until a guide page exists
+  - [Check fixture expectations in your test suite](https://hexdocs.pm/statifier_ui/StatifierUI.Fixtures.Expectations.html) -
+    each stated `expect` evaluated against its dataset; the API reference until
+    a guide page exists
+- Look up
+  - [API reference](https://hexdocs.pm/statifier_ui/api-reference.html) -
+    every public module and function
+  - [The trace wire format](docs/wire-format.md) - the normative specification
+    of the JSON trace stream a UI consumes
+  - [CHANGELOG](CHANGELOG.md) - what changed in each release, with every
+    breaking change marked
+- Understand
+  - [Architecture](docs/architecture.md) - the layers, what each piece is for,
+    and the boundary with the engine it visualizes
+  - [Per-fragment fixture bundles](docs/fixture-bundles.md) - how a reusable
+    chart fragment carries its own executable examples
+  - [Telemetry and the OTel bridge half](docs/telemetry.md) - what this
+    package emits about its own work, and how a host correlates it
+  - [The decision records](https://github.com/riddler/statifier-ui/tree/main/docs/adr) -
+    why the package is built the way it is
 
-- [Architecture](docs/architecture.md) - the layers of statifier-ui, what
-  each piece is for, and the boundary with the engine it visualizes.
-- [Embedding](docs/ops-embedding.md) - putting the components on a host's
-  own page: the asset pipeline that compiles the hooks, the classes and
-  data-attributes a host's stylesheet themes them with, and the contract
-  for rendering your own surfaces off the wire format instead.
-- [Fixture bundles](docs/fixture-bundles.md) - the per-fragment fixture
-  layout, the sidecar file format, and how bundles are discovered.
-- [Trace wire format](docs/wire-format.md) - the normative specification of
-  the language-neutral JSON trace stream a UI consumes.
-- [Telemetry and the OTel bridge half](docs/telemetry.md) - what this package
-  emits about its own work, what it will never emit, and how a host hands it
-  OpenTelemetry correlation ids without this package calling an OTel API.
+## Compatibility
 
-## Development
+- Elixir `~> 1.18`.
+- Runtime dependencies: `statifier ~> 2.5`, `predicator ~> 9.4`,
+  `statifier_datamodel ~> 0.4`; optional: `kino ~> 0.14`,
+  `phoenix_live_view ~> 1.0`.
+- The LiveView hooks ship as JavaScript source, so a host that registers them
+  needs a Node step in its asset pipeline; without the hooks every component
+  still renders, without the JavaScript enhancement.
+- Pre-1.0: a minor release may rename modules, callbacks, telemetry events or
+  error vocabulary with no compatibility shim. Every such change is under a
+  bold **Breaking** heading in the [CHANGELOG](CHANGELOG.md), and pinning to
+  an exact minor (`~> X.Y.0`) is the recommended way to consume the package
+  until 1.0.
+
+## Contributing
 
 ```bash
 mise install     # provision erlang + elixir
@@ -411,10 +150,8 @@ mix deps.get
 mix quality      # the full gate: format, compile, credo, dialyzer, docs, tests
 ```
 
-`mix quality --profile loop` is the faster inner-loop variant - it skips
-dialyzer and coverage and runs only the tests covering changed code.
-
-CI runs the same gate on every push and pull request. See `.quality.exs`.
+`mix quality --profile loop` is the faster inner-loop variant. CI runs the
+full gate on every push and pull request; see `.quality.exs`.
 
 ## License
 
