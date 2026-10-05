@@ -55,8 +55,19 @@ defmodule StatifierUI.MixProject do
         "docs/wire-format.md",
         "docs/telemetry.md"
       ],
+      # Grouped by the kind of page the reader needs, in the family order
+      # (Tutorials, How-to guides, Reference, Explanation, Upgrading); a
+      # group appears only when it has a page. The README and the CHANGELOG
+      # stay ungrouped at the top. Decision records and planning notes are a
+      # record for contributors, not extras.
       groups_for_extras: [
-        Guides: ~r{docs/}
+        "How-to guides": ["docs/ops-embedding.md"],
+        Reference: ["docs/wire-format.md"],
+        Explanation: [
+          "docs/architecture.md",
+          "docs/fixture-bundles.md",
+          "docs/telemetry.md"
+        ]
       ],
       skip_undefined_reference_warnings_on: ["CHANGELOG.md"]
     ]

@@ -1,4 +1,4 @@
-# Embedding the ops view in a host LiveView
+# How to embed the ops view in a host LiveView
 
 This guide puts the read-only diagram and run-history event log on a page a
 Phoenix host already has: an admin screen, a support tool, an incident view.
