@@ -54,7 +54,8 @@ defmodule StatifierUI.MixProject do
         "docs/guides/observe-an-execution.md",
         "docs/fixture-bundles.md",
         "docs/wire-format.md",
-        "docs/telemetry.md"
+        "docs/telemetry.md",
+        "docs/explanation/why-a-wire-format.md"
       ],
       # Grouped by the kind of page the reader needs, in the family order
       # (Tutorials, How-to guides, Reference, Explanation, Upgrading); a
@@ -70,7 +71,8 @@ defmodule StatifierUI.MixProject do
         Explanation: [
           "docs/architecture.md",
           "docs/fixture-bundles.md",
-          "docs/telemetry.md"
+          "docs/telemetry.md",
+          "docs/explanation/why-a-wire-format.md"
         ]
       ],
       skip_undefined_reference_warnings_on: ["CHANGELOG.md"]
@@ -102,6 +104,7 @@ defmodule StatifierUI.MixProject do
         docs/fixture-bundles.md
         docs/wire-format.md
         docs/telemetry.md
+        docs/explanation/why-a-wire-format.md
       ),
       links: %{
         "GitHub" => @source_url,
