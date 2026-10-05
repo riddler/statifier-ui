@@ -10,6 +10,43 @@ fragment in [`changelog.d/`](https://github.com/riddler/statifier-ui/blob/v0.10.
 into a version section at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [0.10.2] 2026-10-05
+
+A patch for the documentation. The HexDocs sidebar groups its pages by the
+kind of page a reader needs, two pages are added, and the README is rewritten
+as an introduction with a map of the documentation. No public function,
+option or runtime dependency changes, and the trace wire format is untouched,
+so a consumer taking `~> 0.10.0` re-pins nothing. Documentation takes no
+changelog fragment here, so this section is written at release.
+
+### Added
+
+- A how-to guide, "How to observe an execution from a LiveView host"
+  (`docs/guides/observe-an-execution.md`): one execution's current state on a
+  host's own page, kept current as it moves. A test executes the page's code
+  and asserts each result it states.
+- An explanation page, "Why the viewer speaks a wire format and not the
+  engine" (`docs/explanation/why-a-wire-format.md`): why every pane reads a
+  documented trace stream rather than the engine, what that buys and costs,
+  and the alternatives considered.
+
+### Changed
+
+- The HexDocs sidebar groups the extras by kind of page - How-to guides,
+  Reference and Explanation - in place of one Guides group; the README and
+  the CHANGELOG stay ungrouped at the top. The embedding guide is retitled
+  "How to embed the ops view in a host LiveView".
+- The README is rewritten as an introduction: what the package is, why it
+  exists, how to install it, a basic usage example, and a Documentation
+  section that maps every page by the reader's question (Learn, Do, Look up,
+  Understand). The longer usage sections give way to links into the guides
+  and the API reference.
+- The package tarball ships the `docs/` guides the README links to, so the
+  README's relative links resolve on the hex.pm package page as they do on
+  HexDocs.
+- Examples in the docs name a saved capture `execution.jsonl`, and the
+  LiveView event log's truncation notice reads "this log starts mid-trace".
+
 ## [0.10.1] 2026-09-08
 
 A patch. `StatifierUI.Live.ExpressionInput.expression_input/1` reads the
