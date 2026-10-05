@@ -101,6 +101,9 @@ Elixir.
   - [How to embed the ops view in a host LiveView](docs/ops-embedding.md) -
     the hooks' asset pipeline, the classes and data attributes to theme, and
     rendering your own surfaces off the wire format
+  - [How to observe an execution from a LiveView host](docs/guides/observe-an-execution.md) -
+    one execution's current state on your own page, kept current as it
+    moves
   - [Add an expression field with completion](https://hexdocs.pm/statifier_ui/StatifierUI.Live.ExpressionInput.html) -
     the field, its declared path kinds and its hook; the API reference until a
     guide page exists
