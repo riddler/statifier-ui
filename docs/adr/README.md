@@ -20,6 +20,7 @@
 | [0016](0016-value-location-omits-its-fallback.md) | `value_location` omits its element-span fallback | accepted |
 | [0017](0017-an-offline-producer-for-the-wire-format.md) | An offline producer for the wire format | accepted |
 | [0018](0018-a-wire-message-for-guard-evaluation.md) | A wire message for guard evaluation | accepted |
+| [0019](0019-a-version-tag-push-publishes-to-hex.md) | A version tag push publishes to Hex, through a release workflow | proposed |
 
 New ADRs: next number, same three-section format (Context, Decision,
 Consequences), indexed here in the same commit.
