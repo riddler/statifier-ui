@@ -120,7 +120,7 @@ publishes is, for this repository, permanent.
 ## Note (2026-10-10): accepted
 
 *A note, not an amendment. Nothing above it has been edited except the
-status word on the Status line.*
+Status line.*
 
 The condition in the last Consequences bullet is met: a version of this
 package has been published through the workflow, and the Status line above
