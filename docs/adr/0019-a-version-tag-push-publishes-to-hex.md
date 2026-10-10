@@ -1,6 +1,6 @@
 # ADR-0019: A version tag push publishes to Hex, through a release workflow
 
-Status: proposed (2026-10-04)
+Status: accepted (2026-10-10, statifier_ui 0.10.2; proposed 2026-10-04)
 
 ## Context
 
@@ -116,3 +116,35 @@ publishes is, for this repository, permanent.
   or gate steps is made in `release.yml` in the same change.
 - This record stays proposed until a version of this package has been
   published through the workflow.
+
+## Note (2026-10-10): accepted
+
+*A note, not an amendment. Nothing above it has been edited except the
+status word on the Status line.*
+
+The condition in the last Consequences bullet is met: a version of this
+package has been published through the workflow, and the Status line above
+now reads accepted. The flip takes that first publish as its evidence (ruled
+by the operator, 2026-10-06).
+
+- **The first publish through the workflow:** statifier_ui 0.10.2, from the
+  tag `v0.10.2` on commit `2bc4ea4b`, in the workflow run
+  https://github.com/riddler/statifier-ui/actions/runs/37310304855. Every
+  step of that run succeeded, the checks of decision 2, the gate of
+  decision 3 and the publish of decision 4 among them, and Hex and HexDocs
+  both show 0.10.2.
+- **Later publishes through the workflow:** none. That run is the workflow's
+  only run so far.
+- **Re-verified at:** every claim this record makes was checked on
+  2026-10-10 against `origin/main` at `2bc4ea4b`, the same commit the tag
+  names: `.github/workflows/release.yml` (decisions 1 to 6), its toolchain,
+  cache, dependency and gate steps against `.github/workflows/ci.yml`
+  (decision 3), `gate.full` in `.claude/wurk.json`, `@version` in `mix.exs`,
+  the authority table's release, version-bump and tagging rows and the
+  "Release preps" paragraph in `CLAUDE.md`, and `.claude/wurk/release.md`
+  (the first Consequences bullet). The Context's description of `be89b76`
+  was checked at that commit. No claim failed and none is superseded.
+
+(The wording of this Note, naming the first publish on the Status line and
+the later publishes here, was decided by the conductor under a standing
+consent, 2026-10-10.)
