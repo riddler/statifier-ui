@@ -59,8 +59,8 @@ capability to get started.
 ## What exists today
 
 As of this writing one thing is built and the rest is scaffold. The scaffold
-is the packaging: `mix.exs` declares the `statifier` dependency (a git
-dependency until statifier-ex publishes to hex) and the two optional
+is the packaging: `mix.exs` declares the `statifier` dependency (a Hex
+dependency pinned in `mix.lock`) and the two optional
 integrations, `kino` and `phoenix_live_view`, and `lib/statifier_ui.ex` is
 the top-level module with its `@moduledoc` and a `version/0` function.
 
