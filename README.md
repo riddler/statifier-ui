@@ -30,7 +30,7 @@ Livebook, in a LiveView page, or as a string in a test.
 ```elixir
 def deps do
   [
-    {:statifier_ui, "~> 0.10.0"}
+    {:statifier_ui, "~> 0.11.0"}
   ]
 end
 ```

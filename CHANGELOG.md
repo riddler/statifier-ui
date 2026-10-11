@@ -10,6 +10,20 @@ fragment in [`changelog.d/`](https://github.com/riddler/statifier-ui/blob/v0.10.
 into a version section at release. See that README for the format and for when a
 change warrants an entry at all.
 
+## [0.11.0] 2026-10-11
+
+A minor, because a documented live behaviour changes: the Livebook
+inspector's datamodel pane now follows the scrubber instead of always showing
+the current values. No public function, option or runtime dependency
+changes, and the trace wire format is untouched; a host taking `~> 0.10.0`
+moves its pin to `~> 0.11.0` to take this release.
+
+### Changed
+
+- The live inspector's datamodel pane (`StatifierUI.Kino.inspect/3`) follows
+  its scrubber: on a selected macrostep it shows the values as they stood at
+  the end of that macrostep, and **Live** returns it to the current values.
+
 ## [0.10.2] 2026-10-05
 
 A patch for the documentation. The HexDocs sidebar groups its pages by the
