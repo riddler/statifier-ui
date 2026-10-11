@@ -140,6 +140,57 @@ defmodule StatifierUI.KinoTest do
     end
   end
 
+  describe "the scrubber's updater over a datamodel that moves" do
+    setup do
+      machine = SessionCase.compile!(@counter)
+      {sub, session} = SessionCase.start_early!(machine, "sess_kino_scrub_datamodel")
+      Session.send_event(session, "bump")
+      SessionCase.wait_for_macrostep(session, 2)
+      Session.send_event(session, "bump")
+      SessionCase.wait_for_macrostep(session, 3)
+      wait_for_buffered_macrostep(sub, 3)
+
+      frames =
+        Map.new([:status, :note, :diagram, :datamodel, :log], fn key ->
+          {key, Kino.Frame.new(placeholder: false)}
+        end)
+
+      {:ok, updater} =
+        Updater.start_link(
+          sub: sub,
+          machine: machine,
+          frames: frames,
+          initial_configuration: [0, 1]
+        )
+
+      %{updater: updater, frames: frames, messages: Subscriber.messages(sub)}
+    end
+
+    # Sabotage: rendered the live datamodel pane with `Inspector.datamodel/1`
+    # (no selection) in `Updater` - this test went red on the scrubbed
+    # assert, showing the live tip's count where the first macrostep's was
+    # expected, and the other updater tests stayed green.
+    test "the datamodel pane follows the scrubber and returns to the tip on live",
+         %{updater: updater, frames: frames, messages: messages} do
+      at_first = Inspector.datamodel(messages, selection: {:macrostep, 1})
+      at_tip = Inspector.datamodel(messages)
+
+      # The fold differs between the two points, so the pane can only match
+      # one of them.
+      assert at_first =~ "42"
+      assert at_tip =~ "44"
+      refute at_first == at_tip
+
+      :ok = Updater.scrub(updater, :first)
+      _settled = :sys.get_state(updater)
+      assert rendered_text(frames.datamodel) == at_first
+
+      :ok = Updater.scrub(updater, :live)
+      _settled = :sys.get_state(updater)
+      assert rendered_text(frames.datamodel) == at_tip
+    end
+  end
+
   describe "truth_table/2" do
     setup do
       {:ok, fixtures} =
@@ -381,6 +432,26 @@ defmodule StatifierUI.KinoTest do
       assert Inspector.datamodel_diff(messages, selection: {:macrostep, 2}) =~ "`42` | `43`"
       assert Inspector.selection_note(messages, selection: {:macrostep, 2}) =~ "macrostep 2"
       assert Process.alive?(stepper)
+    end
+  end
+
+  # The Markdown text a frame holds now - what the widget shows - read
+  # through `Kino.Frame.get_items/1`, the frame's own record of its content.
+  defp rendered_text(frame) do
+    [%Kino.Markdown{text: text}] = Kino.Frame.get_items(frame)
+    text
+  end
+
+  # The session reports a macrostep before its subscriber has necessarily
+  # buffered every message of it; poll the buffer itself.
+  defp wait_for_buffered_macrostep(sub, target, timeout \\ 1000) do
+    buffered? = Enum.any?(Subscriber.messages(sub), &(&1.macrostep == target))
+
+    if buffered? or timeout <= 0 do
+      :ok
+    else
+      Process.sleep(10)
+      wait_for_buffered_macrostep(sub, target, timeout - 10)
     end
   end
 end

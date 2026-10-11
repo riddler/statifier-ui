@@ -169,13 +169,12 @@ caught-up stream got there through statifier ADR-0034 replay.
    (`sui-dc7`), and the note keeps the two readings apart: a configuration
    the chart *exited* in is never worded as one it *settled* in.
 
-The datamodel explorer in **this** widget does not move with the
-scrubber - it always shows the current values. The per-macrostep fold
-exists (`StatifierUI.Inspector.datamodel/2` takes the same `:selection`
-every other read here does, `sui-2uz`), and the persisted stepper in step
-10 is built on it; wiring it into the live inspector's own pane is a
-separate change. Here the diagram and the log are the pair this walk
-exercises.
+The datamodel explorer follows the scrubber too. On a selected macrostep
+it shows the values as they stood at the end of that macrostep - the fold
+`StatifierUI.Inspector.datamodel/2` takes under the same `:selection`
+every other read here does, and the one the persisted stepper in step 10
+shows. Back at **|< First**, expect `authorization_attempts` and
+`captured_cents` at `0`; **Live** returns the pane to the current values.
 
 ## 7. The form, including its error path
 
@@ -243,7 +242,7 @@ number and event.
 
 1. Pick a macrostep from **Jump to**. Expect: the note, the diagram, the
    event log's marked entry, **and the datamodel pane** all move to that
-   point together - unlike step 6, the values shown are the ones that
+   point together - as in step 6, the values shown are the ones that
    macrostep ended with, not the ones the run finished with.
 2. Read the **Datamodel changes in macrostep N** table below the panes.
    Expect: one row per slot the step moved, with the value before and
