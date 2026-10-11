@@ -44,7 +44,8 @@ jobs:
 
       # _build carries the Dialyzer PLT
       # (_build/dev/dialyxir_erlang-*_elixir-*_deps-dev.plt), so this cache is
-      # the PLT cache too. mix.lock pins the statifier git dep by SHA, so its
+      # the PLT cache too. statifier is a Hex dependency pinned in mix.lock by
+      # its exact version and checksum, so the lockfile's
       # hash moves whenever the engine moves. The restore-keys fallback means a
       # lockfile bump rebuilds the PLT incrementally from the previous one
       # rather than from scratch.
