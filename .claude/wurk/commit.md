@@ -31,7 +31,10 @@ the fragments that landed since the previous one.
 a release**: at release the fragments in `changelog.d/` are assembled into a
 new version section and deleted in the same commit, per the "At release"
 section of `changelog.d/README.md`. An ordinary commit adds a fragment; it
-does not touch `CHANGELOG.md`.
+does not touch `CHANGELOG.md`. The one exception is an edit outside every
+version section - the preamble, or a link in it - which is permitted
+outside a release only when it fixes a broken or stale link or a stale
+preamble fact, and changes no version section's text.
 
 ## Version bump: none
 
