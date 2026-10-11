@@ -13,11 +13,12 @@ if Code.ensure_loaded?(Kino) do
     ## The scrubber (sui-3gg)
 
     Four buttons above the diagram - **First**, **Prev**, **Next**,
-    **Live** - move the diagram from the live tip to any macrostep in the
-    log and back. Selecting a macrostep draws the configuration that
-    macrostep settled in, opens its entry in the event log, and marks that
-    entry `- selected`; the note above the diagram says which
-    point is on screen. `StatifierUI.Inspector` decides all of it, so the
+    **Live** - move the diagram and the datamodel explorer from the live
+    tip to any macrostep in the log and back. Selecting a macrostep draws
+    the configuration that macrostep settled in, shows the datamodel as it
+    stood at the end of that macrostep, opens its entry in the event log,
+    and marks that entry `- selected`; the note above the diagram says
+    which point is on screen. `StatifierUI.Inspector` decides all of it, so the
     whole behaviour is testable without Kino - this module only wires
     buttons to `Updater.scrub/2`.
 
@@ -512,7 +513,7 @@ if Code.ensure_loaded?(Kino) do
 
       Kino.Frame.render(
         state.frames.datamodel,
-        Kino.Markdown.new(Inspector.datamodel(messages))
+        Kino.Markdown.new(Inspector.datamodel(messages, opts))
       )
 
       Kino.Frame.render(state.frames.log, Kino.Markdown.new(Inspector.event_log(messages, opts)))
