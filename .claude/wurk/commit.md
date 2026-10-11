@@ -47,8 +47,9 @@ that is a commit-time concern: the recipe runs on a release bead the
 operator has named, and it still stops short of tagging, pushing and publishing.
 Those follow `CLAUDE.md`'s authority table: once the prep is merged to
 `origin/main`, the conductor or the session that owns the release bead tags
-that merged commit, and only the publish (`mix hex.publish`, a GitHub
-release) is the operator's, in every campaign.
+that merged commit, and the release workflow publishes on the tag push
+(ADR-0019): an agent or a session never runs `mix hex.publish`, and a
+GitHub release stays the operator's, in every campaign.
 What it means for an ordinary commit is only this: if a version change turns
 up in the diff and you are not on a release bead, that is the finding -
 report it and stop, do not commit it.
