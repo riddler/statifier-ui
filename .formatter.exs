@@ -5,5 +5,5 @@
   # lib/statifier_ui/live.ex paren-free the way every LiveView codebase
   # writes them.
   import_deps: [:phoenix_live_view],
-  inputs: ["{mix,.formatter}.exs", "{config,lib,test}/**/*.{ex,exs}"]
+  inputs: ["{mix,.formatter,.quality}.exs", "{config,lib,test}/**/*.{ex,exs}"]
 ]
