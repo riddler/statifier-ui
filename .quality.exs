@@ -50,7 +50,6 @@
   format: [
     check: true
   ],
-
   credo: [
     strict: true
   ],
@@ -75,7 +74,6 @@
   # grouped by the reader's question. Findings fail the gate. The line
   # ceiling comes from `readme_max_lines` in `.claude/diataxis.md`.
   readme: [enabled: :auto, severity: :error],
-
   profiles: [
     loop: [
       stages: [:format, :compile, :credo, :test],
