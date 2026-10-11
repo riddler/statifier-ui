@@ -34,7 +34,9 @@
     "build_paths": ["lib/", "test/", "config/", "mix.exs", "mix.lock"],
     "also_gated_paths": ["assets/", "docs/wire-format.md"],
     "moving_files": [".quality.exs", "coveralls.json", ".doctor.exs"],
-    "project_level_skips": [],
+    "project_level_skips": [
+      "^opt-in; set (diataxis): \\[enabled: :auto\\] in \\.quality\\.exs$"
+    ],
     "not_applicable_skips": [
       "^:gettext not installed$",
       "^:sobelow not installed$"
