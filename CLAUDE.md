@@ -192,7 +192,7 @@ stays proposed alone and is reported with the claim quoted.
 mise install                 # provision erlang + elixir
 mix deps.get
 mix quality --profile loop   # inner loop: format, compile, credo, changed-scope tests
-mix quality                  # full gate: + dialyzer, deps audit, doctor, suite w/ coverage
+mix quality                  # full gate: + dialyzer, deps audit, doctor, docs build, doc links, suite w/ coverage
 mix quality --format json --report -   # machine-readable results
 mix test                     # tests only
 ```
