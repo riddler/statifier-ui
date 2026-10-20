@@ -80,6 +80,12 @@ the backend is still the open work.
 | Embedding and theming verification in a realistic host asset pipeline | `sui-191` |
 | `mix.exs` `files:` omits `assets/` though ADR-0009 requires it be published | `sui-2ke` |
 
+2026-10-19: history. The first row's parenthetical (the notebook's step 6
+notes the datamodel explorer does not move with the scrubber) described
+the notebook as audited on 2026-09-02. The datamodel pane now follows the
+scrubber, and section 6 of `notebooks/inspector.livemd` says so in its
+opening and in step 1.
+
 No new beads were filed by this audit. The one gap with no bead - an
 implementation for ADR-0008's elkjs renderer - is raised as a candidate
 in this bead's pull request rather than filed, because filing outside the
