@@ -437,6 +437,9 @@ defmodule StatifierUI.KinoTest do
 
   # The Markdown text a frame holds now - what the widget shows - read
   # through `Kino.Frame.get_items/1`, the frame's own record of its content.
+  # That function is `@doc false` in kino, kept anyway because no documented
+  # Kino read returns a frame's current content (render output goes to the
+  # Livebook runtime, not back to the caller).
   defp rendered_text(frame) do
     [%Kino.Markdown{text: text}] = Kino.Frame.get_items(frame)
     text

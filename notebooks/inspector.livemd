@@ -143,15 +143,18 @@ Do these in order, watching the panes after each click:
 
 ## 6. Scrub back through the run
 
-The scrubber moves the **diagram** to any macrostep in the log while the
-log itself stays whole. Nothing is recomputed: every configuration it can
-show was stamped by the engine on a `trace.macrostep_stable`, and a
-caught-up stream got there through statifier ADR-0034 replay.
+The scrubber moves the **diagram** and the **datamodel pane** to any
+macrostep in the log while the log itself stays whole. Nothing is
+recomputed: every configuration it can show was stamped by the engine on a
+`trace.macrostep_stable`, and a caught-up stream got there through
+statifier ADR-0034 replay.
 
 1. Click **|< First**. Expect: the note reads **Showing macrostep 1
    (initialize), at its quiescent configuration**, the diagram highlights
-   `pending`, and macrostep 1's entry in the log is open and suffixed
-   **- selected**. Exactly one entry carries that suffix.
+   `pending`, the datamodel pane shows the values as that macrostep ended
+   (`authorization_attempts` and `captured_cents` at `0`), and macrostep
+   1's entry in the log is open and suffixed **- selected**. Exactly one
+   entry carries that suffix.
 2. Click **Next >** repeatedly. Expect: the note and the marked log entry
    advance together, macrostep by macrostep; the highlight follows what
    each macrostep settled in (so it sits on `pending` through the
